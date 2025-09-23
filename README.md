@@ -126,23 +126,23 @@
 ## 📂 산출물
 <details>
   <summary><b> <a href='https://docs.google.com/spreadsheets/d/1T9HX4fSAoEJpjI7ewdls1ylfE5ZluGYYnR-oLL4OooU/edit?gid=1270453977#gid=1270453977' style="text-decoration: none; color: inherit;"> WBS</a></b></summary>
-  <img width="1710" height="873" alt="스크린샷 2025-08-25 오후 2 28 50" src="https://github.com/user-attachments/assets/40727227-3e5f-4da2-adfc-abd5e5f11bea" />
+  <!-- <img width="1710" height="873" alt="스크린샷 2025-08-25 오후 2 28 50" src="https://github.com/user-attachments/assets/40727227-3e5f-4da2-adfc-abd5e5f11bea" /> -->
 </details>
 
 <details>
   <summary><b><a href='https://docs.google.com/spreadsheets/d/1T9HX4fSAoEJpjI7ewdls1ylfE5ZluGYYnR-oLL4OooU/edit?gid=1270453977#gid=1270453977' style="text-decoration: none; color: inherit;"> 요구사항 명세서</a></b></summary>
-  <img width="1708" height="869" alt="스크린샷 2025-08-25 오후 2 30 20" src="https://github.com/user-attachments/assets/ff3ab3dd-7685-4c48-b3dc-b0429a650ebc" />
+  <!-- <img width="1708" height="869" alt="스크린샷 2025-08-25 오후 2 30 20" src="https://github.com/user-attachments/assets/ff3ab3dd-7685-4c48-b3dc-b0429a650ebc" /> -->
 </details>
 
 <details>
   <summary><b> <a href='https://www.erdcloud.com/d/4XEmWM7BEZB2zLQPo' style="text-decoration: none; color: inherit;"> ERD</a></b></summary>
-  <img width="5040" height="2242" alt="요리한수 (1)" src="https://github.com/user-attachments/assets/895e27f9-4b0b-49ed-8201-1fc9e191770a" />
+  <!-- <img width="5040" height="2242" alt="요리한수 (1)" src="https://github.com/user-attachments/assets/895e27f9-4b0b-49ed-8201-1fc9e191770a" /> -->
 
   <a href="https://www.erdcloud.com/...">
 </details>
 
 <details>
-  <summary><b> <a href='https://tranquil-fuchsia-64e.notion.site/25a7cd1f5ed980b9ab40e6897bc980e1?source=copy_link' style="text-decoration: none; color: inherit;"> 프로젝트 기획서</a></b></summary>
+  <summary><b> <a href='https://tranquil-fuchsia-64e.notion.site/Synco-2717cd1f5ed981d685b1c0a1776dc85b?source=copy_link' style="text-decoration: none; color: inherit;"> 프로젝트 기획서</a></b></summary>
  
 </details>
 
