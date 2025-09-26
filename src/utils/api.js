@@ -11,7 +11,7 @@ const apiClient = axios.create({
   headers: { 'Content-Type': 'application/json' },
 })
 
-// 요청 인터셉터 (토큰 자동 주입)
+// 요청 인터셉터 (토큰 자동 주입) - 주석처리
 // 모든 API 요청에 자동으로 Authorization 헤더 추가
 apiClient.interceptors.request.use((config) => {
   const authStore = useAuthStore()
@@ -21,7 +21,7 @@ apiClient.interceptors.request.use((config) => {
   return config
 })
 
-// 응답 인터셉터 (401 → refresh 토큰)
+// 응답 인터셉터 (401 → refresh 토큰) - 주석처리
 // 401 에러 시 자동으로 토큰 갱신 시도
 apiClient.interceptors.response.use(
   (res) => res,

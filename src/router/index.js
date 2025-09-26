@@ -1,30 +1,17 @@
 import { createRouter, createWebHistory } from 'vue-router'
-import { useAuthStore } from '@/store/authStore'
+// import { useAuthStore } from '@/store/authStore'
 
 // View 컴포넌트들
-// import HomeView from '@/views/HomeView.vue'
-// import LoginView from '@/views/LoginView.vue'
-// import UserListView from '@/views/UserListView.vue'
+import LandingPage from '@/views/landing/LandingPage.vue'
 
 const routes = [
   {
     path: '/',
-    name: 'Home',
-    // component: HomeView,
+    name: 'Landing',
+    component: LandingPage,
     meta: { requiresAuth: false },
   },
-  {
-    path: '/login',
-    name: 'Login',
-    // component: LoginView,
-    meta: { requiresGuest: true },
-  },
-  {
-    path: '/users',
-    name: 'UserList',
-    // component: UserListView,
-    meta: { requiresAuth: true },
-  },
+
 ]
 
 const router = createRouter({
@@ -32,18 +19,19 @@ const router = createRouter({
   routes,
 })
 
-// 네비게이션 가드
-router.beforeEach((to, from, next) => {
-  const authStore = useAuthStore()
-  const isAuthenticated = authStore.isAuthenticated
+//// 네비게이션 가드 (토큰 관련 제약 주석처리)
+// router.beforeEach((to, from, next) => {
+//   const authStore = useAuthStore()
+//   const isAuthenticated = authStore.isAuthenticated
 
-  if (to.meta.requiresAuth && !isAuthenticated) {
-    next({ name: 'Login' })
-  } else if (to.meta.requiresGuest && isAuthenticated) {
-    next({ name: 'Home' })
-  } else {
-    next()
-  }
-})
+//   // 기본값: requiresAuth가 명시되지 않으면 true로 간주
+//   const requiresAuth = to.meta.requiresAuth !== false
+  
+//   if (requiresAuth && !isAuthenticated) {
+//     next({ name: 'Landing' })
+//   } else {
+//     next()
+//   }
+// })
 
 export default router
