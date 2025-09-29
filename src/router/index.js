@@ -3,6 +3,7 @@ import { createRouter, createWebHistory } from 'vue-router'
 
 // View 컴포넌트들
 import LandingPage from '@/views/landing/LandingPage.vue'
+import MainLayout from '@/layouts/MainLayout.vue'
 
 const routes = [
   {
@@ -10,6 +11,15 @@ const routes = [
     name: 'Landing',
     component: LandingPage,
     meta: { requiresAuth: false },
+  },
+  {
+    path: '/workspace',
+    redirect: '/workspace/personal/dashboard'
+  },
+  {
+    path: '/workspace/:workspaceId/:channel/:subChannel?',
+    name: 'Workspace',
+    component: MainLayout,
   },
 
 ]
