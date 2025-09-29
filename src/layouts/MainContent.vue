@@ -122,6 +122,7 @@ const contentStyle = computed(() => {
   transition: margin-left 0.3s ease, margin-right 0.3s ease, width 0.3s ease;
   position: relative;
   overflow-x: auto;
+  overflow-y: visible;
 }
 
 /* 반응형 디자인 */

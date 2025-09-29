@@ -744,14 +744,13 @@ watch(() => props.currentWorkspace, () => {
     <div class="header-right">
       <!-- 검색바 (알림 바로 왼쪽) -->
       <div class="search-container">
-        <div class="search-input-wrapper">
-          <v-icon class="search-icon">mdi-magnify</v-icon>
-          <input 
-            type="text" 
-            placeholder="검색" 
-            class="search-input"
-          />
-        </div>
+        <GlobalSearch 
+          placeholder="검색"
+          search-scope="current-workspace"
+          :search-types="['messages', 'files', 'users', 'channels']"
+          :auto-navigate="true"
+          :debounce-ms="300"
+        />
       </div>
 
       <!-- 알림 버튼 -->
@@ -1114,6 +1113,7 @@ watch(() => props.currentWorkspace, () => {
   backdrop-filter: blur(10px);
   border-bottom: 1px solid rgba(255, 255, 255, 0.1);
   height: 60px !important;
+  z-index: 1005 !important;
 }
 
 .dark-header {
@@ -1156,43 +1156,7 @@ watch(() => props.currentWorkspace, () => {
 .search-container {
   position: relative;
   width: 300px;
-}
-
-.search-input-wrapper {
-  position: relative;
-  width: 100%;
-}
-
-.search-icon {
-  position: absolute;
-  left: 16px;
-  top: 50%;
-  transform: translateY(-50%);
-  color: rgba(var(--v-theme-on-surface), 0.6);
-  z-index: 2;
-}
-
-.search-input {
-  width: 100%;
-  height: 40px;
-  padding: 8px 16px 8px 48px;
-  border: 1px solid rgba(var(--v-theme-on-surface), 0.2);
-  border-radius: 20px;
-  background: rgba(var(--v-theme-surface), 0.8);
-  color: rgb(var(--v-theme-on-surface));
-  font-size: 14px;
-  outline: none;
-  transition: all 0.3s ease;
-}
-
-.search-input:focus {
-  border-color: rgb(var(--v-theme-primary));
-  background: rgba(var(--v-theme-surface), 1);
-  box-shadow: 0 0 0 2px rgba(var(--v-theme-primary), 0.1);
-}
-
-.search-input::placeholder {
-  color: rgba(var(--v-theme-on-surface), 0.6);
+  z-index: 1008;
 }
 
 /* 팀 설정 버튼 */

@@ -261,15 +261,13 @@ const getWorkspaceIconColor = (workspace) => {
             
             <!-- 공용 검색바 -->
             <div class="global-search-container">
-              <div class="search-input-wrapper">
-                <v-icon class="search-icon">mdi-magnify</v-icon>
-                <input 
-                  v-model="friendSearchQuery"
-                  type="text" 
-                  placeholder="사용자 검색..." 
-                  class="search-input"
-                />
-              </div>
+              <GlobalSearch 
+                placeholder="사용자 검색..."
+                search-scope="all"
+                :search-types="['users']"
+                :auto-navigate="false"
+                :debounce-ms="200"
+              />
             </div>
             
             <div class="member-selection-container">

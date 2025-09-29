@@ -164,6 +164,7 @@ const handleNavigateToChannel = (channelId) => {
   padding-top: 60px; /* 헤더 높이만큼 패딩 */
   width: 100vw;
   overflow-x: hidden;
+  overflow-y: visible;
 }
 
 /* 반응형 디자인 */
