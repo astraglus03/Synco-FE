@@ -1,7 +1,7 @@
 <template>
-  <div class="team-meeting">
+  <div class="project-meeting">
     <div class="meeting-header">
-      <h1>팀 화상회의</h1>
+      <h1>화상회의</h1>
       <v-btn color="primary" prepend-icon="mdi-video">
         회의 시작
       </v-btn>
@@ -14,7 +14,7 @@
           화상회의
         </v-card-title>
         <v-card-text>
-          <p>팀 화상회의가 여기에 표시됩니다.</p>
+          <p>프로젝트 화상회의가 여기에 표시됩니다.</p>
           <p v-if="selectedChannel">선택된 회의실: {{ selectedChannel }}</p>
           <!-- TODO: 화상회의 기능 구현 예정 -->
         </v-card-text>
@@ -24,7 +24,7 @@
 </template>
 
 <script setup>
-// 팀 화상회의 컴포넌트
+// 프로젝트 화상회의 컴포넌트
 // TODO: 실제 기능 구현 예정
 
 const props = defineProps({
@@ -33,7 +33,7 @@ const props = defineProps({
 </script>
 
 <style scoped>
-.team-meeting {
+.project-meeting {
   padding: 24px;
 }
 

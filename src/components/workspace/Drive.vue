@@ -1,7 +1,7 @@
 <template>
-  <div class="team-drive">
+  <div class="project-drive">
     <div class="drive-header">
-      <h1>팀 드라이브</h1>
+      <h1>프로젝트 드라이브</h1>
       <v-btn color="primary" prepend-icon="mdi-upload">
         파일 업로드
       </v-btn>
@@ -11,10 +11,10 @@
       <v-card>
         <v-card-title>
           <v-icon left>mdi-folder-multiple</v-icon>
-          팀 파일
+          프로젝트 파일
         </v-card-title>
         <v-card-text>
-          <p>팀 공유 파일들이 여기에 표시됩니다.</p>
+          <p>프로젝트 공유 파일들이 여기에 표시됩니다.</p>
           <!-- TODO: 파일 관리 기능 구현 예정 -->
         </v-card-text>
       </v-card>
@@ -23,12 +23,12 @@
 </template>
 
 <script setup>
-// 팀 드라이브 컴포넌트
+// 프로젝트 드라이브 컴포넌트
 // TODO: 실제 기능 구현 예정
 </script>
 
 <style scoped>
-.team-drive {
+.project-drive {
   padding: 24px;
 }
 

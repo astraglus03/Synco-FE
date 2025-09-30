@@ -60,10 +60,10 @@ const teamChannels = ref([
       { id: 'meeting-schedule', name: '회의 일정', type: 'schedule' }
     ]
   },
-  { id: 'drive', name: '팀 드라이브', icon: 'mdi-folder', type: 'main' },
+  { id: 'drive', name: '드라이브', icon: 'mdi-folder', type: 'main' },
   { 
     id: 'meeting', 
-    name: '팀 화상회의', 
+    name: '화상회의', 
     icon: 'mdi-video', 
     type: 'main',
     expanded: false,

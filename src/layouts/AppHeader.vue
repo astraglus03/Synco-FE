@@ -184,8 +184,8 @@ const personalNotifications = ref([
   }
 ])
 
-// 팀 스페이스용 알림 데이터
-const teamNotifications = ref([
+// 프로젝트 스페이스용 알림 데이터
+const projectNotifications = ref([
   { 
     id: 7, 
     type: 'team_task_assigned', 
@@ -386,8 +386,8 @@ const teamNotifications = ref([
 
 // 현재 워크스페이스에 따른 알림 데이터
 const notifications = computed(() => {
-  if (props.currentWorkspace?.type === 'team') {
-    return teamNotifications.value
+  if (props.currentWorkspace?.type === 'project') {
+    return projectNotifications.value
   } else {
     return personalNotifications.value
   }
@@ -403,22 +403,22 @@ const personalFilters = ref([
   { key: 'personal_achievement', label: '성과', icon: 'mdi-trophy', count: 0 }
 ])
 
-// 팀 스페이스용 필터 옵션
-const teamFilters = ref([
+// 프로젝트 스페이스용 필터 옵션
+const projectFilters = ref([
   { key: 'all', label: '전체', icon: 'mdi-bell', count: 0 },
   { key: 'unread', label: '읽지 않음', icon: 'mdi-bell-ring', count: 0 },
-  { key: 'team_task', label: '팀 업무', icon: 'mdi-clipboard-list', count: 0 },
-  { key: 'team_meeting', label: '회의', icon: 'mdi-calendar-clock', count: 0 },
-  { key: 'team_message', label: '팀 메시지', icon: 'mdi-message', count: 0 },
-  { key: 'team_file', label: '파일 공유', icon: 'mdi-file-share', count: 0 },
-  { key: 'team_member', label: '팀원', icon: 'mdi-account-group', count: 0 },
-  { key: 'team_project', label: '프로젝트', icon: 'mdi-chart-line', count: 0 }
+  { key: 'project_task', label: '프로젝트 업무', icon: 'mdi-clipboard-list', count: 0 },
+  { key: 'project_meeting', label: '회의', icon: 'mdi-calendar-clock', count: 0 },
+  { key: 'project_message', label: '프로젝트 메시지', icon: 'mdi-message', count: 0 },
+  { key: 'project_file', label: '파일 공유', icon: 'mdi-file-share', count: 0 },
+  { key: 'project_member', label: '프로젝트 멤버', icon: 'mdi-account-group', count: 0 },
+  { key: 'project_update', label: '프로젝트 업데이트', icon: 'mdi-chart-line', count: 0 }
 ])
 
 // 현재 워크스페이스에 따른 필터 옵션
 const notificationFilters = computed(() => {
-  if (props.currentWorkspace?.type === 'team') {
-    return teamFilters.value
+  if (props.currentWorkspace?.type === 'project') {
+    return projectFilters.value
   } else {
     return personalFilters.value
   }
@@ -612,11 +612,11 @@ const teamMembers = ref([
 
 // 사이드바 기능 목록
 const sidebarFeatures = ref([
-  { key: 'dashboard', name: '팀 대시보드', icon: 'mdi-view-dashboard', expanded: false },
-  { key: 'chat', name: '팀 채팅', icon: 'mdi-message', expanded: false },
-  { key: 'schedule', name: '팀 일정관리', icon: 'mdi-calendar', expanded: false },
-  { key: 'drive', name: '팀 드라이브', icon: 'mdi-folder', expanded: false },
-  { key: 'meeting', name: '팀 화상회의', icon: 'mdi-video', expanded: false }
+  { key: 'dashboard', name: '대시보드', icon: 'mdi-view-dashboard', expanded: false },
+  { key: 'chat', name: '채팅', icon: 'mdi-message', expanded: false },
+  { key: 'schedule', name: '일정관리', icon: 'mdi-calendar', expanded: false },
+  { key: 'drive', name: '드라이브', icon: 'mdi-folder', expanded: false },
+  { key: 'meeting', name: '화상회의', icon: 'mdi-video', expanded: false }
 ])
 
 // 각 기능별 팀원 권한
@@ -771,28 +771,28 @@ watch(() => props.currentWorkspace, () => {
         <v-tooltip activator="parent" location="bottom">알림</v-tooltip>
       </v-btn>
 
-      <!-- 팀 설정 버튼 (팀 워크스페이스일 때만 표시) -->
+      <!-- 프로젝트 설정 버튼 (프로젝트 워크스페이스일 때만 표시) -->
       <v-btn 
-        v-if="currentWorkspace?.type === 'team'"
+        v-if="currentWorkspace?.type === 'project'"
         icon 
         variant="text"
         @click="workspaceSettingsOpen = true"
-        class="team-settings-btn"
+        class="project-settings-btn"
       >
         <v-icon>mdi-cog</v-icon>
-        <v-tooltip activator="parent" location="bottom">팀 설정</v-tooltip>
+        <v-tooltip activator="parent" location="bottom">프로젝트 설정</v-tooltip>
       </v-btn>
 
-      <!-- 멤버 목록 토글 (팀 워크스페이스일 때만 표시) -->
+      <!-- 멤버 목록 토글 (프로젝트 워크스페이스일 때만 표시) -->
       <v-btn 
-        v-if="currentWorkspace?.type === 'team'"
+        v-if="currentWorkspace?.type === 'project'"
         icon 
         variant="text"
         :color="memberSidebarVisible ? 'primary' : ''"
         @click="emit('toggle-member-sidebar')"
       >
         <v-icon>mdi-account-group</v-icon>
-        <v-tooltip activator="parent" location="bottom">팀원 목록</v-tooltip>
+        <v-tooltip activator="parent" location="bottom">프로젝트 멤버 목록</v-tooltip>
       </v-btn>
 
       <!-- 테마 토글 -->

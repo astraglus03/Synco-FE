@@ -1,7 +1,7 @@
 <template>
-  <div class="team-chat">
+  <div class="project-chat">
     <div class="chat-header">
-      <h1>팀 채팅</h1>
+      <h1>프로젝트 채팅</h1>
       <v-btn color="primary" prepend-icon="mdi-plus">
         채널 생성
       </v-btn>
@@ -11,10 +11,10 @@
       <v-card>
         <v-card-title>
           <v-icon left>mdi-message-text</v-icon>
-          팀 채널
+          프로젝트 채널
         </v-card-title>
         <v-card-text>
-          <p>팀 채팅이 여기에 표시됩니다.</p>
+          <p>프로젝트 채팅이 여기에 표시됩니다.</p>
           <p v-if="selectedChannel">선택된 채널: {{ selectedChannel }}</p>
           <!-- TODO: 채팅 기능 구현 예정 -->
         </v-card-text>
@@ -24,7 +24,7 @@
 </template>
 
 <script setup>
-// 팀 채팅 컴포넌트
+// 프로젝트 채팅 컴포넌트
 // TODO: 실제 기능 구현 예정
 
 const props = defineProps({
@@ -33,7 +33,7 @@ const props = defineProps({
 </script>
 
 <style scoped>
-.team-chat {
+.project-chat {
   padding: 24px;
 }
 

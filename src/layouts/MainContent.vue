@@ -6,15 +6,15 @@ import PersonalDrive from '@/components/workspace/PersonalDrive.vue'
 import PersonalCalendar from '@/components/workspace/PersonalCalendar.vue'
 import PersonalProfile from '@/components/workspace/PersonalProfile.vue'
 import PersonalChat from '@/components/workspace/PersonalChat.vue'
-import TeamDashboard from '@/components/workspace/TeamDashboard.vue'
-import TeamChat from '@/components/workspace/TeamChat.vue'
-import TeamSchedule from '@/components/workspace/TeamSchedule.vue'
-import TeamDrive from '@/components/workspace/TeamDrive.vue'
-import TeamMeeting from '@/components/workspace/TeamMeeting.vue'
+import Dashboard from '@/components/workspace/Dashboard.vue'
+import Chat from '@/components/workspace/Chat.vue'
+import Schedule from '@/components/workspace/Schedule.vue'
+import Drive from '@/components/workspace/Drive.vue'
+import Meeting from '@/components/workspace/Meeting.vue'
 import MemberSidebar from './MemberSidebar.vue'
 
 const props = defineProps({
-  workspaceType: String, // 'personal' 또는 'team'
+  workspaceType: String, // 'personal' 또는 'project'
   currentChannel: String,
   memberSidebarVisible: Boolean,
   workspaceSidebarCollapsed: Boolean
@@ -69,12 +69,12 @@ const currentComponent = computed(() => {
     }
   } else {
     switch (props.currentChannel) {
-      case 'dashboard': return TeamDashboard
-      case 'chat': return TeamChat
-      case 'schedule': return TeamSchedule
-      case 'drive': return TeamDrive
-      case 'meeting': return TeamMeeting
-      default: return TeamDashboard
+      case 'dashboard': return Dashboard
+      case 'chat': return Chat
+      case 'schedule': return Schedule
+      case 'drive': return Drive
+      case 'meeting': return Meeting
+      default: return Dashboard
     }
   }
 })
@@ -107,9 +107,9 @@ const contentStyle = computed(() => {
       :navigate-to-personal-drive="navigateToPersonalDrive"
     />
     
-    <!-- 멤버 사이드바 (팀 워크스페이스일 때만 표시) -->
+    <!-- 멤버 사이드바 (프로젝트 워크스페이스일 때만 표시) -->
     <MemberSidebar 
-      v-if="workspaceType === 'team' && memberSidebarVisible"
+      v-if="workspaceType === 'project' && memberSidebarVisible"
       :visible="memberSidebarVisible"
     />
   </div>
