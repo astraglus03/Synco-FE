@@ -30,6 +30,7 @@ const selectedItems = ref([])
 // 드래그 앤 드롭 상태
 const draggedItem = ref(null)
 const dragOverItem = ref(null)
+const dragOverItemType = ref(null)
 const isDragging = ref(false)
 
 // 드롭 모달 상태
@@ -39,6 +40,7 @@ const dropTarget = ref(null)
 
 // 폴더 이름 변경 상태
 const editingItem = ref(null)
+const editingItemType = ref(null)
 const editingName = ref('')
 
 // 전체 폴더 목록 (공유문서 생성용)
@@ -63,19 +65,9 @@ const showFolderSelector = ref(false)
 const showDocEditor = ref(false)
 const currentDocument = ref(null)
 
-// 계산된 속성들 - 스토어 데이터 사용
+// 계산된 속성들 - 스토어 데이터 사용 (백엔드에서 이미 정렬되어 있으므로 그대로 사용)
 const currentItems = computed(() => {
-  let items = [...driveStore.items]
-  
-  // 폴더 우선, 파일 나중으로 정렬
-  const folders = items.filter(item => item.type === 'folder')
-  const files = items.filter(item => item.type !== 'folder')
-  
-  // 각각을 선택된 정렬 기준으로 정렬
-  const sortedFolders = sortItems(folders)
-  const sortedFiles = sortItems(files)
-  
-  return [...sortedFolders, ...sortedFiles]
+  return driveStore.items || []
 })
 
 // 필터링된 항목들
@@ -226,9 +218,11 @@ const handleDragOver = (item, event) => {
   
   if (canDrop) {
     dragOverItem.value = item
+    dragOverItemType.value = item.type
     event.dataTransfer.dropEffect = 'move'
   } else {
     dragOverItem.value = null
+    dragOverItemType.value = null
     event.dataTransfer.dropEffect = 'none'
   }
 }
@@ -236,6 +230,7 @@ const handleDragOver = (item, event) => {
 // 드래그 리브
 const handleDragLeave = () => {
   dragOverItem.value = null
+  dragOverItemType.value = null
 }
 
 // 드롭
@@ -286,8 +281,8 @@ const executeDropAction = async (actionType, targetItem) => {
       console.error('아이템 이동 실패:', result.error)
     }
   } else if (actionType === 'reorder') {
-    // 순서 변경
-    const result = await driveStore.reorderFolder(draggedItem.value.id, targetItem.id)
+    // 순서 변경 - 타겟 폴더의 order 값 사용
+    const result = await driveStore.reorderFolder(draggedItem.value.id, targetItem.orders)
     if (!result.success) {
       console.error('순서 변경 실패:', result.error)
     }
@@ -312,6 +307,7 @@ const closeDropModal = () => {
 // 드래그 상태 리셋
 const resetDragState = () => {
   dragOverItem.value = null
+  dragOverItemType.value = null
   draggedItem.value = null
   isDragging.value = false
 }
@@ -321,21 +317,22 @@ const handleDragEnd = () => {
   resetDragState()
 }
 
-// 폴더 이름 변경 시작
+// 이름 변경 시작
 const startRename = (item) => {
-  if (item.type !== 'folder') return
+  if (item.type !== 'folder' && item.type !== 'shared-doc' && item.type !== 'file') return
   
   // 이미 편집 중인 아이템을 다시 클릭하면 취소
-  if (editingItem.value === item.id) {
+  if (editingItem.value === item.id && editingItemType.value === item.type) {
     cancelRename()
     return
   }
   
   editingItem.value = item.id
+  editingItemType.value = item.type
   editingName.value = item.name
 }
 
-// 폴더 이름 변경 완료
+// 이름 변경 완료
 const finishRename = async () => {
   if (!editingItem.value || !editingName.value.trim()) {
     cancelRename()
@@ -343,23 +340,38 @@ const finishRename = async () => {
   }
   
   try {
-    const result = await driveStore.renameFolder(editingItem.value, editingName.value.trim())
+    const item = driveStore.items.find(item => item.id === editingItem.value)
+    let result
+    
+    if (editingItemType.value === 'folder') {
+      result = await driveStore.renameFolder(editingItem.value, editingName.value.trim())
+    } else if (editingItemType.value === 'shared-doc') {
+      result = await driveStore.renameDocument(editingItem.value, editingName.value.trim())
+    } else if (editingItemType.value === 'file') {
+      result = await driveStore.renameDocument(editingItem.value, editingName.value.trim())
+    }
+    
     if (result.success) {
       editingItem.value = null
+      editingItemType.value = null
       editingName.value = ''
+      
+      // UI 업데이트를 위해 다음 틱에서 포커스 해제
+      await nextTick()
     } else {
-      console.error('폴더 이름 변경 실패:', result.error)
+      console.error('이름 변경 실패:', result.error)
       // 실패 시 편집 모드 유지 (사용자가 다시 시도할 수 있도록)
     }
   } catch (error) {
-    console.error('폴더 이름 변경 중 오류:', error)
+    console.error('이름 변경 중 오류:', error)
     // 에러 발생 시 편집 모드 유지
   }
 }
 
-// 폴더 이름 변경 취소
+// 이름 변경 취소
 const cancelRename = () => {
   editingItem.value = null
+  editingItemType.value = null
   editingName.value = ''
 }
 
@@ -409,6 +421,41 @@ const buildFolderHierarchy = (folders) => {
 const openSharedDocModal = () => {
   showSharedDocModal.value = true
   loadAllFolders() // 전체 폴더 목록 로드
+}
+
+// 아이템 삭제
+const deleteItem = async (item) => {
+  if (!confirm(`"${item.name}"을(를) 삭제하시겠습니까?`)) {
+    return
+  }
+  
+  try {
+    const result = await driveStore.deleteItem(item.id, item.type)
+    if (!result.success) {
+      console.error('아이템 삭제 실패:', result.error)
+      alert('삭제에 실패했습니다.')
+    }
+  } catch (error) {
+    console.error('아이템 삭제 중 오류:', error)
+    alert('삭제 중 오류가 발생했습니다.')
+  }
+}
+
+// 삭제 버튼 표시 여부 확인
+const canDeleteItem = (item) => {
+  // 폴더는 항상 삭제 가능
+  if (item.type === 'folder') {
+    return true
+  }
+  
+  // 문서는 내가 올린 것만 삭제 가능 (memberSeq 확인)
+  if (item.type === 'file' || item.type === 'shared-doc') {
+    // TODO: 현재 사용자의 memberSeq와 비교
+    // 현재는 테스트용으로 true 반환
+    return true
+  }
+  
+  return false
 }
 
 // 평면화된 폴더 목록 (계층구조 표시용)
@@ -849,23 +896,23 @@ const loadDriveItems = async () => {
             class="grid-item"
             :class="{ 
               'selected': selectedItems.some(selected => selected.id === item.id),
-              'drag-over': dragOverItem?.id === item.id
+              'drag-over': dragOverItem?.id === item.id && dragOverItemType === item.type
             }"
             @click="selectItem(item, $event)"
             @dblclick="item.type === 'folder' ? enterFolder(item) : item.type === 'shared-doc' ? openSharedDoc(item) : null"
-            @dragstart="editingItem === item.id ? null : startDrag(item, $event)"
-            @dragover="editingItem === item.id ? null : handleDragOver(item, $event)"
-            @dragleave="editingItem === item.id ? null : handleDragLeave"
-            @drop="editingItem === item.id ? null : handleDrop(item, $event)"
-            :draggable="editingItem === item.id ? false : true"
+            @dragstart="editingItem === item.id && editingItemType === item.type ? null : startDrag(item, $event)"
+            @dragover="editingItem === item.id && editingItemType === item.type ? null : handleDragOver(item, $event)"
+            @dragleave="editingItem === item.id && editingItemType === item.type ? null : handleDragLeave"
+            @drop="editingItem === item.id && editingItemType === item.type ? null : handleDrop(item, $event)"
+            :draggable="editingItem === item.id && editingItemType === item.type ? false : true"
           >
             <div class="item-icon">
               <v-icon :color="item.color" size="48">{{ item.icon }}</v-icon>
             </div>
             <div class="item-name" :title="item.name">
-              <!-- 폴더 이름 편집 모드 -->
+              <!-- 이름 편집 모드 -->
               <input
-                v-if="editingItem === item.id && item.type === 'folder'"
+                v-if="editingItem === item.id && editingItemType === item.type"
                 v-model="editingName"
                 class="rename-input"
                 @keyup.enter="finishRename"
@@ -910,9 +957,35 @@ const loadDriveItems = async () => {
                 <v-icon size="16">mdi-download</v-icon>
               </v-btn>
               
+              <!-- 일반 파일 이름 변경 버튼 -->
+              <v-btn
+                v-if="item.type === 'file'"
+                icon="mdi-pencil"
+                size="small"
+                variant="text"
+                class="action-btn"
+                @click.stop="startRename(item)"
+                title="이름 변경"
+              >
+                <v-icon size="16">mdi-pencil</v-icon>
+              </v-btn>
+              
               <!-- 폴더 이름 변경 버튼 -->
               <v-btn
                 v-if="item.type === 'folder'"
+                icon="mdi-pencil"
+                size="small"
+                variant="text"
+                class="action-btn"
+                @click.stop="startRename(item)"
+                title="이름 변경"
+              >
+                <v-icon size="16">mdi-pencil</v-icon>
+              </v-btn>
+              
+              <!-- 공유문서 이름 변경 버튼 -->
+              <v-btn
+                v-if="item.type === 'shared-doc'"
                 icon="mdi-pencil"
                 size="small"
                 variant="text"
@@ -935,6 +1008,19 @@ const loadDriveItems = async () => {
               >
                 <v-icon size="16">{{ item.isLocked ? 'mdi-lock-open' : 'mdi-lock' }}</v-icon>
               </v-btn>
+              
+              <!-- 삭제 버튼 -->
+              <v-btn
+                v-if="canDeleteItem(item)"
+                icon="mdi-delete"
+                size="small"
+                variant="text"
+                class="action-btn delete-btn"
+                @click.stop="deleteItem(item)"
+                title="삭제"
+              >
+                <v-icon size="16">mdi-delete</v-icon>
+              </v-btn>
             </div>
           </div>
         </div>
@@ -956,19 +1042,29 @@ const loadDriveItems = async () => {
             class="list-item"
             :class="{ 
               'selected': selectedItems.some(selected => selected.id === item.id),
-              'drag-over': dragOverItem?.id === item.id
+              'drag-over': dragOverItem?.id === item.id && dragOverItemType === item.type
             }"
             @click="selectItem(item, $event)"
             @dblclick="item.type === 'folder' ? enterFolder(item) : item.type === 'shared-doc' ? openSharedDoc(item) : null"
-            @dragstart="editingItem === item.id ? null : startDrag(item, $event)"
-            @dragover="editingItem === item.id ? null : handleDragOver(item, $event)"
-            @dragleave="editingItem === item.id ? null : handleDragLeave"
-            @drop="editingItem === item.id ? null : handleDrop(item, $event)"
-            :draggable="editingItem === item.id ? false : true"
+            @dragstart="editingItem === item.id && editingItemType === item.type ? null : startDrag(item, $event)"
+            @dragover="editingItem === item.id && editingItemType === item.type ? null : handleDragOver(item, $event)"
+            @dragleave="editingItem === item.id && editingItemType === item.type ? null : handleDragLeave"
+            @drop="editingItem === item.id && editingItemType === item.type ? null : handleDrop(item, $event)"
+            :draggable="editingItem === item.id && editingItemType === item.type ? false : true"
           >
             <div class="list-cell name-cell">
               <v-icon :color="item.color" size="20" class="item-icon">{{ item.icon }}</v-icon>
-              <span class="item-name">{{ item.name }}</span>
+              <!-- 이름 편집 모드 -->
+              <input
+                v-if="editingItem === item.id && editingItemType === item.type"
+                v-model="editingName"
+                class="rename-input"
+                @keyup.enter="finishRename"
+                @keyup.escape="cancelRename"
+                ref="renameInput"
+              />
+              <!-- 일반 표시 모드 -->
+              <span v-else class="item-name">{{ item.name }}</span>
               <div v-if="item.type === 'shared-doc'" class="shared-doc-icons">
                 <v-icon 
                   v-if="item.isLocked"
@@ -997,9 +1093,35 @@ const loadDriveItems = async () => {
                 <v-icon size="16">mdi-download</v-icon>
               </v-btn>
               
+              <!-- 일반 파일 이름 변경 버튼 -->
+              <v-btn
+                v-if="item.type === 'file'"
+                icon="mdi-pencil"
+                size="small"
+                variant="text"
+                class="action-btn"
+                @click.stop="startRename(item)"
+                title="이름 변경"
+              >
+                <v-icon size="16">mdi-pencil</v-icon>
+              </v-btn>
+              
               <!-- 폴더 이름 변경 버튼 -->
               <v-btn
                 v-if="item.type === 'folder'"
+                icon="mdi-pencil"
+                size="small"
+                variant="text"
+                class="action-btn"
+                @click.stop="startRename(item)"
+                title="이름 변경"
+              >
+                <v-icon size="16">mdi-pencil</v-icon>
+              </v-btn>
+              
+              <!-- 공유문서 이름 변경 버튼 -->
+              <v-btn
+                v-if="item.type === 'shared-doc'"
                 icon="mdi-pencil"
                 size="small"
                 variant="text"
@@ -1021,6 +1143,19 @@ const loadDriveItems = async () => {
                 :title="item.isLocked ? '잠금 해제' : '잠금'"
               >
                 <v-icon size="16">{{ item.isLocked ? 'mdi-lock-open' : 'mdi-lock' }}</v-icon>
+              </v-btn>
+              
+              <!-- 삭제 버튼 -->
+              <v-btn
+                v-if="canDeleteItem(item)"
+                icon="mdi-delete"
+                size="small"
+                variant="text"
+                class="action-btn delete-btn"
+                @click.stop="deleteItem(item)"
+                title="삭제"
+              >
+                <v-icon size="16">mdi-delete</v-icon>
               </v-btn>
             </div>
             <div class="list-cell size-cell">{{ item.size }}</div>
@@ -2083,5 +2218,14 @@ const loadDriveItems = async () => {
   padding: 12px 16px;
   color: rgba(var(--v-theme-on-surface), 0.6);
   font-size: 14px;
+}
+
+/* 삭제 버튼 스타일 */
+.delete-btn {
+  color: #f44336 !important;
+}
+
+.delete-btn:hover {
+  background-color: rgba(244, 67, 54, 0.1) !important;
 }
 </style>

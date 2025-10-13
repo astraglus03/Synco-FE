@@ -21,6 +21,9 @@ export class DriveItem {
     this.documentType = data.documentType || null
     this.memberSeq = data.memberSeq || null
     
+    // 폴더 순서 (문서는 0)
+    this.orders = data.orders
+    
     // 하위 아이템 (폴더인 경우)
     this.children = data.children || []
   }
@@ -96,6 +99,7 @@ export class DriveItem {
       documentUrl: apiData.documentUrl,
       documentType: apiData.documentType,
       memberSeq: apiData.memberSeq,
+      orders: apiData.orders || 0, // 폴더 순서 (문서는 0)
       children: apiData.children || []
     })
   }

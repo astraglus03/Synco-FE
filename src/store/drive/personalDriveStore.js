@@ -93,7 +93,24 @@ export const usePersonalDriveStore = defineStore('personalDrive', () => {
       const result = await personalDriveApi.createFolder(name, currentDriveChannelSeq.value, parentId || currentParentId.value, true)
       
       if (result.success) {
-        items.value.push(result.data)
+        // 폴더를 올바른 위치에 삽입 (폴더들 중에서 orders 기준으로 정렬)
+        const newFolder = result.data
+        const folders = items.value.filter(item => item.type === 'folder')
+        const files = items.value.filter(item => item.type !== 'folder')
+        
+        // 새 폴더를 폴더들 중에서 올바른 위치에 삽입
+        let insertIndex = folders.length
+        for (let i = 0; i < folders.length; i++) {
+          if ((newFolder.orders || 0) < (folders[i].orders || 0)) {
+            insertIndex = i
+            break
+          }
+        }
+        
+        // 폴더들을 다시 정렬하고 파일들과 합치기
+        folders.splice(insertIndex, 0, newFolder)
+        items.value = [...folders, ...files]
+        
         return { success: true, data: result.data }
       } else {
         error.value = result.error
@@ -163,11 +180,12 @@ export const usePersonalDriveStore = defineStore('personalDrive', () => {
       const result = await personalDriveApi.renameFolder(folderId, newName, currentDriveChannelSeq.value)
       
       if (result.success) {
-        const index = items.value.findIndex(item => item.id === folderId)
+        // ID와 타입을 모두 확인해서 정확한 아이템 찾기
+        const index = items.value.findIndex(item => item.id === folderId && item.type === 'folder')
         if (index !== -1) {
-          items.value[index] = result.data
+          items.value[index].name = newName
         }
-        return { success: true, data: result.data }
+        return { success: true, data: items.value[index] }
       } else {
         error.value = result.error
         return { success: false, error: result.error }
@@ -175,6 +193,35 @@ export const usePersonalDriveStore = defineStore('personalDrive', () => {
     } catch (err) {
       error.value = '이름 변경에 실패했습니다.'
       console.error('개인 드라이브 폴더 이름 변경 실패:', err)
+      return { success: false, error: error.value }
+    } finally {
+      isLoading.value = false
+    }
+  }
+
+  const renameDocument = async (documentId, newName) => {
+    isLoading.value = true
+    error.value = null
+
+    try {
+      const result = await personalDriveApi.renameDocument(documentId, newName, currentDriveChannelSeq.value)
+      
+      if (result.success) {
+        // ID와 타입을 모두 확인해서 정확한 아이템 찾기 (file 또는 shared-doc)
+        const index = items.value.findIndex(item => 
+          item.id === documentId && (item.type === 'file' || item.type === 'shared-doc')
+        )
+        if (index !== -1) {
+          items.value[index].name = newName
+        }
+        return { success: true, data: items.value[index] }
+      } else {
+        error.value = result.error
+        return { success: false, error: result.error }
+      }
+    } catch (err) {
+      error.value = '문서 이름 변경에 실패했습니다.'
+      console.error('개인 드라이브 문서 이름 변경 실패:', err)
       return { success: false, error: error.value }
     } finally {
       isLoading.value = false
@@ -320,6 +367,8 @@ export const usePersonalDriveStore = defineStore('personalDrive', () => {
       const result = await personalDriveApi.reorderFolder(folderId, newOrder, currentDriveChannelSeq.value, true)
       
       if (result.success) {
+        // 순서 변경 후 전체 목록을 다시 로드하여 올바른 순서 반영
+        await loadItems(currentDriveChannelSeq.value, currentParentId.value)
         return { success: true }
       } else {
         error.value = result.error
@@ -435,6 +484,7 @@ export const usePersonalDriveStore = defineStore('personalDrive', () => {
     createSharedDocument,
     deleteItem,
     renameFolder,
+    renameDocument,
     downloadFile,
     downloadDocument,
     loadDocumentContent,

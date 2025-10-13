@@ -12,6 +12,7 @@ const API_ENDPOINTS = {
   PROJECT_REORDER: '/drive-service/drive/project/reorder',
   PROJECT_DOWNLOAD: (channelSeq, docSeq) => `/drive-service/drive/project/${channelSeq}/download/${docSeq}`,
   PROJECT_RENAME_FOLDER: '/drive-service/drive/project/folder/rename',
+  PROJECT_RENAME_DOCUMENT: '/drive-service/drive/project/document/rename',
   PROJECT_DELETE: (channelSeq) => `/drive-service/drive/project/${channelSeq}`,
   PROJECT_DOCUMENT: (channelSeq, docSeq) => `/drive-service/drive/project/${channelSeq}/documents/${docSeq}`,
   PROJECT_DOCUMENT_LOCK: '/drive-service/drive/project/documents/lock',
@@ -27,6 +28,7 @@ const API_ENDPOINTS = {
   PERSONAL_REORDER: '/drive-service/drive/personal/reorder',
   PERSONAL_DOWNLOAD: (channelSeq, docSeq) => `/drive-service/drive/personal/${channelSeq}/download/${docSeq}`,
   PERSONAL_RENAME_FOLDER: '/drive-service/drive/personal/folder/rename',
+  PERSONAL_RENAME_DOCUMENT: '/drive-service/drive/personal/document/rename',
   PERSONAL_DELETE: (channelSeq) => `/drive-service/drive/personal/${channelSeq}`,
   PERSONAL_DOCUMENT: (channelSeq, docSeq) => `/drive-service/drive/personal/${channelSeq}/documents/${docSeq}`,
   PERSONAL_DOCUMENT_LOCK: '/drive-service/drive/personal/documents/lock',
@@ -111,6 +113,7 @@ class DriveApiBase {
       reorder: API_ENDPOINTS.PERSONAL_REORDER,
       download: API_ENDPOINTS.PERSONAL_DOWNLOAD,
       renameFolder: API_ENDPOINTS.PERSONAL_RENAME_FOLDER,
+      renameDocument: API_ENDPOINTS.PERSONAL_RENAME_DOCUMENT,
       delete: API_ENDPOINTS.PERSONAL_DELETE,
       document: API_ENDPOINTS.PERSONAL_DOCUMENT,
       documentLock: API_ENDPOINTS.PERSONAL_DOCUMENT_LOCK,
@@ -125,6 +128,7 @@ class DriveApiBase {
       reorder: API_ENDPOINTS.PROJECT_REORDER,
       download: API_ENDPOINTS.PROJECT_DOWNLOAD,
       renameFolder: API_ENDPOINTS.PROJECT_RENAME_FOLDER,
+      renameDocument: API_ENDPOINTS.PROJECT_RENAME_DOCUMENT,
       delete: API_ENDPOINTS.PROJECT_DELETE,
       document: API_ENDPOINTS.PROJECT_DOCUMENT,
       documentLock: API_ENDPOINTS.PROJECT_DOCUMENT_LOCK,
@@ -249,6 +253,25 @@ class DriveApiBase {
     }
   }
 
+  // 문서 이름 변경
+  async renameDocument(documentSeq, newDocumentName, driveChannelSeq) {
+    try {
+      const response = await axios.patch(this.endpoints.renameDocument, {
+        driveChannelSeq: TEST_CHANNEL_SEQ,
+        documentSeq,
+        newDocumentName
+      })
+      
+      return createApiResponse(true, DriveItem.fromApiFormat({
+        ...response.data.data,
+        driveChannelSeq,
+        isPersonal: this.isPersonal
+      }))
+    } catch (error) {
+      return handleApiError(error, '문서 이름 변경에 실패했습니다.')
+    }
+  }
+
   // 아이템 삭제
   async deleteItem(itemId, itemType, driveChannelSeq) {
     try {
@@ -323,10 +346,10 @@ class DriveApiBase {
   async moveItem(itemId, itemType, newParentId, driveChannelSeq) {
     try {
       await axios.patch(this.endpoints.move, {
-        driveChannelSeq: TEST_CHANNEL_SEQ,
         itemId,
+        driveChannelSeq: TEST_CHANNEL_SEQ,
         itemType,
-        newParentId
+        newParentSeq: newParentId
       })
       
       return createApiResponse(true)
@@ -336,16 +359,18 @@ class DriveApiBase {
   }
 
   // 폴더 순서 변경
-  async reorderFolder(folderId, targetFolderId, driveChannelSeq) {
+  async reorderFolder(folderId, newOrder, driveChannelSeq) {
     try {
       await axios.patch(this.endpoints.reorder, {
+        itemId: folderId,
         driveChannelSeq: TEST_CHANNEL_SEQ,
-        folderId,
-        targetFolderId
+        newOrder: newOrder
       })
       
+      console.log('✅ 폴더 순서 변경 성공')
       return createApiResponse(true)
     } catch (error) {
+      console.error('❌ 폴더 순서 변경 실패:', error)
       return handleApiError(error, '순서 변경에 실패했습니다.')
     }
   }
@@ -406,6 +431,12 @@ export const driveApi = {
     return api.renameFolder(folderId, newName, driveChannelSeq)
   },
 
+  // 문서 이름 변경
+  async renameDocument(documentId, newName, driveChannelSeq, isPersonal = false) {
+    const api = isPersonal ? personalDriveApi : projectDriveApi
+    return api.renameDocument(documentId, newName, driveChannelSeq)
+  },
+
   // 파일 다운로드
   async downloadFile(documentId, driveChannelSeq, isPersonal = false) {
     const api = isPersonal ? personalDriveApi : projectDriveApi
@@ -452,8 +483,8 @@ export const driveApi = {
   },
 
   // 폴더 순서 변경
-  async reorderFolder(folderId, targetFolderId, driveChannelSeq, isPersonal = false) {
+  async reorderFolder(folderId, newOrder, driveChannelSeq, isPersonal = false) {
     const api = isPersonal ? personalDriveApi : projectDriveApi
-    return api.reorderFolder(folderId, targetFolderId, driveChannelSeq)
+    return api.reorderFolder(folderId, newOrder, driveChannelSeq)
   }
 }
