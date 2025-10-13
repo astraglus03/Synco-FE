@@ -54,7 +54,7 @@ const initializeFromRoute = () => {
     notificationStore.setWorkspaceType(workspace.type)
     
     // 워크스페이스별 권한 설정 (테스트용)
-    if (workspace.type === 'team') {
+    if (workspace.type === 'project') {
       setUserRole(PERMISSION_TYPES.MANAGER, workspace.id)
     } else {
       setUserRole(PERMISSION_TYPES.PARTICIPANT, workspace.id)

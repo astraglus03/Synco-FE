@@ -709,13 +709,13 @@ const handleGlobalClick = (event) => {
 const loadDriveItems = async () => {
   if (!props.currentChannel) return
   
-  const driveChannelSeq = parseInt(props.currentChannel.replace('team', ''))
+  const driveChannelSeq = parseInt(props.currentChannel.replace('project', ''))
   await driveStore.loadItems(driveChannelSeq, null)
 }
 </script>
 
 <template>
-  <div class="team-drive">
+  <div class="project-drive">
     <!-- 헤더 -->
     <div class="drive-header">
       <div class="header-left">
@@ -1419,7 +1419,7 @@ const loadDriveItems = async () => {
 </template>
 
 <style scoped>
-.team-drive {
+.project-drive {
   height: calc(100vh - 60px);
   background: rgb(var(--v-theme-background));
   display: flex;
