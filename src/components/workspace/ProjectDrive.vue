@@ -1,6 +1,8 @@
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { usePermissions, PERMISSIONS } from '@/composables/usePermissions'
+import { useProjectDriveStore } from '@/store/drive/projectDriveStore'
+import { useDraggable, useDropZone } from '@vueuse/core'
 import SharedDocEditor from './SharedDocEditor.vue'
 
 const props = defineProps({
@@ -8,12 +10,19 @@ const props = defineProps({
 })
 
 const { hasPermission, isManager, isSuper } = usePermissions()
+const driveStore = useProjectDriveStore()
 
 // 뷰 모드 (list, grid)
 const viewMode = ref('grid')
 
-// 현재 폴더 경로
-const currentPath = ref([])
+// 브레드크럼 경로
+const breadcrumbPath = computed(() => {
+  const path = [{ id: null, name: '홈' }]
+  if (driveStore.currentPath && driveStore.currentPath.length > 0) {
+    path.push(...driveStore.currentPath)
+  }
+  return path
+})
 
 // 선택된 항목들
 const selectedItems = ref([])
@@ -21,6 +30,20 @@ const selectedItems = ref([])
 // 드래그 앤 드롭 상태
 const draggedItem = ref(null)
 const dragOverItem = ref(null)
+const isDragging = ref(false)
+
+// 드롭 모달 상태
+const showDropModal = ref(false)
+const dropAction = ref(null) // 'move' 또는 'reorder'
+const dropTarget = ref(null)
+
+// 폴더 이름 변경 상태
+const editingItem = ref(null)
+const editingName = ref('')
+
+// 전체 폴더 목록 (공유문서 생성용)
+const allFolders = ref([])
+const loadingFolders = ref(false)
 
 // 검색 및 필터
 const searchQuery = ref('')
@@ -40,264 +63,9 @@ const showFolderSelector = ref(false)
 const showDocEditor = ref(false)
 const currentDocument = ref(null)
 
-// 팀 멤버 데이터
-const teamMembers = ref([
-  { id: 1, name: '김민수', avatar: '김', role: '팀장', status: 'online' },
-  { id: 2, name: '이지현', avatar: '이', role: '디자이너', status: 'away' },
-  { id: 3, name: '박준호', avatar: '박', role: '개발자', status: 'online' },
-  { id: 4, name: '최수진', avatar: '최', role: '마케터', status: 'offline' },
-  { id: 5, name: '정다은', avatar: '정', role: '기획자', status: 'online' }
-])
-
-// 파일/폴더 데이터 (계층 구조)
-const fileSystem = ref([
-  {
-    id: 1,
-    name: '프로젝트 문서',
-    type: 'folder',
-    size: '-',
-    uploader: '김민수',
-    uploadDate: '2025-01-10',
-    modifiedDate: '2025-01-15',
-    icon: 'mdi-folder',
-    color: '#2196f3',
-    parentId: null,
-    children: [
-      {
-        id: 11,
-        name: '기획서',
-        type: 'folder',
-        size: '-',
-        uploader: '김민수',
-        uploadDate: '2025-01-10',
-        modifiedDate: '2025-01-12',
-        icon: 'mdi-folder',
-        color: '#2196f3',
-        parentId: 1,
-        children: [
-          {
-            id: 111,
-            name: '프로젝트 기획서_v2.pdf',
-            type: 'file',
-            size: '2.3 MB',
-            uploader: '김민수',
-            uploadDate: '2025-01-12',
-            modifiedDate: '2025-01-12',
-            icon: 'mdi-file-pdf',
-            color: '#f44336',
-            parentId: 11
-          },
-          {
-            id: 112,
-            name: '요구사항 정의서.docx',
-            type: 'file',
-            size: '1.8 MB',
-            uploader: '이지현',
-            uploadDate: '2025-01-11',
-            modifiedDate: '2025-01-11',
-            icon: 'mdi-file-word',
-            color: '#2196f3',
-            parentId: 11
-          }
-        ]
-      },
-      {
-        id: 12,
-        name: '디자인',
-        type: 'folder',
-        size: '-',
-        uploader: '최수진',
-        uploadDate: '2025-01-09',
-        modifiedDate: '2025-01-14',
-        icon: 'mdi-folder',
-        color: '#2196f3',
-        parentId: 1,
-        children: [
-          {
-            id: 121,
-            name: 'UI_디자인_시안.psd',
-            type: 'file',
-            size: '15.7 MB',
-            uploader: '최수진',
-            uploadDate: '2025-01-14',
-            modifiedDate: '2025-01-14',
-            icon: 'mdi-file-image',
-            color: '#ff5722',
-            parentId: 12
-          },
-          {
-            id: 122,
-            name: '아이콘_세트.ai',
-            type: 'file',
-            size: '8.2 MB',
-            uploader: '최수진',
-            uploadDate: '2025-01-13',
-            modifiedDate: '2025-01-13',
-            icon: 'mdi-file-image',
-            color: '#ff5722',
-            parentId: 12
-          }
-        ]
-      }
-    ]
-  },
-  {
-    id: 2,
-    name: '마케팅 자료',
-    type: 'folder',
-    size: '-',
-    uploader: '이지현',
-    uploadDate: '2025-01-08',
-    modifiedDate: '2025-01-16',
-    icon: 'mdi-folder',
-    color: '#2196f3',
-    parentId: null,
-    children: [
-      {
-        id: 21,
-        name: '브랜드 가이드.pdf',
-        type: 'file',
-        size: '5.2 MB',
-        uploader: '이지현',
-        uploadDate: '2025-01-16',
-        modifiedDate: '2025-01-16',
-        icon: 'mdi-file-pdf',
-        color: '#f44336',
-        parentId: 2
-      },
-      {
-        id: 22,
-        name: '소셜미디어_템플릿.psd',
-        type: 'file',
-        size: '12.1 MB',
-        uploader: '이지현',
-        uploadDate: '2025-01-15',
-        modifiedDate: '2025-01-15',
-        icon: 'mdi-file-image',
-        color: '#ff5722',
-        parentId: 2
-      }
-    ]
-  },
-  {
-    id: 3,
-    name: '개발 문서',
-    type: 'folder',
-    size: '-',
-    uploader: '박준호',
-    uploadDate: '2025-01-07',
-    modifiedDate: '2025-01-17',
-    icon: 'mdi-folder',
-    color: '#2196f3',
-    parentId: null,
-    children: [
-      {
-        id: 31,
-        name: 'API_문서.md',
-        type: 'file',
-        size: '0.8 MB',
-        uploader: '박준호',
-        uploadDate: '2025-01-17',
-        modifiedDate: '2025-01-17',
-        icon: 'mdi-file-document',
-        color: '#607d8b',
-        parentId: 3
-      },
-      {
-        id: 32,
-        name: '데이터베이스_스키마.sql',
-        type: 'file',
-        size: '0.3 MB',
-        uploader: '박준호',
-        uploadDate: '2025-01-16',
-        modifiedDate: '2025-01-16',
-        icon: 'mdi-file-code',
-        color: '#795548',
-        parentId: 3
-      }
-    ]
-  },
-  {
-    id: 4,
-    name: '회의록_2025_01_15.txt',
-    type: 'file',
-    size: '0.5 KB',
-    uploader: '김민수',
-    uploadDate: '2025-01-15',
-    modifiedDate: '2025-01-15',
-    icon: 'mdi-file-document',
-    color: '#607d8b',
-    parentId: null
-  },
-  {
-    id: 7,
-    name: '프로젝트 회의록',
-    type: 'shared-doc',
-    size: '-',
-    uploader: '김민수',
-    uploadDate: '2025-01-15',
-    modifiedDate: '2025-01-15',
-    icon: 'mdi-file-document-multiple',
-    color: '#ff9800',
-    parentId: null,
-    isShared: true,
-    isLocked: false,
-    content: '프로젝트 회의록\n\n일시: 2025년 1월 15일\n참석자: 김민수, 이지현, 박준호\n\n주요 안건:\n1. 프로젝트 진행 상황 검토\n2. 다음 주 계획 수립\n3. 이슈 사항 논의\n\n결과:\n- 웹사이트 리뉴얼 프로젝트 70% 완료\n- 다음 주까지 UI 디자인 완료 예정\n- 데이터베이스 구축 작업 시작'
-  },
-  {
-    id: 8,
-    name: '기획서 초안',
-    type: 'shared-doc',
-    size: '-',
-    uploader: '이지현',
-    uploadDate: '2025-01-14',
-    modifiedDate: '2025-01-16',
-    icon: 'mdi-file-document-multiple',
-    color: '#ff9800',
-    parentId: 1,
-    isShared: true,
-    isLocked: true,
-    content: '기획서 초안\n\n1. 프로젝트 개요\n- 목적: 사용자 경험 개선\n- 기간: 3개월\n- 예산: 5천만원\n\n2. 주요 기능\n- 반응형 웹 디자인\n- 모바일 최적화\n- 접근성 개선\n\n3. 일정\n- 1월: 기획 및 설계\n- 2월: 개발\n- 3월: 테스트 및 배포'
-  },
-  {
-    id: 5,
-    name: '데이터_분석_보고서.xlsx',
-    type: 'file',
-    size: '3.8 MB',
-    uploader: '정다은',
-    uploadDate: '2025-01-14',
-    modifiedDate: '2025-01-14',
-    icon: 'mdi-file-excel',
-    color: '#4caf50',
-    parentId: null
-  },
-  {
-    id: 6,
-    name: '프레젠테이션_자료.pptx',
-    type: 'file',
-    size: '7.2 MB',
-    uploader: '김민수',
-    uploadDate: '2025-01-13',
-    modifiedDate: '2025-01-13',
-    icon: 'mdi-file-powerpoint',
-    color: '#2196f3',
-    parentId: null
-  }
-])
-
-// 현재 폴더의 항목들 (폴더 우선, 파일 나중)
+// 계산된 속성들 - 스토어 데이터 사용
 const currentItems = computed(() => {
-  const currentFolderId = currentPath.value.length > 0 ? currentPath.value[currentPath.value.length - 1] : null
-  let items = []
-  
-  if (currentFolderId) {
-    // 특정 폴더 내부
-    const folder = findItemById(currentFolderId)
-    items = folder?.children || []
-  } else {
-    // 루트 폴더
-    items = fileSystem.value
-  }
+  let items = [...driveStore.items]
   
   // 폴더 우선, 파일 나중으로 정렬
   const folders = items.filter(item => item.type === 'folder')
@@ -318,18 +86,6 @@ const filteredItems = computed(() => {
     item.name.toLowerCase().includes(searchQuery.value.toLowerCase())
   )
 })
-
-// 아이템 찾기 (재귀)
-const findItemById = (id, items = fileSystem.value) => {
-  for (const item of items) {
-    if (item.id === id) return item
-    if (item.children) {
-      const found = findItemById(id, item.children)
-      if (found) return found
-    }
-  }
-  return null
-}
 
 // 아이템 정렬
 const sortItems = (items) => {
@@ -375,112 +131,105 @@ const parseSize = (sizeStr) => {
   }
 }
 
-// 폴더 더블클릭으로 진입
-const enterFolder = (folder) => {
-  if (folder.type === 'folder') {
-    currentPath.value.push(folder.id)
-  }
-}
-
 // 공유문서 더블클릭으로 문서 편집기 진입
-const openSharedDoc = (doc) => {
+const openSharedDoc = async (doc) => {
   if (doc.type === 'shared-doc') {
-    currentDocument.value = {
-      ...doc,
-      content: doc.content || '문서를 작성해보세요...'
+    const result = await driveStore.loadDocumentContent(doc.id)
+    if (result.success) {
+      showDocEditor.value = true
+    } else {
+      console.error('문서 내용 로드 실패:', result.error)
     }
-    showDocEditor.value = true
   }
 }
 
 // 파일 다운로드
-const downloadFile = (file) => {
+const downloadFile = async (file) => {
   if (file.type !== 'folder' && file.type !== 'shared-doc') {
-    console.log('파일 다운로드:', file.name)
-    // TODO: 실제 파일 다운로드 로직 구현
+    const result = await driveStore.downloadFile(file)
+    if (!result.success) {
+      console.error('파일 다운로드 실패:', result.error)
+    }
   }
 }
 
 // 공유문서 저장
-const saveDocument = (docData) => {
-  const doc = findItemById(docData.id)
-  if (doc) {
-    doc.content = docData.content
-    doc.modifiedDate = docData.modifiedDate
+const saveDocument = async (docData) => {
+  const result = await driveStore.saveDocumentContent(docData.id, docData.content)
+  if (!result.success) {
+    console.error('문서 저장 실패:', result.error)
   }
 }
 
 // 공유문서 편집기 닫기
 const closeDocEditor = () => {
   showDocEditor.value = false
-  currentDocument.value = null
+  driveStore.currentDocument = null
 }
 
 // 공유문서 잠금 해제/잠금
-const toggleDocumentLock = (docId) => {
-  const doc = findItemById(docId)
-  if (doc && doc.type === 'shared-doc') {
-    doc.isLocked = !doc.isLocked
-    // 현재 편집 중인 문서라면 currentDocument도 업데이트
-    if (currentDocument.value && currentDocument.value.id === docId) {
-      currentDocument.value.isLocked = doc.isLocked
-    }
-  }
-}
-
-// 뒤로가기
-const goBack = () => {
-  if (currentPath.value.length > 0) {
-    currentPath.value.pop()
+const toggleDocumentLock = async (docId) => {
+  const result = await driveStore.toggleDocumentLock(docId)
+  if (!result.success) {
+    console.error('잠금 상태 변경 실패:', result.error)
   }
 }
 
 // 홈으로
 const goHome = () => {
-  currentPath.value = []
+  driveStore.goToRoot()
 }
 
 // 현재 경로 표시
 const currentPathDisplay = computed(() => {
-  if (currentPath.value.length === 0) return '홈'
-  
-  const pathNames = currentPath.value.map(id => {
-    const item = findItemById(id)
-    return item ? item.name : '알 수 없음'
-  })
-  
-  return ['홈', ...pathNames].join(' / ')
+  return driveStore.currentPathString || '홈'
 })
 
 // 아이템 선택
 const selectItem = (item, event) => {
   if (event.ctrlKey || event.metaKey) {
     // Ctrl/Cmd 클릭: 다중 선택
-    const index = selectedItems.value.findIndex(selected => selected.id === item.id)
-    if (index > -1) {
-      selectedItems.value.splice(index, 1)
-    } else {
-      selectedItems.value.push(item)
-    }
+    driveStore.selectItem(item.id)
   } else {
     // 일반 클릭: 단일 선택
-    selectedItems.value = [item]
+    driveStore.clearSelection()
+    driveStore.selectItem(item.id)
   }
 }
 
 // 드래그 시작
 const startDrag = (item, event) => {
   draggedItem.value = item
+  isDragging.value = true
   event.dataTransfer.effectAllowed = 'move'
-  event.dataTransfer.setData('text/plain', item.id)
+  event.dataTransfer.setData('text/plain', item.id.toString())
 }
 
 // 드래그 오버
 const handleDragOver = (item, event) => {
   event.preventDefault()
-  if (item.type === 'folder') {
+  
+  if (!draggedItem.value || draggedItem.value.id === item.id) return
+  
+  // 드롭 가능한 경우만 표시
+  let canDrop = false
+  
+  if (draggedItem.value.type === 'folder') {
+    // 폴더는 다른 폴더로 이동하거나 같은 레벨에서 순서 변경 가능
+    if (item.type === 'folder') {
+      canDrop = true
+    }
+  } else {
+    // 문서나 파일은 폴더로만 이동 가능
+    canDrop = item.type === 'folder'
+  }
+  
+  if (canDrop) {
     dragOverItem.value = item
     event.dataTransfer.dropEffect = 'move'
+  } else {
+    dragOverItem.value = null
+    event.dataTransfer.dropEffect = 'none'
   }
 }
 
@@ -490,64 +239,194 @@ const handleDragLeave = () => {
 }
 
 // 드롭
-const handleDrop = (targetItem, event) => {
+const handleDrop = async (targetItem, event) => {
   event.preventDefault()
   
-  if (!draggedItem.value || !targetItem || targetItem.type !== 'folder') return
+  if (!draggedItem.value || !targetItem) return
   
-  // 같은 폴더로 이동하는 경우 무시
-  if (draggedItem.value.parentId === targetItem.id) return
+  // 같은 아이템으로 드롭하는 경우 무시
+  if (draggedItem.value.id === targetItem.id) {
+    resetDragState()
+    return
+  }
   
-  // 아이템 이동
-  moveItem(draggedItem.value.id, targetItem.id)
+  // 드롭 가능 여부 확인
+  let canDrop = false
+  let actionType = null
   
+  if (draggedItem.value.type === 'folder') {
+    if (targetItem.type === 'folder') {
+      canDrop = true
+      // 폴더끼리 드롭하는 경우 모달로 선택
+      dropAction.value = null
+      dropTarget.value = targetItem
+      showDropModal.value = true
+      return
+    }
+  } else {
+    if (targetItem.type === 'folder') {
+      canDrop = true
+      actionType = 'move'
+    }
+  }
+  
+  if (canDrop && actionType) {
+    await executeDropAction(actionType, targetItem)
+  }
+  
+  resetDragState()
+}
+
+// 드롭 액션 실행
+const executeDropAction = async (actionType, targetItem) => {
+  if (actionType === 'move') {
+    // 폴더로 이동
+    const result = await driveStore.moveItem(draggedItem.value.id, draggedItem.value.type, targetItem.id)
+    if (!result.success) {
+      console.error('아이템 이동 실패:', result.error)
+    }
+  } else if (actionType === 'reorder') {
+    // 순서 변경
+    const result = await driveStore.reorderFolder(draggedItem.value.id, targetItem.id)
+    if (!result.success) {
+      console.error('순서 변경 실패:', result.error)
+    }
+  }
+}
+
+// 드롭 모달에서 액션 선택
+const selectDropAction = async (action) => {
+  dropAction.value = action
+  await executeDropAction(action, dropTarget.value)
+  closeDropModal()
+}
+
+// 드롭 모달 닫기
+const closeDropModal = () => {
+  showDropModal.value = false
+  dropAction.value = null
+  dropTarget.value = null
+  resetDragState()
+}
+
+// 드래그 상태 리셋
+const resetDragState = () => {
   dragOverItem.value = null
   draggedItem.value = null
+  isDragging.value = false
 }
 
-// 아이템 이동
-const moveItem = (itemId, newParentId) => {
-  const item = findItemById(itemId)
-  if (!item) return
-  
-  // 기존 위치에서 제거
-  removeItemFromParent(itemId, item.parentId)
-  
-  // 새 위치에 추가
-  addItemToParent(item, newParentId)
-  
-  // 선택 해제
-  selectedItems.value = []
+// 드래그 종료
+const handleDragEnd = () => {
+  resetDragState()
 }
 
-// 부모에서 아이템 제거
-const removeItemFromParent = (itemId, parentId) => {
-  if (parentId === null) {
-    const index = fileSystem.value.findIndex(item => item.id === itemId)
-    if (index > -1) fileSystem.value.splice(index, 1)
-  } else {
-    const parent = findItemById(parentId)
-    if (parent && parent.children) {
-      const index = parent.children.findIndex(item => item.id === itemId)
-      if (index > -1) parent.children.splice(index, 1)
+// 폴더 이름 변경 시작
+const startRename = (item) => {
+  if (item.type !== 'folder') return
+  
+  // 이미 편집 중인 아이템을 다시 클릭하면 취소
+  if (editingItem.value === item.id) {
+    cancelRename()
+    return
+  }
+  
+  editingItem.value = item.id
+  editingName.value = item.name
+}
+
+// 폴더 이름 변경 완료
+const finishRename = async () => {
+  if (!editingItem.value || !editingName.value.trim()) {
+    cancelRename()
+    return
+  }
+  
+  try {
+    const result = await driveStore.renameFolder(editingItem.value, editingName.value.trim())
+    if (result.success) {
+      editingItem.value = null
+      editingName.value = ''
+    } else {
+      console.error('폴더 이름 변경 실패:', result.error)
+      // 실패 시 편집 모드 유지 (사용자가 다시 시도할 수 있도록)
     }
+  } catch (error) {
+    console.error('폴더 이름 변경 중 오류:', error)
+    // 에러 발생 시 편집 모드 유지
   }
 }
 
-// 부모에 아이템 추가
-const addItemToParent = (item, parentId) => {
-  item.parentId = parentId
-  
-  if (parentId === null) {
-    fileSystem.value.push(item)
+// 폴더 이름 변경 취소
+const cancelRename = () => {
+  editingItem.value = null
+  editingName.value = ''
+}
+
+// 폴더 진입
+const enterFolder = (folder) => {
+  driveStore.enterFolder(folder)
+}
+
+// 브레드크럼 클릭으로 폴더 이동
+const navigateToFolder = (folderId) => {
+  if (folderId === null) {
+    // 홈으로 이동
+    driveStore.goToRoot()
   } else {
-    const parent = findItemById(parentId)
-    if (parent) {
-      if (!parent.children) parent.children = []
-      parent.children.push(item)
-    }
+    // 특정 폴더로 이동
+    driveStore.goToFolder(folderId)
   }
 }
+
+// 뒤로 가기
+const goBack = () => {
+  driveStore.goBack()
+}
+
+// 전체 폴더 목록 로드
+const loadAllFolders = async () => {
+  loadingFolders.value = true
+  try {
+    const result = await driveStore.getAllFolders()
+    if (result.success) {
+      allFolders.value = result.data
+    }
+  } catch (error) {
+    console.error('전체 폴더 목록 로드 실패:', error)
+  } finally {
+    loadingFolders.value = false
+  }
+}
+
+// 폴더 계층구조 생성 (백엔드에서 이미 계층구조로 반환됨)
+const buildFolderHierarchy = (folders) => {
+  // 백엔드에서 이미 계층구조로 반환되므로 그대로 사용
+  return folders || []
+}
+
+// 공유문서 생성 모달 열기
+const openSharedDocModal = () => {
+  showSharedDocModal.value = true
+  loadAllFolders() // 전체 폴더 목록 로드
+}
+
+// 평면화된 폴더 목록 (계층구조 표시용)
+const flattenedFolders = computed(() => {
+  const result = []
+  
+  const flatten = (folders, level = 0) => {
+    folders.forEach(folder => {
+      result.push({ ...folder, level })
+      if (folder.children && folder.children.length > 0) {
+        flatten(folder.children, level + 1)
+      }
+    })
+  }
+  
+  flatten(buildFolderHierarchy(allFolders.value))
+  return result
+})
 
 // 파일 크기 포맷팅
 const formatFileSize = (bytes) => {
@@ -560,6 +439,7 @@ const formatFileSize = (bytes) => {
 
 // 날짜 포맷팅
 const formatDate = (dateStr) => {
+  if (!dateStr) return '-'
   const date = new Date(dateStr)
   return date.toLocaleDateString('ko-KR', {
     year: 'numeric',
@@ -584,36 +464,16 @@ const toggleViewMode = () => {
 }
 
 // 폴더 생성
-const createFolder = () => {
+const createFolder = async () => {
   if (!newFolderName.value.trim()) return
   
-  const newFolder = {
-    id: Date.now(),
-    name: newFolderName.value.trim(),
-    type: 'folder',
-    size: '-',
-    uploader: '김민수', // 현재 사용자
-    uploadDate: new Date().toISOString().split('T')[0],
-    modifiedDate: new Date().toISOString().split('T')[0],
-    icon: 'mdi-folder',
-    color: '#2196f3',
-    parentId: currentPath.value.length > 0 ? currentPath.value[currentPath.value.length - 1] : null,
-    children: []
-  }
-  
-  // 현재 폴더에 추가
-  if (newFolder.parentId) {
-    const parent = findItemById(newFolder.parentId)
-    if (parent) {
-      if (!parent.children) parent.children = []
-      parent.children.push(newFolder)
-    }
+  const result = await driveStore.createFolder(newFolderName.value.trim())
+  if (result.success) {
+    newFolderName.value = ''
+    showNewFolderModal.value = false
   } else {
-    fileSystem.value.push(newFolder)
+    console.error('폴더 생성 실패:', result.error)
   }
-  
-  newFolderName.value = ''
-  showNewFolderModal.value = false
 }
 
 // 파일 업로드
@@ -624,39 +484,16 @@ const handleFileUpload = (event) => {
 }
 
 // 파일 업로드 처리
-const uploadFilesToDrive = () => {
+const uploadFilesToDrive = async () => {
   if (uploadFiles.value.length === 0) return
   
-  const currentFolderId = currentPath.value.length > 0 ? currentPath.value[currentPath.value.length - 1] : null
-  
-  uploadFiles.value.forEach(file => {
-    const newFile = {
-      id: Date.now() + Math.random(),
-      name: file.name,
-      type: getFileType(file.type),
-      size: formatFileSizeFromBytes(file.size),
-      uploader: '김민수', // 현재 사용자
-      uploadDate: new Date().toISOString().split('T')[0],
-      modifiedDate: new Date().toISOString().split('T')[0],
-      icon: getFileIcon(file.type),
-      color: getFileColor(file.type),
-      parentId: currentFolderId
-    }
-    
-    // 현재 폴더에 추가
-    if (newFile.parentId) {
-      const parent = findItemById(newFile.parentId)
-      if (parent) {
-        if (!parent.children) parent.children = []
-        parent.children.push(newFile)
-      }
-    } else {
-      fileSystem.value.push(newFile)
-    }
-  })
-  
-  uploadFiles.value = []
-  showUploadModal.value = false
+  const result = await driveStore.uploadFiles(uploadFiles.value)
+  if (result.success) {
+    uploadFiles.value = []
+    showUploadModal.value = false
+  } else {
+    console.error('파일 업로드 실패:', result.error)
+  }
 }
 
 // 파일 타입 결정
@@ -708,41 +545,23 @@ const formatFileSizeFromBytes = (bytes) => {
 }
 
 // 공유문서 생성
-const createSharedDoc = () => {
+const createSharedDoc = async () => {
   if (!sharedDocTitle.value.trim()) return
   
-  const newSharedDoc = {
-    id: Date.now(),
-    name: sharedDocTitle.value.trim(),
-    type: 'shared-doc',
-    size: '-',
-    uploader: '김민수', // 현재 사용자
-    uploadDate: new Date().toISOString().split('T')[0],
-    modifiedDate: new Date().toISOString().split('T')[0],
-    icon: 'mdi-file-document-multiple',
-    color: '#ff9800',
-    parentId: sharedDocLocation.value,
-    isShared: true,
-    isLocked: sharedDocIsLocked.value
-  }
+  // 현재 폴더의 ID를 사용 (sharedDocLocation이 선택된 폴더가 아니라면 현재 폴더 사용)
+  const parentFolderId = sharedDocLocation.value || driveStore.currentParentId
   
-  // 선택된 폴더에 추가
-  if (newSharedDoc.parentId) {
-    const parent = findItemById(newSharedDoc.parentId)
-    if (parent) {
-      if (!parent.children) parent.children = []
-      parent.children.push(newSharedDoc)
-    }
+  const result = await driveStore.createSharedDocument(sharedDocTitle.value.trim(), parentFolderId, sharedDocIsLocked.value)
+  if (result.success) {
+    // 폼 초기화
+    sharedDocTitle.value = ''
+    sharedDocLocation.value = null
+    sharedDocIsLocked.value = false
+    showSharedDocModal.value = false
+    showFolderSelector.value = false
   } else {
-    fileSystem.value.push(newSharedDoc)
+    console.error('공유문서 생성 실패:', result.error)
   }
-  
-  // 폼 초기화
-  sharedDocTitle.value = ''
-  sharedDocLocation.value = null
-  sharedDocIsLocked.value = false
-  showSharedDocModal.value = false
-  showFolderSelector.value = false
 }
 
 // 계층형 폴더 구조 생성 (공유문서 위치 선택용)
@@ -770,7 +589,7 @@ const hierarchicalFolders = computed(() => {
     })
   }
   
-  buildHierarchy(fileSystem.value)
+  buildHierarchy(driveStore.items)
   return folders
 })
 
@@ -788,12 +607,11 @@ const selectFolderForSharedDoc = (folder) => {
   showFolderSelector.value = false
 }
 
-
 // 현재 선택된 폴더 이름 가져오기
 const selectedFolderName = computed(() => {
   if (sharedDocLocation.value === null) return '최상위 루트'
   if (!sharedDocLocation.value) return '폴더를 선택하세요'
-  const folder = findItemById(sharedDocLocation.value)
+  const folder = driveStore.items.find(item => item.id === sharedDocLocation.value)
   return folder ? folder.name : '알 수 없는 폴더'
 })
 
@@ -810,9 +628,43 @@ const closeModals = () => {
   sharedDocIsLocked.value = false
 }
 
+// 생명주기
 onMounted(() => {
-  // 초기화
+  loadDriveItems()
+  
+  // 전역 클릭 이벤트로 편집 모드 취소
+  document.addEventListener('click', handleGlobalClick)
 })
+
+onUnmounted(() => {
+  // 이벤트 리스너 정리
+  document.removeEventListener('click', handleGlobalClick)
+})
+
+// 전역 클릭 핸들러
+const handleGlobalClick = (event) => {
+  // 편집 중이 아닌 경우 무시
+  if (!editingItem.value) return
+  
+  // 편집 입력 필드나 편집 버튼을 클릭한 경우 무시
+  const target = event.target
+  if (target.classList.contains('rename-input') || 
+      target.closest('.action-btn') ||
+      target.closest('.item-name')) {
+    return
+  }
+  
+  // 다른 곳을 클릭한 경우 편집 취소
+  cancelRename()
+}
+
+// API 연동 메서드들
+const loadDriveItems = async () => {
+  if (!props.currentChannel) return
+  
+  const driveChannelSeq = parseInt(props.currentChannel.replace('team', ''))
+  await driveStore.loadItems(driveChannelSeq, null)
+}
 </script>
 
 <template>
@@ -822,13 +674,24 @@ onMounted(() => {
       <div class="header-left">
         <h2 class="page-title">
           <v-icon class="title-icon">mdi-folder-multiple</v-icon>
-          드라이브
+          프로젝트 드라이브
         </h2>
         <div class="breadcrumb">
-          <span class="breadcrumb-item" @click="goHome">홈</span>
-          <template v-for="(id, index) in currentPath" :key="id">
-            <v-icon size="16" class="breadcrumb-separator">mdi-chevron-right</v-icon>
-            <span class="breadcrumb-item">{{ findItemById(id)?.name || '알 수 없음' }}</span>
+          <template v-for="(item, index) in breadcrumbPath" :key="item.id || 'home'">
+            <span 
+              class="breadcrumb-item" 
+              :class="{ 'clickable': index < breadcrumbPath.length - 1 }"
+              @click="index < breadcrumbPath.length - 1 ? navigateToFolder(item.id) : null"
+            >
+              {{ item.name }}
+            </span>
+            <v-icon 
+              v-if="index < breadcrumbPath.length - 1" 
+              size="16" 
+              class="breadcrumb-separator"
+            >
+              mdi-chevron-right
+            </v-icon>
           </template>
         </div>
       </div>
@@ -869,7 +732,7 @@ onMounted(() => {
     <div class="drive-toolbar">
       <div class="toolbar-left">
         <v-btn
-          v-if="currentPath.length > 0"
+          v-if="driveStore.currentPath && driveStore.currentPath.length > 0"
           icon="mdi-arrow-left"
           variant="text"
           size="small"
@@ -902,7 +765,7 @@ onMounted(() => {
           variant="text"
           size="small"
           class="new-shared-doc-btn"
-          @click="showSharedDocModal = true"
+          @click="openSharedDocModal"
         >
           <v-icon>mdi-file-document-multiple</v-icon>
         </v-btn>
@@ -959,8 +822,26 @@ onMounted(() => {
 
     <!-- 파일/폴더 목록 -->
     <div class="drive-content">
+      <!-- 로딩 상태 -->
+      <div v-if="driveStore.isLoading" class="loading-container">
+        <v-progress-circular indeterminate color="primary" />
+        <p>로딩 중...</p>
+      </div>
+      
+      <!-- 에러 상태 -->
+      <div v-else-if="driveStore.error" class="error-container">
+        <v-alert type="error" :text="driveStore.error" />
+      </div>
+      
+      <!-- 빈 상태 -->
+      <div v-else-if="filteredItems.length === 0" class="empty-container">
+        <v-icon size="64" color="grey">mdi-folder-open-outline</v-icon>
+        <h3>폴더가 비어있습니다</h3>
+        <p>파일을 업로드하거나 새 폴더를 만들어보세요</p>
+      </div>
+      
       <!-- 그리드 뷰 -->
-      <div v-if="viewMode === 'grid'" class="grid-view">
+      <div v-else-if="viewMode === 'grid'" class="grid-view">
         <div class="grid-container">
           <div
             v-for="item in filteredItems"
@@ -972,32 +853,44 @@ onMounted(() => {
             }"
             @click="selectItem(item, $event)"
             @dblclick="item.type === 'folder' ? enterFolder(item) : item.type === 'shared-doc' ? openSharedDoc(item) : null"
-            @dragstart="startDrag(item, $event)"
-            @dragover="handleDragOver(item, $event)"
-            @dragleave="handleDragLeave"
-            @drop="handleDrop(item, $event)"
-            draggable="true"
+            @dragstart="editingItem === item.id ? null : startDrag(item, $event)"
+            @dragover="editingItem === item.id ? null : handleDragOver(item, $event)"
+            @dragleave="editingItem === item.id ? null : handleDragLeave"
+            @drop="editingItem === item.id ? null : handleDrop(item, $event)"
+            :draggable="editingItem === item.id ? false : true"
           >
             <div class="item-icon">
               <v-icon :color="item.color" size="48">{{ item.icon }}</v-icon>
             </div>
             <div class="item-name" :title="item.name">
-              {{ item.name }}
-              <div v-if="item.type === 'shared-doc'" class="shared-doc-icons">
-                <v-icon 
-                  v-if="item.isLocked"
-                  class="lock-icon"
-                  size="14"
-                >
-                  mdi-lock
-                </v-icon>
-                <v-icon 
-                  class="shared-icon"
-                  size="16"
-                >
-                  mdi-account-multiple
-                </v-icon>
-              </div>
+              <!-- 폴더 이름 편집 모드 -->
+              <input
+                v-if="editingItem === item.id && item.type === 'folder'"
+                v-model="editingName"
+                class="rename-input"
+                @keyup.enter="finishRename"
+                @keyup.escape="cancelRename"
+                ref="renameInput"
+              />
+              <!-- 일반 표시 모드 -->
+              <template v-else>
+                {{ item.name }}
+                <div v-if="item.type === 'shared-doc'" class="shared-doc-icons">
+                  <v-icon 
+                    v-if="item.isLocked"
+                    class="lock-icon"
+                    size="14"
+                  >
+                    mdi-lock
+                  </v-icon>
+                  <v-icon 
+                    class="shared-icon"
+                    size="16"
+                  >
+                    mdi-account-multiple
+                  </v-icon>
+                </div>
+              </template>
             </div>
             <div class="item-meta">
               <span class="item-size">{{ item.size }}</span>
@@ -1015,6 +908,19 @@ onMounted(() => {
                 title="다운로드"
               >
                 <v-icon size="16">mdi-download</v-icon>
+              </v-btn>
+              
+              <!-- 폴더 이름 변경 버튼 -->
+              <v-btn
+                v-if="item.type === 'folder'"
+                icon="mdi-pencil"
+                size="small"
+                variant="text"
+                class="action-btn"
+                @click.stop="startRename(item)"
+                title="이름 변경"
+              >
+                <v-icon size="16">mdi-pencil</v-icon>
               </v-btn>
               
               <!-- 공유문서 잠금 해제 버튼 -->
@@ -1054,11 +960,11 @@ onMounted(() => {
             }"
             @click="selectItem(item, $event)"
             @dblclick="item.type === 'folder' ? enterFolder(item) : item.type === 'shared-doc' ? openSharedDoc(item) : null"
-            @dragstart="startDrag(item, $event)"
-            @dragover="handleDragOver(item, $event)"
-            @dragleave="handleDragLeave"
-            @drop="handleDrop(item, $event)"
-            draggable="true"
+            @dragstart="editingItem === item.id ? null : startDrag(item, $event)"
+            @dragover="editingItem === item.id ? null : handleDragOver(item, $event)"
+            @dragleave="editingItem === item.id ? null : handleDragLeave"
+            @drop="editingItem === item.id ? null : handleDrop(item, $event)"
+            :draggable="editingItem === item.id ? false : true"
           >
             <div class="list-cell name-cell">
               <v-icon :color="item.color" size="20" class="item-icon">{{ item.icon }}</v-icon>
@@ -1089,6 +995,19 @@ onMounted(() => {
                 title="다운로드"
               >
                 <v-icon size="16">mdi-download</v-icon>
+              </v-btn>
+              
+              <!-- 폴더 이름 변경 버튼 -->
+              <v-btn
+                v-if="item.type === 'folder'"
+                icon="mdi-pencil"
+                size="small"
+                variant="text"
+                class="action-btn"
+                @click.stop="startRename(item)"
+                title="이름 변경"
+              >
+                <v-icon size="16">mdi-pencil</v-icon>
               </v-btn>
               
               <!-- 공유문서 잠금 해제 버튼 -->
@@ -1184,6 +1103,12 @@ onMounted(() => {
             <!-- 계층형 폴더 선택 드롭다운 -->
             <div v-if="showFolderSelector" class="folder-dropdown">
               <div class="folder-list">
+                <!-- 로딩 상태 -->
+                <div v-if="loadingFolders" class="loading-state">
+                  <v-progress-circular size="20" indeterminate></v-progress-circular>
+                  <span>폴더 목록을 불러오는 중...</span>
+                </div>
+                
                 <!-- 최상위 루트 옵션 -->
                 <div 
                   class="folder-item"
@@ -1198,30 +1123,16 @@ onMounted(() => {
                   </span>
                 </div>
                 
+                <!-- 계층구조 폴더 목록 -->
                 <div 
-                  v-for="folder in hierarchicalFolders" 
+                  v-for="folder in flattenedFolders" 
                   :key="folder.id"
                   class="folder-item"
-                  :class="{ 
-                    'selected': sharedDocLocation === folder.id,
-                    'has-children': folder.children && folder.children.length > 0
-                  }"
-                  :style="{ paddingLeft: (folder.level * 20 + 16) + 'px' }"
+                  :class="{ 'selected': sharedDocLocation === folder.id }"
+                  :style="{ paddingLeft: `${20 + folder.level * 20}px` }"
                   @click="selectFolderForSharedDoc(folder)"
                 >
-                  <v-icon 
-                    v-if="folder.children && folder.children.length > 0"
-                    class="expand-icon"
-                    :class="{ 'expanded': folder.isExpanded }"
-                    @click.stop="toggleFolderExpansion(folder.id)"
-                  >
-                    mdi-chevron-right
-                  </v-icon>
-                  <v-icon 
-                    v-else
-                    class="expand-placeholder"
-                  ></v-icon>
-                  <v-icon class="folder-icon" :color="folder.color">mdi-folder</v-icon>
+                  <v-icon class="folder-icon" color="#ff9800">mdi-folder</v-icon>
                   <span class="folder-name">{{ folder.name }}</span>
                   <span v-if="sharedDocLocation === folder.id" class="selected-indicator">
                     <v-icon color="primary" size="16">mdi-check</v-icon>
@@ -1316,15 +1227,59 @@ onMounted(() => {
       </v-card>
     </v-dialog>
 
-    <!-- 공유문서 편집기 -->
-    <SharedDocEditor
-      v-if="currentDocument"
-      v-model:is-open="showDocEditor"
-      :document="currentDocument"
-      @save="saveDocument"
-      @close="closeDocEditor"
-      @toggle-lock="toggleDocumentLock"
-    />
+    <!-- 드롭 액션 선택 모달 -->
+    <v-dialog v-model="showDropModal" max-width="500px" @click:outside="closeDropModal">
+      <v-card class="drop-action-modal">
+        <v-card-title class="modal-header">
+          <div class="header-content">
+            <v-icon class="header-icon" color="primary">mdi-drag</v-icon>
+            <h3 class="modal-title">이동 방식 선택</h3>
+          </div>
+          <v-btn icon="mdi-close" variant="text" @click="closeDropModal"></v-btn>
+        </v-card-title>
+        
+        <v-card-text class="modal-body">
+          <div class="drop-info">
+            <div class="dragged-item">
+              <v-icon :color="draggedItem?.color" size="24">{{ draggedItem?.icon }}</v-icon>
+              <span class="item-name">{{ draggedItem?.name }}</span>
+            </div>
+            <v-icon class="arrow-icon" color="primary">mdi-arrow-right</v-icon>
+            <div class="target-item">
+              <v-icon :color="dropTarget?.color" size="24">{{ dropTarget?.icon }}</v-icon>
+              <span class="item-name">{{ dropTarget?.name }}</span>
+            </div>
+          </div>
+          
+          <div class="action-options">
+            <div class="option-item" @click="selectDropAction('move')">
+              <div class="option-icon">
+                <v-icon color="#4caf50" size="32">mdi-folder-move</v-icon>
+              </div>
+              <div class="option-content">
+                <h4 class="option-title">폴더로 이동</h4>
+                <p class="option-description">선택한 폴더 안으로 이동합니다</p>
+              </div>
+            </div>
+            
+            <div class="option-item" @click="selectDropAction('reorder')">
+              <div class="option-icon">
+                <v-icon color="#ff9800" size="32">mdi-sort</v-icon>
+              </div>
+              <div class="option-content">
+                <h4 class="option-title">순서 변경</h4>
+                <p class="option-description">선택한 폴더 앞으로 이동합니다</p>
+              </div>
+            </div>
+          </div>
+        </v-card-text>
+        
+        <v-card-actions class="modal-actions">
+          <v-spacer></v-spacer>
+          <v-btn variant="text" @click="closeDropModal">취소</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
   </div>
 </template>
 
@@ -1379,7 +1334,7 @@ onMounted(() => {
   transition: color 0.2s ease;
 }
 
-.breadcrumb-item:hover {
+.breadcrumb-item.clickable:hover {
   color: rgb(var(--v-theme-primary));
 }
 
@@ -1511,6 +1466,17 @@ onMounted(() => {
   flex: 1;
   padding: 24px;
   overflow-y: auto;
+}
+
+.loading-container,
+.error-container,
+.empty-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 300px;
+  color: #666;
 }
 
 /* 그리드 뷰 */
@@ -1954,7 +1920,6 @@ onMounted(() => {
   background: rgba(var(--v-theme-primary), 0.1);
 }
 
-
 .lock-setting {
   padding: 16px 0;
   border-top: 1px solid rgba(var(--v-theme-on-surface), 0.1);
@@ -2003,5 +1968,120 @@ onMounted(() => {
   .modal-actions {
     padding: 12px 20px;
   }
+}
+
+/* 드롭 액션 모달 스타일 */
+.drop-action-modal {
+  border-radius: 16px;
+  overflow: hidden;
+}
+
+.drop-info {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 20px;
+  background: rgba(var(--v-theme-primary), 0.05);
+  border-radius: 12px;
+  margin-bottom: 24px;
+}
+
+.dragged-item,
+.target-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  background: rgb(var(--v-theme-surface));
+  border-radius: 8px;
+  border: 1px solid rgba(var(--v-theme-on-surface), 0.1);
+}
+
+.item-name {
+  font-size: 14px;
+  font-weight: 500;
+  color: rgb(var(--v-theme-on-surface));
+}
+
+.arrow-icon {
+  color: rgb(var(--v-theme-primary));
+}
+
+.action-options {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.option-item {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 16px;
+  border: 2px solid rgba(var(--v-theme-on-surface), 0.1);
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.option-item:hover {
+  border-color: rgb(var(--v-theme-primary));
+  background: rgba(var(--v-theme-primary), 0.05);
+  transform: translateY(-2px);
+}
+
+.option-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  background: rgba(var(--v-theme-on-surface), 0.05);
+  border-radius: 12px;
+}
+
+.option-content {
+  flex: 1;
+}
+
+.option-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: rgb(var(--v-theme-on-surface));
+  margin: 0 0 4px 0;
+}
+
+.option-description {
+  font-size: 14px;
+  color: rgba(var(--v-theme-on-surface), 0.7);
+  margin: 0;
+}
+
+/* 폴더 이름 변경 스타일 */
+.rename-input {
+  background: transparent;
+  border: 1px solid rgb(var(--v-theme-primary));
+  border-radius: 4px;
+  padding: 4px 8px;
+  font-size: 14px;
+  color: rgb(var(--v-theme-on-surface));
+  width: 100%;
+  outline: none;
+}
+
+.rename-input:focus {
+  border-color: rgb(var(--v-theme-primary));
+  box-shadow: 0 0 0 2px rgba(var(--v-theme-primary), 0.2);
+}
+
+/* 로딩 상태 스타일 */
+.loading-state {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  color: rgba(var(--v-theme-on-surface), 0.6);
+  font-size: 14px;
 }
 </style>

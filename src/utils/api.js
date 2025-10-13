@@ -1,51 +1,57 @@
 import axios from 'axios'
-import { useAuthStore } from '@/store/auth'
+// import { useAuthStore } from '@/store/auth'
 import { handleApiResponse } from '@/models/common/ApiResponse'
 
 // ----------------------
 // Axios 인스턴스
 // ----------------------
 const apiClient = axios.create({
-  baseURL: import.meta.env.VITE_API_URL,
+  baseURL: import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080',
   timeout: 10000,
   headers: { 'Content-Type': 'application/json' },
 })
 
-// 요청 인터셉터 (토큰 자동 주입) - 주석처리
+// 요청 인터셉터 (토큰 자동 주입) - 테스트용으로 주석처리
 // 모든 API 요청에 자동으로 Authorization 헤더 추가
 apiClient.interceptors.request.use((config) => {
-  const authStore = useAuthStore()
-  if (authStore?.accessToken) {
-    config.headers.Authorization = `Bearer ${authStore.accessToken}`
-  }
+  // 테스트용으로 토큰 비활성화
+  // const mockToken = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c'
+  
+  // if (mockToken) {
+  //   config.headers.Authorization = `Bearer ${mockToken}`
+  // }
+  
+  // X-Member-Seq 헤더 추가 (백엔드에서 사용자 식별용)
+  config.headers['X-Member-Seq'] = '1'
+  
   return config
 })
 
-// 응답 인터셉터 (401 → refresh 토큰) - 주석처리
-// 401 에러 시 자동으로 토큰 갱신 시도
-apiClient.interceptors.response.use(
-  (res) => res,
-  async (error) => {
-    const authStore = useAuthStore()
-    const originalRequest = error.config
+// // 응답 인터셉터 (401 → refresh 토큰) - 주석처리
+// // 401 에러 시 자동으로 토큰 갱신 시도
+// apiClient.interceptors.response.use(
+//   (res) => res,
+//   async (error) => {
+//     const authStore = useAuthStore()
+//     const originalRequest = error.config
 
-    if (error.response?.status === 401 && !originalRequest._retry) {
-      originalRequest._retry = true
-      try {
-        const { data } = await axios.post(
-          `${import.meta.env.VITE_API_URL}/auth/refresh`,
-          { refreshToken: authStore.refreshToken }
-        )
-        authStore.setAccessToken(data.accessToken)
-        originalRequest.headers.Authorization = `Bearer ${data.accessToken}`
-        return apiClient(originalRequest)
-      } catch {
-        authStore.logout()
-      }
-    }
-    return Promise.reject(error)
-  }
-)
+//     if (error.response?.status === 401 && !originalRequest._retry) {
+//       originalRequest._retry = true
+//       try {
+//         const { data } = await axios.post(
+//           `${import.meta.env.VITE_API_URL}/auth/refresh`,
+//           { refreshToken: authStore.refreshToken }
+//         )
+//         authStore.setAccessToken(data.accessToken)
+//         originalRequest.headers.Authorization = `Bearer ${data.accessToken}`
+//         return apiClient(originalRequest)
+//       } catch {
+//         authStore.logout()
+//       }
+//     }
+//     return Promise.reject(error)
+//   }
+// )
 
 // ----------------------
 // CRUD + 자동 응답 처리
@@ -126,3 +132,6 @@ export const apiPutModelAttr = async (endpoint, dataObj) => {
   })
   return handleApiResponse(res).getData()
 }
+
+// 기본 axios 인스턴스 export (드라이브 API에서 사용)
+export default apiClient
