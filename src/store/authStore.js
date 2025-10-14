@@ -2,9 +2,8 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 
 export const useAuthStore = defineStore('auth', () => {
-  // 토큰
+  // 토큰 (AT만 localStorage, RT는 HttpOnly Cookie)
   const accessToken = ref(localStorage.getItem('accessToken') || null)
-  const refreshToken = ref(localStorage.getItem('refreshToken') || null)
   
   // 사용자 정보
   const user = ref(null)
@@ -13,7 +12,7 @@ export const useAuthStore = defineStore('auth', () => {
     try {
       user.value = JSON.parse(userString)
     } catch (e) {
-      console.error('Failed to parse user data:', e)
+      // 파싱 실패 시 무시
     }
   }
 
@@ -30,16 +29,6 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
-  // 리프레시 토큰 설정
-  const setRefreshToken = (token) => {
-    refreshToken.value = token
-    if (token) {
-      localStorage.setItem('refreshToken', token)
-    } else {
-      localStorage.removeItem('refreshToken')
-    }
-  }
-
   // 사용자 정보 설정
   const setUser = (userData) => {
     user.value = userData
@@ -50,37 +39,37 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
-  // 로그인
+  // 로그인 (RT는 Cookie로 관리되므로 제외)
   const login = (tokens, userData) => {
     setAccessToken(tokens.accessToken)
-    setRefreshToken(tokens.refreshToken)
     setUser(userData)
   }
 
   // 로그아웃
   const logout = () => {
     setAccessToken(null)
-    setRefreshToken(null)
     setUser(null)
+    // RT는 서버에서 Cookie 삭제 처리
   }
 
   // 토큰 초기화 (앱 시작 시)
   const initializeAuth = () => {
     const storedAccessToken = localStorage.getItem('accessToken')
-    const storedRefreshToken = localStorage.getItem('refreshToken')
     const storedUser = localStorage.getItem('user')
+
+    // 기존 RT 삭제 (HttpOnly Cookie로 전환되었으므로)
+    if (localStorage.getItem('refreshToken')) {
+      localStorage.removeItem('refreshToken')
+    }
 
     if (storedAccessToken) {
       accessToken.value = storedAccessToken
-    }
-    if (storedRefreshToken) {
-      refreshToken.value = storedRefreshToken
     }
     if (storedUser) {
       try {
         user.value = JSON.parse(storedUser)
       } catch (e) {
-        console.error('Failed to parse user data:', e)
+        // 파싱 실패 시 무시
       }
     }
   }
@@ -88,7 +77,6 @@ export const useAuthStore = defineStore('auth', () => {
   return {
     // State
     accessToken,
-    refreshToken,
     user,
     
     // Getters
@@ -96,7 +84,6 @@ export const useAuthStore = defineStore('auth', () => {
     
     // Actions
     setAccessToken,
-    setRefreshToken,
     setUser,
     login,
     logout,

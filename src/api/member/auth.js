@@ -29,9 +29,9 @@ export const findPassword = async (findPasswordData) => {
 }
 
 // ----------------------
-// 토큰 갱신 API
+// 토큰 갱신 API (RT는 Cookie로 자동 전송)
 // ----------------------
-export const refreshAccessToken = async (refreshToken) => {
-  return await apiPost('/workspace-service/member/refreshAt', { refreshToken })
+export const refreshAccessToken = async () => {
+  return await apiPost('/workspace-service/member/refreshAt', {})
 }
 

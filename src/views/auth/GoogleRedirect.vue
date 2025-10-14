@@ -53,11 +53,14 @@ const sendCodeToServer = async (code) => {
     }
     const baseUrl = (import.meta.env.VITE_API_URL || 'http://localhost:8080').replace(/\/+$/, '')
     // 서버에 인가 코드 전달하여 토큰 교환 (백엔드 엔드포인트 통일)
-    const { data } = await axios.post(`${baseUrl}/workspace-service/member/google/doLogin`, { code })
+    const { data } = await axios.post(
+        `${baseUrl}/workspace-service/member/google/doLogin`, 
+        { code },
+        { withCredentials: true } // ✅ 쿠키 수신 활성화
+    )
     const body = data?.data ?? data
-    // 토큰 저장 방식 통일: Pinia auth 스토어 사용
+    // 토큰 저장 (AT만, RT는 HttpOnly Cookie로 자동 관리)
     if (body.accessToken) authStore.setAccessToken(body.accessToken)
-    if (body.refreshToken) authStore.setRefreshToken(body.refreshToken)
     if (body.user) authStore.setUser(body.user)
     if (body.needMemberId) {
         window.location.href = '/oauth/member-id'

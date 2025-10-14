@@ -52,10 +52,14 @@ const sendCodeToServer = async (code) => {
         return
     }
     const baseUrl = (import.meta.env.VITE_API_URL || 'http://localhost:8080').replace(/\/+$/, '')
-    const { data } = await axios.post(`${baseUrl}/workspace-service/member/kakao/doLogin`, { code })
+    const { data } = await axios.post(
+        `${baseUrl}/workspace-service/member/kakao/doLogin`, 
+        { code },
+        { withCredentials: true } // ✅ 쿠키 수신 활성화
+    )
     const body = data?.data ?? data
+    // 토큰 저장 (AT만, RT는 HttpOnly Cookie로 자동 관리)
     if (body.accessToken) authStore.setAccessToken(body.accessToken)
-    if (body.refreshToken) authStore.setRefreshToken(body.refreshToken)
     if (body.user) authStore.setUser(body.user)
     if (body.needMemberId) {
         window.location.href = '/oauth/member-id'

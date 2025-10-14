@@ -196,9 +196,9 @@ const handleLogin = async () => {
     
     const response = await doLogin(loginData)
     
-    // 토큰 저장
+    // 토큰 저장 (AT만, RT는 Cookie로 자동 관리)
     authStore.setAccessToken(response.accessToken)
-    authStore.setRefreshToken(response.refreshToken)
+    // ✅ RT는 HttpOnly Cookie로 전송되므로 저장 불필요
     
     // 자동 로그인 설정
     if (formData.value.rememberMe) {

@@ -9,6 +9,7 @@ const apiClient = axios.create({
   baseURL: import.meta.env.VITE_API_URL || 'http://localhost:8080',
   timeout: 10000,
   headers: { 'Content-Type': 'application/json' },
+  withCredentials: true, // ✅ 쿠키 전송 활성화
 })
 
 // 요청 인터셉터 (토큰 자동 주입) - 주석처리
@@ -33,9 +34,11 @@ apiClient.interceptors.response.use(
       originalRequest._retry = true
       try {
         const baseUrl = (import.meta.env.VITE_API_URL || 'http://localhost:8080').replace(/\/+$/, '')
+        // ✅ RT는 Cookie로 자동 전송됨 (body 필요 없음)
         const { data } = await axios.post(
           `${baseUrl}/workspace-service/member/refreshAt`,
-          { refreshToken: authStore.refreshToken }
+          {}, // body 비움
+          { withCredentials: true } // 쿠키 전송
         )
         // 백엔드 ResponseDto 구조: data.data.accessToken
         const newAccessToken = data?.data?.accessToken || data?.accessToken
@@ -43,7 +46,6 @@ apiClient.interceptors.response.use(
         originalRequest.headers.Authorization = `Bearer ${newAccessToken}`
         return apiClient(originalRequest)
       } catch (refreshError) {
-        console.error('토큰 갱신 실패:', refreshError)
         authStore.logout()
         window.location.href = '/'
         return Promise.reject(refreshError)
