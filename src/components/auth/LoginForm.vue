@@ -15,9 +15,9 @@
         <div class="input-wrapper">
           <v-icon class="input-icon">mdi-account</v-icon>
           <v-text-field
-            v-model="formData.userId"
+            v-model="formData.memberId"
             placeholder="회원ID를 입력하세요"
-            :rules="userIdRules"
+            :rules="memberIdRules"
             variant="plain"
             hide-details="auto"
             class="custom-input"
@@ -50,7 +50,7 @@
         </div>
       </div>
 
-      <!-- 자동 로그인 -->
+      <!-- 회원ID 기억하기 -->
       <div class="remember-section">
         <v-checkbox
           v-model="formData.rememberMe"
@@ -59,7 +59,7 @@
           class="remember-checkbox"
         >
           <template #label>
-            <span class="remember-text">자동 로그인</span>
+            <span class="remember-text">회원ID 기억하기</span>
           </template>
         </v-checkbox>
         <v-btn
@@ -98,34 +98,34 @@
     <div class="social-login">
       <div class="social-buttons">
         <v-btn
+          icon
           variant="outlined"
           size="large"
           @click="handleSocialLogin('google')"
           :loading="socialLoading === 'google'"
           class="social-btn google-btn"
         >
-          <v-icon left color="red">mdi-google</v-icon>
-          Google
+          <img :src="googleLogo" alt="Google" class="social-logo" />
         </v-btn>
         <v-btn
+          icon
           variant="outlined"
           size="large"
           @click="handleSocialLogin('naver')"
           :loading="socialLoading === 'naver'"
           class="social-btn naver-btn"
         >
-          <v-icon left color="green">mdi-naver</v-icon>
-          Naver
+          <img :src="naverLogo" alt="Naver" class="social-logo" />
         </v-btn>
         <v-btn
+          icon
           variant="outlined"
           size="large"
           @click="handleSocialLogin('kakao')"
           :loading="socialLoading === 'kakao'"
           class="social-btn kakao-btn"
         >
-          <v-icon left color="yellow">mdi-chat</v-icon>
-          Kakao
+          <img :src="kakaoLogo" alt="Kakao" class="social-logo" />
         </v-btn>
       </div>
     </div>
@@ -147,9 +147,17 @@
 
 <script setup>
 import { ref } from 'vue'
+import { doLogin } from '@/api/member/auth'
+import { useAuthStore } from '@/store/authStore'
+import googleLogo from '@/assets/images/social/google.png'
+import kakaoLogo from '@/assets/images/social/kakao.png'
+import naverLogo from '@/assets/images/social/naver.png'
 
 // Props & Emits
 const emit = defineEmits(['switch-to-signup', 'switch-to-find', 'login-success'])
+
+// Store
+const authStore = useAuthStore()
 
 // Reactive data
 const loginForm = ref(null)
@@ -159,13 +167,13 @@ const socialLoading = ref(null)
 const showPassword = ref(false)
 
 const formData = ref({
-  userId: '',
+  memberId: '',
   password: '',
   rememberMe: false
 })
 
 // Validation rules
-const userIdRules = [
+const memberIdRules = [
   v => !!v || '회원ID를 입력해주세요',
   v => (v && v.length >= 3) || '회원ID는 3자 이상이어야 합니다'
 ]
@@ -180,55 +188,81 @@ const handleLogin = async () => {
 
   isLoading.value = true
   try {
-    // 임시 성공 처리 (UI 테스트용)
-    await new Promise(resolve => setTimeout(resolve, 1500))
-    
-    const userData = {
-      id: 1,
-      email: 'test@example.com',
-      userId: formData.value.userId,
-      name: '테스트 사용자',
-      phone: '010-1234-5678',
-      profileImage: null,
-      socialProvider: null,
-      createdAt: new Date().toISOString()
+    // 로그인 API 호출
+    const loginData = {
+      memberId: formData.value.memberId,
+      password: formData.value.password
     }
+    
+    const response = await doLogin(loginData)
+    
+    // 토큰 저장
+    authStore.setAccessToken(response.accessToken)
+    authStore.setRefreshToken(response.refreshToken)
     
     // 자동 로그인 설정
     if (formData.value.rememberMe) {
       localStorage.setItem('autoLogin', 'true')
-      localStorage.setItem('userEmailOrId', formData.value.userId)
+      localStorage.setItem('userMemberId', formData.value.memberId)
+    } else {
+      localStorage.removeItem('autoLogin')
+      localStorage.removeItem('userMemberId')
     }
     
-    emit('login-success', userData)
+    // 성공 알림
+    emit('login-success', {
+      message: '로그인이 완료되었습니다!',
+      data: response
+    })
+    
+    // 폼 초기화
+    if (!formData.value.rememberMe) {
+      formData.value.memberId = ''
+    }
+    formData.value.password = ''
+    
   } catch (error) {
     console.error('로그인 실패:', error)
+    
+    // 에러 메시지 추출 및 표시
+    let errorMessage = '로그인 중 오류가 발생했습니다.'
+    
+    if (error.response?.data?.message) {
+      errorMessage = error.response.data.message
+    } else if (error.response?.data?.error) {
+      errorMessage = error.response.data.error
+    } else if (error.message) {
+      errorMessage = error.message
+    }
+    
+    alert(errorMessage)
   } finally {
     isLoading.value = false
   }
 }
 
+import { redirectToGoogleOAuth, redirectToKakaoOAuth, redirectToNaverOAuth } from '@/utils/oauth'
+
 const handleSocialLogin = async (provider) => {
   socialLoading.value = provider
-  
   try {
-    // 임시 성공 처리 (UI 테스트용)
-    await new Promise(resolve => setTimeout(resolve, 1500))
-    
-    const socialData = {
-      id: 2,
-      email: 'social@example.com',
-      userId: 'socialuser',
-      name: '소셜사용자',
-      phone: null,
-      profileImage: null,
-      socialProvider: provider,
-      createdAt: new Date().toISOString()
+    if (provider === 'google') {
+      redirectToGoogleOAuth()
+      return
     }
-    
-    emit('login-success', socialData)
+    if (provider === 'kakao') {
+      redirectToKakaoOAuth()
+      return
+    }
+    if (provider === 'naver') {
+      redirectToNaverOAuth()
+      return
+    }
+    // 다른 프로바이더는 준비되면 연결
+    throw new Error('아직 지원되지 않는 소셜 로그인입니다')
   } catch (error) {
     console.error('소셜 로그인 실패:', error)
+    alert(error.message)
   } finally {
     socialLoading.value = null
   }
@@ -237,10 +271,10 @@ const handleSocialLogin = async (provider) => {
 // 자동 로그인 체크
 const checkAutoLogin = () => {
   const autoLogin = localStorage.getItem('autoLogin')
-  const userEmailOrId = localStorage.getItem('userEmailOrId')
+  const userMemberId = localStorage.getItem('userMemberId')
   
-  if (autoLogin === 'true' && userEmailOrId) {
-    formData.value.userId = userEmailOrId
+  if (autoLogin === 'true' && userMemberId) {
+    formData.value.memberId = userMemberId
     formData.value.rememberMe = true
   }
 }
@@ -310,6 +344,10 @@ checkAutoLogin()
   border-radius: 8px;
   padding: 0.5rem 0.75rem;
   transition: all 0.2s ease;
+  min-height: 48px;
+  display: flex;
+  align-items: center;
+  overflow: visible;
 }
 
 .input-wrapper:focus-within {
@@ -331,24 +369,45 @@ checkAutoLogin()
 
 .custom-input {
   padding-left: 2rem;
+  position: static;
+  width: 100%;
 }
 
 .custom-input :deep(.v-field) {
   background: transparent;
   box-shadow: none;
   border: none;
+  min-height: auto;
+  height: auto;
+  display: flex;
+  align-items: center;
 }
 
 .custom-input :deep(.v-field__input) {
   color: #374151;
   font-size: 0.875rem;
-  line-height: 1.5;
-  display: flex;
-  align-items: center;
+  line-height: 1.5 !important;
+  min-height: auto;
+  height: auto;
+  padding: 0 !important;
+  margin: 0 !important;
+  opacity: 1 !important;
 }
 
 .custom-input :deep(.v-field__input::placeholder) {
-  color: #9ca3af;
+  color: #9ca3af !important;
+  opacity: 1 !important;
+}
+
+.custom-input :deep(.v-input__details) {
+  position: absolute;
+  left: 0;
+  top: 100%;
+  padding-top: 4px;
+  padding-left: 0;
+  margin: 0;
+  width: 100%;
+  text-align: right;
 }
 
 .password-toggle {
@@ -429,45 +488,45 @@ checkAutoLogin()
 
 .social-buttons {
   display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
+  justify-content: center;
+  align-items: center;
+  gap: 4.0rem;
 }
 
 .social-btn {
-  height: 48px;
-  border-radius: 12px;
-  font-weight: 600;
-  text-transform: none;
-  letter-spacing: 0.025em;
-  border: 2px solid #e5e7eb;
+  width: 56px;
+  height: 56px;
+  border-radius: 8px;
+  border: 2px solid transparent;
   background: white;
-  color: #374151 !important;
   transition: all 0.2s ease;
+  padding: 0;
 }
 
 .social-btn:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.1);
 }
 
-.social-btn :deep(.v-btn__content) {
-  color: #374151 !important;
-  font-weight: 600;
+.social-logo {
+  width: 44px;
+  height: 44px;
+  object-fit: contain;
 }
 
 .google-btn:hover {
   border-color: #db4437;
-  color: #db4437;
+  background: #fff5f5;
 }
 
 .naver-btn:hover {
   border-color: #03c75a;
-  color: #03c75a;
+  background: #f0fdf4;
 }
 
 .kakao-btn:hover {
   border-color: #fee500;
-  color: #fdd835;
+  background: #fefce8;
 }
 
 /* 회원가입 링크 */

@@ -465,7 +465,8 @@ const handleLoginSuccess = (userData) => {
 
 const handleSignupSuccess = (userData) => {
   console.log('회원가입 성공:', userData)
-  router.push('/workspace')
+  // 회원가입 후에는 workspace로 이동하지 않음 (토큰 없음)
+  // AuthModal이 자동으로 로그인 탭으로 전환
 }
 
 const scrollToDemo = () => {
