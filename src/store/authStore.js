@@ -49,6 +49,11 @@ export const useAuthStore = defineStore('auth', () => {
   const logout = () => {
     setAccessToken(null)
     setUser(null)
+    
+    // localStorage의 모든 인증 관련 데이터 삭제
+    localStorage.removeItem('accessToken')
+    localStorage.removeItem('user')
+    
     // RT는 서버에서 Cookie 삭제 처리
   }
 

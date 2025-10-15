@@ -1,33 +1,107 @@
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
+import { useAuthStore } from '@/store/authStore'
+import * as authApi from '@/api/member/auth'
 
 const props = defineProps({
   collapsed: Boolean
 })
 
-// 사용자 상태
-const userStatus = ref('online')
-const userName = ref('사용자')
+const authStore = useAuthStore()
 
-// 상태 옵션들
+// 사용자 상태
+const userStatus = ref('OFFLINE')
+const userName = ref('')
+const profileImageUrl = ref('')
+const loading = ref(false)
+
+// 상태 옵션들 (백엔드 ActiveStatus 매핑)
 const statusOptions = [
-  { value: 'online', label: '온라인', color: 'success' },
-  { value: 'away', label: '자리 비움', color: 'warning' },
-  { value: 'offline', label: '오프라인 표시', color: 'grey' }
+  { value: 'ONLINE', label: '온라인', color: 'success' },
+  { value: 'AWAY', label: '자리 비움', color: 'warning' },
+  { value: 'OFFLINE', label: '오프라인 표시', color: 'error' }
 ]
 
 // 상태 메뉴 표시 여부
 const statusMenuOpen = ref(false)
 
+// 마이페이지 정보 조회
+const fetchUserInfo = async () => {
+  try {
+    const data = await authApi.getMyPage()
+    userName.value = data.name || '사용자'
+    userStatus.value = data.activeStatus || 'OFFLINE'
+    profileImageUrl.value = data.profileImageUrl || ''
+    
+    // authStore에도 상태 업데이트
+    if (authStore.user) {
+      authStore.setUser({
+        ...authStore.user,
+        name: data.name,
+        activeStatus: data.activeStatus
+      })
+    }
+  } catch (error) {
+    console.error('사용자 정보 조회 실패:', error)
+  }
+}
+
 // 상태 변경 함수
-const changeStatus = (status) => {
-  userStatus.value = status
-  statusMenuOpen.value = false
+const changeStatus = async (status) => {
+  if (loading.value) return
+  
+  const previousStatus = userStatus.value
+  
+  try {
+    loading.value = true
+    userStatus.value = status
+    
+    // 백엔드 API 호출
+    await authApi.updateActiveStatus(status)
+    
+    statusMenuOpen.value = false
+    
+    // authStore 업데이트
+    if (authStore.user) {
+      authStore.setUser({
+        ...authStore.user,
+        activeStatus: status
+      })
+    }
+  } catch (error) {
+    console.error('상태 변경 실패:', error)
+    // 실패 시 이전 상태로 복구
+    userStatus.value = previousStatus
+  } finally {
+    loading.value = false
+  }
 }
 
 // 현재 상태 정보
 const currentStatus = computed(() => {
-  return statusOptions.find(option => option.value === userStatus.value)
+  return statusOptions.find(option => option.value === userStatus.value) || statusOptions[2]
+})
+
+// 사용자 이름 표시 (authStore 또는 로컬 상태)
+const displayName = computed(() => {
+  return userName.value || authStore.user?.name || '사용자'
+})
+
+// 프로필 이미지 표시
+const displayProfileImage = computed(() => {
+  return profileImageUrl.value || authStore.user?.profileImageUrl
+})
+
+// 사용자 이름 첫 글자
+const userInitial = computed(() => {
+  return displayName.value.charAt(0).toUpperCase()
+})
+
+// 컴포넌트 마운트 시 사용자 정보 로드
+onMounted(() => {
+  if (authStore.isAuthenticated) {
+    fetchUserInfo()
+  }
 })
 </script>
 
@@ -48,16 +122,23 @@ const currentStatus = computed(() => {
           class="user-info"
           v-bind="menuProps"
         >
-          <v-avatar size="40" color="primary">
-            <span class="text-white font-weight-bold">A</span>
+          <div class="avatar-wrapper">
+            <v-avatar size="40" color="primary">
+              <v-img 
+                v-if="displayProfileImage" 
+                :src="displayProfileImage"
+                cover
+              />
+              <span v-else class="text-white font-weight-bold">{{ userInitial }}</span>
+            </v-avatar>
             <div 
               class="status-dot"
               :class="currentStatus.color"
             />
-          </v-avatar>
+          </div>
           
           <div class="user-details">
-            <div class="user-name">{{ userName }}</div>
+            <div class="user-name">{{ displayName }}</div>
             <div class="user-status-text">{{ currentStatus.label }}</div>
           </div>
         </div>
@@ -69,6 +150,7 @@ const currentStatus = computed(() => {
             v-for="option in statusOptions"
             :key="option.value"
             :class="{ 'active': userStatus === option.value }"
+            :disabled="loading"
             @click="changeStatus(option.value)"
           >
             <template v-slot:prepend>
@@ -78,6 +160,13 @@ const currentStatus = computed(() => {
               />
             </template>
             <v-list-item-title>{{ option.label }}</v-list-item-title>
+            <template v-slot:append v-if="loading && userStatus === option.value">
+              <v-progress-circular
+                indeterminate
+                size="20"
+                width="2"
+              />
+            </template>
           </v-list-item>
         </v-list>
       </v-card>
@@ -119,14 +208,21 @@ const currentStatus = computed(() => {
   background: rgba(255, 255, 255, 0.05);
 }
 
+.avatar-wrapper {
+  position: relative;
+  display: inline-block;
+}
+
 .status-dot {
   position: absolute;
-  bottom: 2px;
-  right: 2px;
-  width: 12px;
-  height: 12px;
-  border: 2px solid rgb(var(--v-theme-background));
+  bottom: -2px;
+  right: -2px;
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(0, 0, 0, 0.4);
   border-radius: 50%;
+  z-index: 1;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
 }
 
 .status-dot.success {
@@ -139,10 +235,6 @@ const currentStatus = computed(() => {
 
 .status-dot.error {
   background: rgb(var(--v-theme-error));
-}
-
-.status-dot.grey {
-  background: rgb(var(--v-theme-grey));
 }
 
 .user-details {
@@ -181,10 +273,6 @@ const currentStatus = computed(() => {
 
 .status-indicator.error {
   background: rgb(var(--v-theme-error));
-}
-
-.status-indicator.grey {
-  background: rgb(var(--v-theme-grey));
 }
 
 .active {

@@ -1,4 +1,4 @@
-import { apiPost, apiPostModelAttr } from '@/utils/api'
+import { apiGet, apiPost, apiPatch, apiDelete, apiPostModelAttr, apiPatchModelAttr } from '@/utils/api'
 
 // ----------------------
 // 회원가입 API
@@ -33,5 +33,47 @@ export const findPassword = async (findPasswordData) => {
 // ----------------------
 export const refreshAccessToken = async () => {
   return await apiPost('/workspace-service/member/refreshAt', {})
+}
+
+// ----------------------
+// 마이페이지 조회 API
+// ----------------------
+export const getMyPage = async () => {
+  return await apiGet('/workspace-service/member/myPage')
+}
+
+// ----------------------
+// 회원 정보 수정 API
+// ----------------------
+export const updateMember = async (memberData) => {
+  return await apiPatchModelAttr('/workspace-service/member/update', memberData)
+}
+
+// ----------------------
+// 회원 탈퇴 API
+// ----------------------
+export const deleteMember = async () => {
+  return await apiDelete('/workspace-service/member/delete')
+}
+
+// ----------------------
+// 비밀번호 변경 API
+// ----------------------
+export const changePassword = async (passwordData) => {
+  return await apiPatch('/workspace-service/member/changePassword', passwordData)
+}
+
+// ----------------------
+// 로그아웃 API
+// ----------------------
+export const logout = async () => {
+  return await apiPost('/workspace-service/member/logout', {})
+}
+
+// ----------------------
+// 사용자 상태 변경 API
+// ----------------------
+export const updateActiveStatus = async (activeStatus) => {
+  return await apiPatch('/workspace-service/member/updateActiveStatus', { activeStatus })
 }
 
