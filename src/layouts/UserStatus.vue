@@ -18,8 +18,8 @@ const loading = ref(false)
 // 상태 옵션들 (백엔드 ActiveStatus 매핑)
 const statusOptions = [
   { value: 'ONLINE', label: '온라인', color: 'success' },
-  { value: 'AWAY', label: '자리 비움', color: 'warning' },
-  { value: 'OFFLINE', label: '오프라인 표시', color: 'error' }
+  { value: 'AWAY', label: '자리비움', color: 'warning' },
+  { value: 'OFFLINE', label: '오프라인', color: 'error' }
 ]
 
 // 상태 메뉴 표시 여부

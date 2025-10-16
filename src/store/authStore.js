@@ -2,7 +2,7 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 
 export const useAuthStore = defineStore('auth', () => {
-  // 토큰 (AT만 localStorage, RT는 HttpOnly Cookie)
+  // 토큰 (AT만 localStorage)
   const accessToken = ref(localStorage.getItem('accessToken') || null)
   
   // 사용자 정보
@@ -62,10 +62,6 @@ export const useAuthStore = defineStore('auth', () => {
     const storedAccessToken = localStorage.getItem('accessToken')
     const storedUser = localStorage.getItem('user')
 
-    // 기존 RT 삭제 (HttpOnly Cookie로 전환되었으므로)
-    if (localStorage.getItem('refreshToken')) {
-      localStorage.removeItem('refreshToken')
-    }
 
     if (storedAccessToken) {
       accessToken.value = storedAccessToken

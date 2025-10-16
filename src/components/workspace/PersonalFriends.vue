@@ -129,9 +129,13 @@
                 />
                 <span v-else>{{ friend.name?.charAt(0) || 'U' }}</span>
               </v-avatar>
-              <div 
-                class="status-dot"
-                :class="getStatusColor(friend.activeStatus)"
+              <!-- 실시간 상태 배지 -->
+              <FriendStatusBadge 
+                :friend-name="friend.name"
+                :current-status="friend.activeStatus"
+                :size="12"
+                :tooltip="true"
+                class="friend-status-badge"
               />
             </div>
             <div class="friend-info">
@@ -391,6 +395,7 @@
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useTheme } from 'vuetify'
 import * as friendApi from '@/api/friend/friend'
+import FriendStatusBadge from '@/components/common/FriendStatusBadge.vue'
 
 const props = defineProps({
   currentChannel: String
@@ -596,21 +601,11 @@ const deleteFriend = async (memberSeq) => {
   }
 }
 
-// 상태 색상
-const getStatusColor = (status) => {
-  switch (status) {
-    case 'ONLINE': return 'success'
-    case 'AWAY': return 'warning'
-    case 'OFFLINE': return 'error'
-    default: return 'grey'
-  }
-}
-
 // 상태 라벨
 const getStatusLabel = (status) => {
   switch (status) {
     case 'ONLINE': return '온라인'
-    case 'AWAY': return '자리 비움'
+    case 'AWAY': return '자리비움'
     case 'OFFLINE': return '오프라인'
     default: return '알 수 없음'
   }
@@ -1091,35 +1086,13 @@ onUnmounted(() => {
   position: relative;
 }
 
-.status-dot {
+.friend-status-badge {
   position: absolute;
   bottom: -2px;
   right: -2px;
-  width: 12px;
-  height: 12px;
-  border-radius: 50%;
-  border: 2px solid #ffffff;
+  z-index: 1;
 }
 
-.dark-mode .status-dot {
-  border-color: #2d2d2d;
-}
-
-.status-dot.success {
-  background: #4caf50;
-}
-
-.status-dot.warning {
-  background: #ff9800;
-}
-
-.status-dot.error {
-  background: #f44336;
-}
-
-.status-dot.grey {
-  background: #9e9e9e;
-}
 
 .friend-info {
   flex: 1;
