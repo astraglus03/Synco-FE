@@ -4,6 +4,7 @@ import { createRouter, createWebHistory } from 'vue-router'
 // View 컴포넌트들
 import LandingPage from '@/views/landing/LandingPage.vue'
 import MainLayout from '@/layouts/MainLayout.vue'
+import ProjectChatPage from '@/views/chat/ProjectChatPage.vue'
 
 const routes = [
   {
@@ -20,6 +21,11 @@ const routes = [
     path: '/workspace/:workspaceId/:channel/:subChannel?',
     name: 'Workspace',
     component: MainLayout,
+  },
+  {
+    path: '/chatpage/:channelSeq',
+    name: 'ProjectChatPage',
+    component: ProjectChatPage
   },
 
 ]
