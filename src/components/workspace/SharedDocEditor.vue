@@ -415,7 +415,8 @@ const selectedHeading = ref(null);
 const selectedList = ref(null);
 
 const user = {
-  name: props.currentUser.name || 'User ' + Math.floor(Math.random() * 100),
+  id: Math.floor(Math.random() * 10000), // 랜덤 ID (테스트용)
+  name: 'User ' + Math.floor(Math.random() * 100),
   color: '#' + Math.floor(Math.random()*16777215).toString(16),
 };
 
@@ -623,6 +624,7 @@ onMounted(async () => {
     Number(props.documentSeq).toString(),
     handleIncomingMessage, // 메시지 수신 콜백
     () => { // 연결 성공 콜백
+      console.log('✅ STOMP 연결 성공 - DocumentId:', props.documentSeq);
       connectionStatus.value = 'connected';
       editor.value.setOptions({ editable: true });
     }
@@ -644,125 +646,121 @@ onBeforeUnmount(() => {
 });
 
 const handleIncomingMessage = (message) => {
+  console.log('📥 메시지 수신:', message);
+  
   if (!editor.value || message.senderId === user.name) {
+    console.log('🚫 메시지 무시 - 본인 메시지');
     return;
   }
 
+  // 원격 업데이트 플래그 설정
   isUpdatingFromRemote.value = true;
   
-  // 1. 커서의 "상대 위치" 저장
-  const { selection } = editor.value.state;
-  const resolvedPos = editor.value.state.doc.resolve(selection.from);
-  let anchorNodeId = null;
-  let startOffset = 0;
-  
-  for (let i = resolvedPos.depth; i > 0; i--) {
-    const node = resolvedPos.node(i);
-    if (node.isBlock && node.attrs.id) {
-      anchorNodeId = node.attrs.id;
-      const nodePos = resolvedPos.start(i);
-      startOffset = selection.from - nodePos;
-      break;
-    }
-  }
+  try {
+    // 메시지 종류에 따라 변경사항 적용
+    if (message.messageType === 'CREATE') {
+      console.log('🆕 CREATE 처리:', message.lineId);
+      let insertPos = 1;
+      if (message.prevLineId) {
+        let found = false;
+        editor.value.state.doc.descendants((node, pos) => {
+          if (!found && node.isBlock && node.attrs.id === message.prevLineId) {
+            insertPos = pos + node.nodeSize;
+            found = true;
+          }
+        });
+        if (!found) {
+          insertPos = editor.value.state.doc.content.size;
+        }
+      }
+      editor.value.chain().insertContentAt(insertPos, message.content).run();
+      
+      // 이전 상태 맵 업데이트 (원격에서 생성된 것도 추가)
+      nextTick(() => {
+        editor.value.state.doc.descendants((node) => {
+          if (node.isBlock && node.attrs.id === message.lineId) {
+            previousNodesById.value.set(node.attrs.id, node.toJSON());
+          }
+        });
+      });
 
-  // 2. 메시지 종류에 따라 변경사항 적용
-  if (message.messageType === 'CREATE') {
-    let insertPos = 1;
-    if (message.prevLineId) {
-      let found = false;
+    } else if (message.messageType === 'UPDATE') {
+      console.log('✏️ UPDATE 처리:', message.lineId);
+      let nodeToUpdate = null;
+      let nodeToUpdatePos = -1;
       editor.value.state.doc.descendants((node, pos) => {
-        if (!found && node.isBlock && node.attrs.id === message.prevLineId) {
-          insertPos = pos + node.nodeSize;
-          found = true;
+        if (node.isBlock && node.attrs.id === message.lineId) {
+          nodeToUpdate = node;
+          nodeToUpdatePos = pos;
         }
       });
-      if (!found) {
-        insertPos = editor.value.state.doc.content.size;
+
+      if (nodeToUpdate) {
+        editor.value.chain()
+          .deleteRange({ from: nodeToUpdatePos, to: nodeToUpdatePos + nodeToUpdate.nodeSize })
+          .insertContentAt(nodeToUpdatePos, message.content)
+          .run();
+        
+        // 이전 상태 맵 업데이트
+        nextTick(() => {
+          editor.value.state.doc.descendants((node) => {
+            if (node.isBlock && node.attrs.id === message.lineId) {
+              previousNodesById.value.set(node.attrs.id, node.toJSON());
+            }
+          });
+        });
       }
-    }
-    editor.value.chain().insertContentAt(insertPos, message.content).run();
 
-  } else if (message.messageType === 'UPDATE') {
-    let nodeToUpdate = null;
-    let nodeToUpdatePos = -1;
-    editor.value.state.doc.descendants((node, pos) => {
-      if (node.isBlock && node.attrs.id === message.lineId) {
-        nodeToUpdate = node;
-        nodeToUpdatePos = pos;
-      }
-    });
-
-    if (nodeToUpdate) {
-      editor.value.chain()
-        .deleteRange({ from: nodeToUpdatePos, to: nodeToUpdatePos + nodeToUpdate.nodeSize })
-        .insertContentAt(nodeToUpdatePos, message.content)
-        .run();
-    }
-
-  } else if (message.messageType === 'DELETE') {
-    console.log('[Delete Debug] Received DELETE message for line ID:', message.lineId);
-    let nodeToDelete = null;
-    let nodeToDeletePos = -1;
-    editor.value.state.doc.descendants((node, pos) => {
-      if (node.isBlock && node.attrs.id === message.lineId) {
-        nodeToDelete = node;
-        nodeToDeletePos = pos;
-      }
-    });
-    
-    console.log(`[Delete Debug] Found node to delete in local editor:`, nodeToDelete);
-
-    if (nodeToDelete) {
-      console.log(`[Delete Debug] Deleting node at pos: ${nodeToDeletePos}`);
-      editor.value.chain()
-        .deleteRange({ from: nodeToDeletePos, to: nodeToDeletePos + nodeToDelete.nodeSize })
-        .run();
-    }
-
-  } else if (message.messageType === 'CURSOR_UPDATE') {
-    const cursorData = JSON.parse(message.content);
-    
-    // 1. lineId를 기반으로 절대 위치(pos) 계산
-    let absolutePos = -1;
-    editor.value.state.doc.descendants((node, pos) => {
-      if (absolutePos === -1 && node.isBlock && node.attrs.id === cursorData.lineId) {
-        absolutePos = pos + cursorData.offset;
-      }
-    });
-
-    // 2. 계산된 위치에 커서 정보 업데이트
-    if (absolutePos !== -1) {
-      remoteCursorsMap.value = {
-        ...remoteCursorsMap.value,
-        [message.senderId]: {
-          user: cursorData.user,
-          pos: absolutePos,
+    } else if (message.messageType === 'DELETE') {
+      console.log('🗑️ DELETE 처리:', message.lineId);
+      let nodeToDelete = null;
+      let nodeToDeletePos = -1;
+      editor.value.state.doc.descendants((node, pos) => {
+        if (node.isBlock && node.attrs.id === message.lineId) {
+          nodeToDelete = node;
+          nodeToDeletePos = pos;
         }
-      };
-    }
-  }
+      });
 
-  // 3. "상대 위치"를 기반으로 커서 위치 복원
-  if (anchorNodeId && (message.messageType === 'CREATE' || message.messageType === 'UPDATE')) {
-    let newAnchorPos = -1;
-    editor.value.state.doc.descendants((node, pos) => {
-        if (newAnchorPos === -1 && node.isBlock && node.attrs.id === anchorNodeId) {
-            newAnchorPos = pos;
+      if (nodeToDelete) {
+        editor.value.chain()
+          .deleteRange({ from: nodeToDeletePos, to: nodeToDeletePos + nodeToDelete.nodeSize })
+          .run();
+        
+        // 이전 상태 맵에서 제거
+        previousNodesById.value.delete(message.lineId);
+      }
+
+    } else if (message.messageType === 'CURSOR_UPDATE') {
+      // 커서 업데이트는 원격 플래그 영향 안받음
+      const cursorData = JSON.parse(message.content);
+      
+      let absolutePos = -1;
+      editor.value.state.doc.descendants((node, pos) => {
+        if (absolutePos === -1 && node.isBlock && node.attrs.id === cursorData.lineId) {
+          absolutePos = pos + cursorData.offset;
         }
-    });
+      });
 
-    if (newAnchorPos !== -1) {
-        const node = editor.value.state.doc.nodeAt(newAnchorPos);
-        const newAbsolutePos = newAnchorPos + startOffset;
-        const finalPos = Math.max(newAnchorPos + 1, Math.min(newAbsolutePos, newAnchorPos + node.nodeSize -1));
-        editor.value.commands.setTextSelection(finalPos);
+      if (absolutePos !== -1) {
+        remoteCursorsMap.value = {
+          ...remoteCursorsMap.value,
+          [message.senderId]: {
+            user: cursorData.user,
+            pos: absolutePos,
+          }
+        };
+      }
     }
+  } catch (error) {
+    console.error('❌ 메시지 처리 오류:', error);
+  } finally {
+    // 원격 업데이트 플래그 해제
+    nextTick(() => {
+      isUpdatingFromRemote.value = false;
+      console.log('✅ 원격 메시지 처리 완료');
+    });
   }
-
-  setTimeout(() => {
-    isUpdatingFromRemote.value = false;
-  }, 50);
 };
 </script>
 
