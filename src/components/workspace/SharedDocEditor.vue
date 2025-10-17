@@ -511,23 +511,30 @@ onMounted(async () => {
       // 2. "수정"된 라인 찾아 UPDATE 메시지 전송
       for (const [id, nodeJSON] of previousNodesById.value.entries()) {
         const currentNode = currentNodesById.get(id);
-        if (currentNode && JSON.stringify(currentNode.content) !== JSON.stringify(nodeJSON.content)) {
-          nextTick(() => {
-            const element = document.querySelector(`[data-id="${id}"]`);
-            if (element) {
-              const cleanedHtml = element.outerHTML.replace(/<br class="ProseMirror-trailingBreak">/g, '');
-              sendStompMessage({
-                destination: '/publish/document/update',
-                body: {
-                  messageType: 'UPDATE',
-                  documentId: props.documentSeq.toString(),
-                  senderId: user.name,
-                  lineId: id,
-                  content: cleanedHtml,
-                },
-              });
-            }
-          });
+        if (currentNode) {
+          // content, type, attrs 모두 비교 (포맷팅 변경 감지)
+          const contentChanged = JSON.stringify(currentNode.content) !== JSON.stringify(nodeJSON.content);
+          const typeChanged = currentNode.type !== nodeJSON.type;
+          const attrsChanged = JSON.stringify(currentNode.attrs) !== JSON.stringify(nodeJSON.attrs);
+          
+          if (contentChanged || typeChanged || attrsChanged) {
+            nextTick(() => {
+              const element = document.querySelector(`[data-id="${id}"]`);
+              if (element) {
+                const cleanedHtml = element.outerHTML.replace(/<br class="ProseMirror-trailingBreak">/g, '');
+                sendStompMessage({
+                  destination: '/publish/document/update',
+                  body: {
+                    messageType: 'UPDATE',
+                    documentId: props.documentSeq.toString(),
+                    senderId: user.name,
+                    lineId: id,
+                    content: cleanedHtml,
+                  },
+                });
+              }
+            });
+          }
         }
       }
 
