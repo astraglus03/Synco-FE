@@ -21,6 +21,12 @@ const routes = [
     name: 'Workspace',
     component: MainLayout,
   },
+  {
+    path: '/drive/:driveChannelSeq/documents/:documentSeq',
+    name: 'DocumentEditor',
+    component: () => import('@/components/workspace/SharedDocEditor.vue'),
+    props: true,
+  },
 
 ]
 

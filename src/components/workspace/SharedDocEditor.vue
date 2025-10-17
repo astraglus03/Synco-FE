@@ -1,823 +1,916 @@
 <template>
-  <v-dialog :model-value="isOpen" max-width="1200px" fullscreen @update:model-value="$emit('update:isOpen', $event)">
-    <v-card class="shared-doc-editor">
-      <!-- 헤더 -->
-      <div class="editor-header">
-        <div class="header-left">
-          <v-btn icon="mdi-arrow-left" variant="text" @click="closeEditor" class="back-btn">
-            <v-icon>mdi-arrow-left</v-icon>
-          </v-btn>
-          <div class="document-info">
-            <h2 class="document-title">{{ documentStore.documentName }}</h2>
-            <div class="document-meta">
-              <span class="document-type">공유문서</span>
-              <v-icon v-if="documentStore.isDocumentLocked" class="lock-icon" size="16">mdi-lock</v-icon>
-              <v-chip
-                :color="isConnected ? 'success' : 'error'"
-                size="small"
-                variant="flat"
-                class="connection-status"
-              >
-                <v-icon start>{{ isConnected ? 'mdi-wifi' : 'mdi-wifi-off' }}</v-icon>
-                {{ isConnected ? '연결됨' : '연결 끊김' }}
-              </v-chip>
-            </div>
-          </div>
-        </div>
-        
-        <div class="header-center">
-          <div class="collaborators">
-            <span class="collaborators-label">협업자:</span>
-            <div class="collaborator-avatars">
-              <v-tooltip
-                v-for="user in documentStore.onlineUsersList"
-                :key="user.id"
-                :text="`${user.name} (${user.cursorPosition || 0}번째 위치)`"
-                location="bottom"
-              >
-                <template v-slot:activator="{ props }">
-                  <v-avatar
-                    v-bind="props"
-                    size="24"
-                    :style="{ backgroundColor: user.color }"
-                    class="collaborator-avatar"
-                  >
-                    {{ user.avatar }}
-                  </v-avatar>
-                </template>
-              </v-tooltip>
-            </div>
-          </div>
-        </div>
-        
-        <div class="header-right">
-          <div class="save-status">
-            <v-icon v-if="documentStore.isSaving" class="saving-icon" size="16">mdi-loading</v-icon>
-            <span v-if="documentStore.isSaving" class="status-text">저장 중...</span>
-            <span v-else-if="documentStore.isModified" class="status-text modified">수정됨</span>
-            <span v-else class="status-text">저장됨 {{ documentStore.formatLastSaved }}</span>
-          </div>
-          
-          <v-btn
-            :icon="documentStore.isDocumentLocked ? 'mdi-lock-open' : 'mdi-lock'"
-            variant="text"
-            @click="toggleLock"
-            class="lock-btn"
-            :title="documentStore.isDocumentLocked ? '잠금 해제' : '잠금'"
-          >
-            <v-icon>{{ documentStore.isDocumentLocked ? 'mdi-lock-open' : 'mdi-lock' }}</v-icon>
-          </v-btn>
-          
-          <v-btn
-            icon="mdi-download"
-            variant="text"
-            @click="downloadDocument"
-            class="download-btn"
-            title="다운로드"
-          >
-            <v-icon>mdi-download</v-icon>
-          </v-btn>
-          
-          <v-btn
-            color="primary"
-            @click="saveDocument"
-            :loading="documentStore.isSaving"
-            :disabled="!documentStore.isModified"
-            class="save-btn"
-          >
-            <v-icon left>mdi-content-save</v-icon>
-            저장
-          </v-btn>
-        </div>
+  <div class="shared-doc-editor">
+    <!-- 헤더 -->
+    <div class="editor-header">
+      <div class="header-left">
+        <v-btn 
+          icon="mdi-arrow-left" 
+          variant="text" 
+          @click="goBack"
+          class="back-btn"
+        >
+          <v-icon>mdi-arrow-left</v-icon>
+        </v-btn>
+        <h2 class="document-title">문서 편집</h2>
       </div>
+      
+      <!-- 연결 상태 표시 -->
+      <div class="connection-status" :class="connectionStatusClass">
+        <v-chip 
+          :color="connectionStatus === 'connected' ? 'success' : connectionStatus === 'connecting' ? 'warning' : 'error'" 
+          size="small"
+          class="status-chip"
+        >
+          <v-icon start>
+            {{ connectionStatus === 'connected' ? 'mdi-check-circle' : 
+                connectionStatus === 'connecting' ? 'mdi-loading' : 'mdi-alert-circle' }}
+          </v-icon>
+          {{ connectionStatus === 'connecting' ? '서버 연결 중...' : 
+             connectionStatus === 'connected' ? '실시간 협업 활성화' : 
+             '오프라인 모드' }}
+        </v-chip>
+      </div>
+    </div>
 
-      <!-- 편집 영역 -->
-      <div class="editor-content">
-        <div class="editor-toolbar">
-          <div class="toolbar-left">
-            <v-btn-group variant="text" density="compact">
-              <v-btn 
-                icon="mdi-format-bold" 
-                size="small" 
-                title="굵게"
-                :class="{ 'v-btn--active': editor?.isActive('bold') }"
-                @click="editor?.chain().focus().toggleBold().run()"
-              ></v-btn>
-              <v-btn 
-                icon="mdi-format-italic" 
-                size="small" 
-                title="기울임"
-                :class="{ 'v-btn--active': editor?.isActive('italic') }"
-                @click="editor?.chain().focus().toggleItalic().run()"
-              ></v-btn>
-              <v-btn 
-                icon="mdi-format-strikethrough" 
-                size="small" 
-                title="취소선"
-                :class="{ 'v-btn--active': editor?.isActive('strike') }"
-                @click="editor?.chain().focus().toggleStrike().run()"
-              ></v-btn>
-            </v-btn-group>
-            
-            <v-divider vertical class="mx-2"></v-divider>
-            
-            <v-btn-group variant="text" density="compact">
-              <v-btn 
-                icon="mdi-format-header-1" 
-                size="small" 
-                title="제목 1"
-                :class="{ 'v-btn--active': editor?.isActive('heading', { level: 1 }) }"
-                @click="editor?.chain().focus().toggleHeading({ level: 1 }).run()"
-              ></v-btn>
-              <v-btn 
-                icon="mdi-format-header-2" 
-                size="small" 
-                title="제목 2"
-                :class="{ 'v-btn--active': editor?.isActive('heading', { level: 2 }) }"
-                @click="editor?.chain().focus().toggleHeading({ level: 2 }).run()"
-              ></v-btn>
-              <v-btn 
-                icon="mdi-format-header-3" 
-                size="small" 
-                title="제목 3"
-                :class="{ 'v-btn--active': editor?.isActive('heading', { level: 3 }) }"
-                @click="editor?.chain().focus().toggleHeading({ level: 3 }).run()"
-              ></v-btn>
-            </v-btn-group>
-            
-            <v-divider vertical class="mx-2"></v-divider>
-            
-            <v-btn-group variant="text" density="compact">
-              <v-btn 
-                icon="mdi-format-list-bulleted" 
-                size="small" 
-                title="글머리 기호"
-                :class="{ 'v-btn--active': editor?.isActive('bulletList') }"
-                @click="editor?.chain().focus().toggleBulletList().run()"
-              ></v-btn>
-              <v-btn 
-                icon="mdi-format-list-numbered" 
-                size="small" 
-                title="번호 매기기"
-                :class="{ 'v-btn--active': editor?.isActive('orderedList') }"
-                @click="editor?.chain().focus().toggleOrderedList().run()"
-              ></v-btn>
-            </v-btn-group>
-          </div>
-          
-          <div class="toolbar-right">
-            <v-btn
-              icon="mdi-eye"
-              variant="text"
-              size="small"
-              :color="documentStore.isEditing ? 'primary' : ''"
-              @click="documentStore.setEditing(!documentStore.isEditing)"
-              title="편집 모드"
-            >
-              <v-icon>mdi-eye</v-icon>
-            </v-btn>
-          </div>
-        </div>
+    <!-- 에디터 툴바 -->
+    <div v-if="editor" class="editor-toolbar">
+      <v-btn-toggle v-model="selectedFormat" mandatory>
+        <v-btn 
+          @click="editor.chain().focus().toggleBold().run()" 
+          :class="{ 'is-active': editor.isActive('bold') }"
+          size="small"
+        >
+          <v-icon>mdi-format-bold</v-icon>
+        </v-btn>
+        <v-btn 
+          @click="editor.chain().focus().toggleItalic().run()" 
+          :class="{ 'is-active': editor.isActive('italic') }"
+          size="small"
+        >
+          <v-icon>mdi-format-italic</v-icon>
+        </v-btn>
+        <v-btn 
+          @click="editor.chain().focus().toggleStrike().run()" 
+          :class="{ 'is-active': editor.isActive('strike') }"
+          size="small"
+        >
+          <v-icon>mdi-format-strikethrough</v-icon>
+        </v-btn>
+      </v-btn-toggle>
+
+      <v-divider vertical class="mx-2"></v-divider>
+
+      <v-btn-toggle v-model="selectedHeading" mandatory>
+        <v-btn 
+          @click="editor.chain().focus().toggleHeading({ level: 1 }).run()" 
+          :class="{ 'is-active': editor.isActive('heading', { level: 1 }) }"
+          size="small"
+        >
+          H1
+        </v-btn>
+        <v-btn 
+          @click="editor.chain().focus().toggleHeading({ level: 2 }).run()" 
+          :class="{ 'is-active': editor.isActive('heading', { level: 2 }) }"
+          size="small"
+        >
+          H2
+        </v-btn>
+        <v-btn 
+          @click="editor.chain().focus().toggleHeading({ level: 3 }).run()" 
+          :class="{ 'is-active': editor.isActive('heading', { level: 3 }) }"
+          size="small"
+        >
+          H3
+        </v-btn>
+        <v-btn 
+          @click="editor.chain().focus().setParagraph().run()" 
+          :class="{ 'is-active': editor.isActive('paragraph') }"
+          size="small"
+        >
+          P
+        </v-btn>
+      </v-btn-toggle>
+
+      <v-divider vertical class="mx-2"></v-divider>
+
+      <v-btn-toggle v-model="selectedList" mandatory>
+        <v-btn 
+          @click="editor.chain().focus().toggleBulletList().run()" 
+          :class="{ 'is-active': editor.isActive('bulletList') }"
+          size="small"
+        >
+          <v-icon>mdi-format-list-bulleted</v-icon>
+        </v-btn>
+        <v-btn 
+          @click="editor.chain().focus().toggleOrderedList().run()" 
+          :class="{ 'is-active': editor.isActive('orderedList') }"
+          size="small"
+        >
+          <v-icon>mdi-format-list-numbered</v-icon>
+        </v-btn>
+      </v-btn-toggle>
+    </div>
+
+    <!-- 에디터 컨테이너 -->
+    <div class="editor-container" ref="editorContainerRef">
+      <div v-if="isLoading" class="loading-container">
+        <v-progress-circular indeterminate color="primary" size="64"></v-progress-circular>
+        <p class="loading-text">문서를 불러오는 중...</p>
+      </div>
+      <div v-else-if="editor">
+        <editor-content :editor="editor" />
         
-        <div class="editor-main">
-          <div class="editor-wrapper">
-            <textarea
-              v-model="editorContent"
-              class="yjs-editor"
-              placeholder="문서를 작성해보세요..."
-              @input="handleContentChange"
-              @keyup="handleCursorUpdate"
-            ></textarea>
+        <!-- 다른 사용자들의 커서를 렌더링하는 부분 -->
+        <div
+          v-for="cursor in remoteCursors"
+          :key="cursor.senderId"
+          class="remote-cursor"
+          :style="{
+            transform: `translate(${cursor.coords.left}px, ${cursor.coords.top}px)`,
+            backgroundColor: cursor.user.color,
+            height: cursor.height ? `${cursor.height}px` : '1.3em'
+          }"
+        >
+          <div class="cursor-flag" :style="{ backgroundColor: cursor.user.color }">
+            {{ cursor.user.name }}
           </div>
         </div>
       </div>
-    </v-card>
-  </v-dialog>
+    </div>
+  </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
-import * as Y from 'yjs'
-import { useDocumentStore } from '@/store/documentStore'
-import { useWebSocket } from '@/composables/useWebSocket'
-import axios from '@/utils/api'
+import { ref, onMounted, onBeforeUnmount, computed, nextTick } from 'vue';
+import { useRouter } from 'vue-router';
+import { Editor, EditorContent } from '@tiptap/vue-3';
+import { Extension } from '@tiptap/core';
+import { Plugin, PluginKey } from 'prosemirror-state';
+import StarterKit from '@tiptap/starter-kit';
+import { connectStomp, sendStompMessage, disconnectStomp } from '@/services/editorStompService';
+import { documentApi } from '@/api/document/documentApi';
 
+// Props 정의 (라우트 파라미터에서 받음)
 const props = defineProps({
-  document: {
-    type: Object,
+  documentSeq: {
+    type: [Number, String],
     required: true
   },
-  isOpen: {
-    type: Boolean,
-    default: false
+  driveChannelSeq: {
+    type: [Number, String],
+    required: true
+  },
+  currentUser: {
+    type: Object,
+    default: () => ({ id: 1, name: '홍길동' })
   }
-})
+});
 
-const emit = defineEmits(['update:isOpen', 'save', 'close', 'toggle-lock'])
+// Emits 정의
+const emit = defineEmits(['document-line-updated', 'document-line-deleted']);
 
-// 스토어 및 컴포저블
-const documentStore = useDocumentStore()
-const { connect, disconnect, sendYjsUpdate, sendCursorUpdate, setYjsUpdateCallback } = useWebSocket()
+// 라우터
+const router = useRouter();
 
-// 에디터 관련
-const editorContent = ref('')
-const ydoc = ref(null)
-const yText = ref(null)
-const isUpdatingFromYjs = ref(false)
+// 뒤로가기 함수
+const goBack = () => {
+  router.go(-1);
+};
 
-// 연결 상태
-const isConnected = computed(() => documentStore.isConnected)
-
-// 텍스트 변경 핸들러
-const handleContentChange = () => {
-  if (!yText.value || isUpdatingFromYjs.value) return
-  
-  // 현재 YJS 텍스트와 textarea 내용이 다를 때만 업데이트
-  const currentYjsText = yText.value.toString()
-  if (currentYjsText !== editorContent.value) {
-    // YJS 텍스트를 textarea 내용으로 교체
-    yText.value.delete(0, currentYjsText.length)
-    yText.value.insert(0, editorContent.value)
-  }
-}
-
-// 커서 위치 업데이트 핸들러
-const handleCursorUpdate = (event) => {
-  if (isConnected.value) {
-    const cursorPosition = event.target.selectionStart
-    sendCursorUpdate(props.document.id, cursorPosition)
-  }
-}
-
-// 문서 초기화
-const initializeEditor = async () => {
-  if (!props.document) return
-  
+// 문서 로딩 함수
+const loadDocument = async () => {
   try {
-    console.log('📝 문서 초기화 시작:', props.document)
+    isLoading.value = true;
     
-    // 문서 정보를 스토어에 설정
-    documentStore.setCurrentDocument(props.document)
+    // 파라미터를 명시적으로 숫자로 변환
+    const driveChannelSeq = Number(props.driveChannelSeq);
+    const documentSeq = Number(props.documentSeq);
     
-    // YJS 문서 생성 및 초기화
-    ydoc.value = new Y.Doc()
+    console.log('문서 로딩 시작:', {
+      driveChannelSeq: driveChannelSeq,
+      documentSeq: documentSeq,
+      originalProps: {
+        driveChannelSeq: props.driveChannelSeq,
+        documentSeq: props.documentSeq
+      }
+    });
+
+    const result = await documentApi.getDocument(driveChannelSeq, documentSeq);
     
-    // YJS 문서에 초기 텍스트 설정
-    yText.value = ydoc.value.getText('content')
-    yText.value.insert(0, props.document.content || '문서를 작성해보세요...')
-    
-    // 초기 내용을 에디터에 설정
-    editorContent.value = yText.value.toString()
-    
-    // YJS 텍스트 변경 감지
-    yText.value.observe((event) => {
-      console.log('📝 YJS 텍스트 변경:', event)
+    if (result.success) {
+      console.log('문서 로딩 성공:', result.data);
       
-      // YJS에서 업데이트 중임을 표시
-      isUpdatingFromYjs.value = true
-      editorContent.value = yText.value.toString()
-      isUpdatingFromYjs.value = false
+      // 백엔드 ResponseDto 구조에 맞게 처리
+      let blocks = [];
+      if (result.data && result.data.success && Array.isArray(result.data.data)) {
+        blocks = result.data.data;
+      } else if (result.data && Array.isArray(result.data)) {
+        blocks = result.data;
+      }
       
-      documentStore.setModified(true)
+      console.log('블록 데이터:', blocks);
       
-      // YJS 업데이트를 STOMP로 전송
-      if (isConnected.value) {
-        try {
-          const update = Y.encodeStateAsUpdate(ydoc.value)
-          const updateBase64 = btoa(String.fromCharCode(...update))
-          sendYjsUpdate(props.document.id, updateBase64, yText.value.toString())
-        } catch (error) {
-          console.error('❌ YJS 업데이트 인코딩 실패:', error)
+      // 블록 데이터를 HTML로 변환
+      if (blocks.length > 0) {
+        documentContent.value = convertBlocksToHTML(blocks);
+      } else {
+        documentContent.value = '<p></p>';
+      }
+      
+      console.log('변환된 HTML:', documentContent.value);
+    } else {
+      console.error('문서 로딩 실패:', result.error);
+      documentContent.value = '<p>문서를 불러올 수 없습니다.</p>';
+    }
+  } catch (error) {
+    console.error('문서 로딩 중 오류:', error);
+    documentContent.value = '<p>문서를 불러오는 중 오류가 발생했습니다.</p>';
+  } finally {
+    isLoading.value = false;
+  }
+};
+
+// 백엔드 블록 데이터를 HTML로 변환
+const convertBlocksToHTML = (blocks) => {
+  if (!blocks || blocks.length === 0) {
+    return '<p></p>';
+  }
+  
+  console.log('📦 받은 블록 데이터:', blocks);
+  console.log('📦 첫 번째 블록 상세:', blocks[0]);
+  console.log('📦 필드명 확인:', Object.keys(blocks[0]));
+  
+  // prevId 기반으로 정렬
+  const sortedBlocks = sortBlocksByPrevId(blocks);
+  
+  console.log('✅ 정렬된 블록:', sortedBlocks.map(b => ({
+    feId: b.feId,
+    parentId: b.parentId,
+    content: b.content?.substring(0, 50)
+  })));
+  
+  // HTML 변환
+  return sortedBlocks.map(block => {
+    // content가 이미 완성된 HTML
+    if (block.content) {
+      return block.content;
+    }
+    
+    // fallback: 없으면 빈 p 태그
+    const lineId = block.feId || randomUUID();
+    return `<p data-id="${lineId}"></p>`;
+  }).join('');
+};
+
+// prevId 기반 정렬 함수
+const sortBlocksByPrevId = (blocks) => {
+  if (blocks.length <= 1) return blocks;
+  
+  console.log('🔧 정렬 시작 - 모든 블록:', blocks.map(b => ({
+    feId: b.feId,
+    parentId: b.parentId,
+    content: b.content?.substring(0, 30)
+  })));
+  
+  // parentId가 NULL인 첫 번째 블록 찾기
+  const first = blocks.find(b => !b.parentId || b.parentId === 'NULL');
+  
+  if (!first) {
+    console.warn('⚠️ 첫 블록을 찾을 수 없음. 모든 parentId:', blocks.map(b => b.parentId));
+    return blocks;
+  }
+  
+  console.log('✅ 첫 번째 블록 찾음:', first.feId);
+  
+  const sorted = [first];
+  const used = new Set([first.feId]);
+  
+  // 연결리스트 따라가기
+  let iteration = 0;
+  while (sorted.length < blocks.length && iteration < 100) {
+    iteration++;
+    const lastId = sorted[sorted.length - 1].feId;
+    
+    console.log(`🔗 [${iteration}] lastId = "${lastId}", 다음 찾는 중...`);
+    
+    const next = blocks.find(b => {
+      const match = b.parentId === lastId && !used.has(b.feId);
+      console.log(`  검사: feId="${b.feId}", parentId="${b.parentId}", 매칭=${match}`);
+      return match;
+    });
+    
+    if (!next) {
+      console.warn(`⚠️ 다음 블록을 찾을 수 없음. lastId="${lastId}"`);
+      break;
+    }
+    
+    console.log(`✅ 다음 블록 찾음: ${next.feId}`);
+    sorted.push(next);
+    used.add(next.feId);
+  }
+  
+  console.log('🎯 최종 정렬 완료:', sorted.length, '/', blocks.length);
+  return sorted;
+};
+
+// 고유 ID 생성 함수
+function randomUUID() {
+  return 'line-' + Math.random().toString(36).substring(2, 11);
+}
+
+// 고유 ID 확장
+const UniqueIdExtension = Extension.create({
+  name: 'uniqueId',
+
+  addOptions() {
+    return {
+      types: ['heading', 'paragraph'],
+      attributeName: 'id',
+    };
+  },
+
+  addGlobalAttributes() {
+    return [
+      {
+        types: this.options.types,
+        attributes: {
+          [this.options.attributeName]: {
+            default: null,
+            parseHTML: element => element.getAttribute('data-id'),
+            renderHTML: attributes => {
+              if (!attributes[this.options.attributeName]) {
+                return {};
+              }
+              return { 'data-id': attributes[this.options.attributeName] };
+            },
+          },
+        },
+      },
+    ];
+  },
+
+  addProseMirrorPlugins() {
+    return [
+      new Plugin({
+        key: new PluginKey('uniqueId'),
+        appendTransaction: (transactions, oldState, newState) => {
+          const docChanged = transactions.some(transaction => transaction.docChanged);
+          if (!docChanged) {
+            return;
+          }
+
+          const tr = newState.tr;
+          let modified = false;
+          const seenIds = new Set();
+
+          newState.doc.descendants((node, pos) => {
+            if (!this.options.types.includes(node.type.name)) {
+              return;
+            }
+
+            const id = node.attrs[this.options.attributeName];
+
+            if (id === null || id === undefined) {
+              tr.setNodeMarkup(pos, undefined, {
+                ...node.attrs,
+                [this.options.attributeName]: randomUUID(),
+              });
+              modified = true;
+            } else if (seenIds.has(id)) {
+              tr.setNodeMarkup(pos, undefined, {
+                ...node.attrs,
+                [this.options.attributeName]: randomUUID(),
+              });
+              modified = true;
+            } else {
+              seenIds.add(id);
+            }
+          });
+
+          if (modified) {
+            return tr;
+          }
+        },
+      }),
+    ];
+  },
+});
+
+// 반응형 변수 선언
+const editor = ref(null);
+const connectionStatus = ref('connecting'); // 'connecting' | 'connected' | 'offline'
+const isUpdatingFromRemote = ref(false);
+const editorContainerRef = ref(null); // 에디터 컨테이너 DOM 참조
+const remoteCursorsMap = ref({}); // 다른 사용자 커서 정보 객체
+const lastCursorUpdate = ref(0); // 커서 업데이트 throttle용
+const previousNodesById = ref(new Map()); // "이전 상태"를 저장
+
+// 문서 로딩 상태
+const isLoading = ref(true);
+const documentContent = ref('');
+
+// 툴바 상태
+const selectedFormat = ref(null);
+const selectedHeading = ref(null);
+const selectedList = ref(null);
+
+const user = {
+  name: props.currentUser.name || 'User ' + Math.floor(Math.random() * 100),
+  color: '#' + Math.floor(Math.random()*16777215).toString(16),
+};
+
+const connectionStatusClass = computed(() => ({
+  'status-connecting': connectionStatus.value === 'connecting',
+  'status-connected': connectionStatus.value === 'connected',
+  'status-offline': connectionStatus.value === 'offline',
+}));
+
+const remoteCursors = computed(() => {
+  if (!editor.value || !editor.value.view || !editorContainerRef.value) {
+    return [];
+  }
+
+  const editorDom = editor.value.view.dom;
+  if (!editorDom) return [];
+  
+  const containerRect = editorContainerRef.value.getBoundingClientRect();
+  const cursors = [];
+
+  for (const senderId in remoteCursorsMap.value) {
+    const cursor = remoteCursorsMap.value[senderId];
+    try {
+      const maxPos = editor.value.state.doc.content.size;
+      const safePos = maxPos > 1
+        ? Math.min(Math.max(cursor.pos, 1), maxPos - 1)
+        : 0;
+
+      const coords = editor.value.view.coordsAtPos(safePos, -1);
+      const cursorHeight = coords.bottom - coords.top;
+      const relativeLeft = coords.left - containerRect.left;
+      const relativeTop = coords.top - containerRect.top;
+
+      cursors.push({
+        senderId,
+        user: cursor.user,
+        coords: {
+          left: relativeLeft,
+          top: relativeTop,
+        },
+        height: cursorHeight,
+      });
+    } catch (error) {
+      console.warn('Invalid cursor position:', cursor.pos, error);
+    }
+  }
+
+  return cursors;
+});
+
+// 라이프사이클 훅
+onMounted(async () => {
+  console.log('SharedDocEditor 마운트됨:', {
+    documentSeq: props.documentSeq,
+    driveChannelSeq: props.driveChannelSeq,
+    currentUser: props.currentUser
+  });
+
+  // 먼저 문서 로딩
+  await loadDocument();
+
+  editor.value = new Editor({
+    extensions: [
+      StarterKit,
+      UniqueIdExtension,
+    ],
+    content: documentContent.value || '<p></p>', // 로딩된 문서 내용 사용
+    onCreate: ({ editor }) => {
+      // 에디터 생성 시, 초기 상태를 "이전 상태"로 저장
+      editor.state.doc.descendants((node) => {
+        if (node.isBlock && node.attrs.id) {
+          previousNodesById.value.set(node.attrs.id, node.toJSON());
+        }
+      });
+    },
+    onUpdate: ({ editor, transaction }) => {
+      if (isUpdatingFromRemote.value || !transaction.docChanged) {
+        return;
+      }
+
+      // 1. 현재 상태 수집
+      const currentNodes = [];
+      const currentNodesById = new Map();
+      editor.state.doc.descendants((node) => {
+        if (node.isBlock && node.attrs.id) {
+          const nodeJSON = node.toJSON();
+          currentNodes.push(nodeJSON);
+          currentNodesById.set(node.attrs.id, nodeJSON);
+        }
+      });
+      
+      // 2. "수정"된 라인 찾아 UPDATE 메시지 전송
+      for (const [id, nodeJSON] of previousNodesById.value.entries()) {
+        const currentNode = currentNodesById.get(id);
+        if (currentNode && JSON.stringify(currentNode.content) !== JSON.stringify(nodeJSON.content)) {
+          nextTick(() => {
+            const element = document.querySelector(`[data-id="${id}"]`);
+            if (element) {
+              const cleanedHtml = element.outerHTML.replace(/<br class="ProseMirror-trailingBreak">/g, '');
+              sendStompMessage({
+                destination: '/publish/document/update',
+                body: {
+                  messageType: 'UPDATE',
+                  documentId: props.documentSeq.toString(),
+                  senderId: user.name,
+                  lineId: id,
+                  content: cleanedHtml,
+                },
+              });
+            }
+          });
         }
       }
-    })
-    
-    // YJS 업데이트 콜백 설정
-    setYjsUpdateCallback((update) => {
-      console.log('📥 YJS 업데이트 적용:', update)
-      try {
-        Y.applyUpdate(ydoc.value, update)
-      } catch (error) {
-        console.error('❌ YJS 업데이트 적용 실패:', error)
+
+      // 3. "삭제"된 라인 찾아 DELETE 메시지 전송
+      const previousIds = Array.from(previousNodesById.value.keys());
+      for (let i = 0; i < previousIds.length; i++) {
+        const oldId = previousIds[i];
+        if (!currentNodesById.has(oldId)) {
+          const prevLineId = i > 0 ? previousIds[i - 1] : null;
+          console.log(`[Delete Debug] Line deleted. ID: ${oldId}, prevLineId: ${prevLineId}. Sending DELETE message...`);
+          sendStompMessage({
+            destination: '/publish/document/delete',
+            body: {
+              messageType: 'DELETE',
+              documentId: props.documentSeq.toString(),
+              senderId: user.name,
+              lineId: oldId,
+              prevLineId: prevLineId,
+            },
+          });
+        }
       }
-    })
-    
-    // WebSocket 연결
-    await connect(props.document.id)
-    
-    // 초기 문서 내용 로드
-    await loadDocumentContent()
-    
-    console.log('✅ 문서 초기화 완료')
-    
-  } catch (error) {
-    console.error('❌ 문서 초기화 오류:', error)
-  }
-}
 
-// 문서 내용 로드 (API)
-const loadDocumentContent = async () => {
-  try {
-    const response = await axios.get(`/drive/project/${props.document.driveChannelSeq}/documents/${props.document.id}`)
-    const docDetail = response.data.data
-    if (docDetail && docDetail.content) {
-      const fullContent = docDetail.content.join('\n')
-      editor.value.commands.setContent(fullContent)
-      documentStore.setModified(false)
+      // 4. "생성"된 라인 찾아 CREATE 메시지 전송
+      for (let i = 0; i < currentNodes.length; i++) {
+        const currentNode = currentNodes[i];
+        const id = currentNode.attrs.id;
+
+        if (!previousNodesById.value.has(id)) {
+          const prevLineId = i > 0 ? currentNodes[i-1].attrs.id : null;
+          
+          nextTick(() => {
+            const element = document.querySelector(`[data-id="${id}"]`);
+            if (element) {
+              const cleanedHtml = element.outerHTML.replace(/<br class="ProseMirror-trailingBreak">/g, '');
+              sendStompMessage({
+                destination: '/publish/document/create',
+                body: {
+                  messageType: 'CREATE',
+                  documentId: props.documentSeq.toString(),
+                  senderId: user.name,
+                  lineId: id,
+                  prevLineId: prevLineId,
+                  content: cleanedHtml,
+                },
+              });
+            }
+          });
+        }
+      }
+
+      // 5. 현재 상태를 "이전 상태"로 갱신
+      previousNodesById.value = currentNodesById;
+    },
+    onSelectionUpdate: ({ editor }) => {
+      if (isUpdatingFromRemote.value || connectionStatus.value !== 'connected') return;
+      
+      const now = Date.now();
+      if (now - lastCursorUpdate.value < 100) return; // 100ms throttle
+      lastCursorUpdate.value = now;
+
+      // 1. 현재 커서 위치의 lineId와 offset 계산
+      const { from } = editor.state.selection;
+      const resolvedPos = editor.state.doc.resolve(from);
+      let cursorLineId = null;
+      let cursorOffset = 0;
+
+      for (let i = resolvedPos.depth; i > 0; i--) {
+        const node = resolvedPos.node(i);
+        if (node.isBlock && node.attrs.id) {
+          cursorLineId = node.attrs.id;
+          const nodePos = resolvedPos.start(i);
+          cursorOffset = from - nodePos;
+          break;
+        }
+      }
+
+      // 2. 계산된 정보로 메시지 전송
+      if (cursorLineId) {
+        sendStompMessage({
+          destination: '/publish/document/cursor',
+          body: {
+            messageType: 'CURSOR_UPDATE',
+            documentId: props.documentSeq.toString(),
+            senderId: user.name,
+            content: JSON.stringify({ lineId: cursorLineId, offset: cursorOffset, user }),
+          },
+        });
+      }
+    },
+  });
+
+  connectStomp(
+    Number(props.documentSeq).toString(),
+    handleIncomingMessage, // 메시지 수신 콜백
+    () => { // 연결 성공 콜백
+      connectionStatus.value = 'connected';
+      editor.value.setOptions({ editable: true });
     }
-  } catch (error) {
-    console.error('❌ 문서 내용 로드 실패:', error)
-  }
-}
+  );
 
-// 문서 저장 (API)
-const saveDocument = async () => {
-  documentStore.setSaving(true)
-  
-  try {
-    const content = editor.value.getHTML()
-    const textContent = editor.value.getText()
-    
-    console.log('💾 문서 저장 시작:', props.document.id)
-    
-    // 백엔드 API 호출
-    await axios.put(`/drive/project/${props.document.driveChannelSeq}/documents/${props.document.id}`, {
-      documentSeq: props.document.id,
-      driveChannelSeq: props.document.driveChannelSeq,
-      content: textContent // 백엔드는 textContent를 저장
-    })
-    
-    documentStore.setModified(false)
-    documentStore.setLastSaved(Date.now())
-    
-    emit('save', {
-      id: props.document.id,
-      content: textContent,
-      modifiedDate: new Date().toISOString()
-    })
-    
-    console.log('✅ 문서 저장 성공')
-    
-  } catch (error) {
-    console.error('❌ 문서 저장 실패:', error)
-  } finally {
-    documentStore.setSaving(false)
-  }
-}
-
-// 문서 다운로드
-const downloadDocument = async () => {
-  try {
-    const response = await axios.get(`/drive/project/${props.document.driveChannelSeq}/documents/${props.document.id}/download`, {
-      responseType: 'blob'
-    })
-    
-    const url = window.URL.createObjectURL(new Blob([response.data]))
-    const link = document.createElement('a')
-    link.href = url
-    link.setAttribute('download', `${props.document.name}.txt`)
-    document.body.appendChild(link)
-    link.click()
-    link.remove()
-    window.URL.revokeObjectURL(url)
-    
-    console.log('✅ 문서 다운로드 성공')
-  } catch (error) {
-    console.error('❌ 문서 다운로드 실패:', error)
-  }
-}
-
-// 잠금 토글 (API)
-const toggleLock = async () => {
-  try {
-    const response = await axios.post(`/drive/project/documents/lock`, {
-      driveChannelSeq: props.document.driveChannelSeq,
-      documentSeq: props.document.id
-    })
-    
-    emit('toggle-lock', props.document.id)
-    console.log('✅ 문서 잠금 상태 변경 성공:', response.data)
-  } catch (error) {
-    console.error('❌ 문서 잠금 상태 변경 오류:', error)
-  }
-}
-
-// 에디터 닫기
-const closeEditor = () => {
-  if (documentStore.isModified) {
-    if (confirm('저장되지 않은 변경사항이 있습니다. 정말 닫으시겠습니까?')) {
-      cleanup()
-      emit('close')
+  setTimeout(() => {
+    if (connectionStatus.value === 'connecting') {
+      connectionStatus.value = 'offline';
+      editor.value.setOptions({ editable: false });
     }
-  } else {
-    cleanup()
-    emit('close')
-  }
-}
+  }, 5000);
+});
 
-// 정리 작업
-const cleanup = () => {
-  if (yText.value) {
-    yText.value.unobserve()
-    yText.value = null
+onBeforeUnmount(() => {
+  disconnectStomp();
+  if (editor.value) {
+    editor.value.destroy();
   }
+});
+
+const handleIncomingMessage = (message) => {
+  if (!editor.value || message.senderId === user.name) {
+    return;
+  }
+
+  isUpdatingFromRemote.value = true;
   
-  if (ydoc.value) {
-    ydoc.value.destroy()
-    ydoc.value = null
-  }
+  // 1. 커서의 "상대 위치" 저장
+  const { selection } = editor.value.state;
+  const resolvedPos = editor.value.state.doc.resolve(selection.from);
+  let anchorNodeId = null;
+  let startOffset = 0;
   
-  editorContent.value = ''
-  
-  disconnect()
-  documentStore.clearDocument()
-}
-
-// 자동 저장 (30초마다)
-let autoSaveInterval = null
-
-const startAutoSave = () => {
-  autoSaveInterval = setInterval(() => {
-    if (documentStore.isModified && !documentStore.isSaving) {
-      console.log('⏰ 자동 저장 중...')
-      saveDocument()
-    }
-  }, 30000) // 30초
-}
-
-const stopAutoSave = () => {
-  if (autoSaveInterval) {
-    clearInterval(autoSaveInterval)
-    autoSaveInterval = null
-  }
-}
-
-// 키보드 단축키
-const handleKeydown = (event) => {
-  if (event.ctrlKey || event.metaKey) {
-    switch (event.key) {
-      case 's':
-        event.preventDefault()
-        saveDocument()
-        break
-      case 'w':
-        event.preventDefault()
-        closeEditor()
-        break
+  for (let i = resolvedPos.depth; i > 0; i--) {
+    const node = resolvedPos.node(i);
+    if (node.isBlock && node.attrs.id) {
+      anchorNodeId = node.attrs.id;
+      const nodePos = resolvedPos.start(i);
+      startOffset = selection.from - nodePos;
+      break;
     }
   }
-}
 
-// 생명주기
-onMounted(async () => {
-  console.log('🚀 SharedDocEditor 마운트됨')
-  await nextTick()
-  
-  if (props.isOpen) {
-    await initializeEditor()
-    startAutoSave()
-  }
-  
-  document.addEventListener('keydown', handleKeydown)
-})
+  // 2. 메시지 종류에 따라 변경사항 적용
+  if (message.messageType === 'CREATE') {
+    let insertPos = 1;
+    if (message.prevLineId) {
+      let found = false;
+      editor.value.state.doc.descendants((node, pos) => {
+        if (!found && node.isBlock && node.attrs.id === message.prevLineId) {
+          insertPos = pos + node.nodeSize;
+          found = true;
+        }
+      });
+      if (!found) {
+        insertPos = editor.value.state.doc.content.size;
+      }
+    }
+    editor.value.chain().insertContentAt(insertPos, message.content).run();
 
-onUnmounted(() => {
-  console.log('🛑 SharedDocEditor 언마운트됨')
-  stopAutoSave()
-  cleanup()
-  document.removeEventListener('keydown', handleKeydown)
-})
+  } else if (message.messageType === 'UPDATE') {
+    let nodeToUpdate = null;
+    let nodeToUpdatePos = -1;
+    editor.value.state.doc.descendants((node, pos) => {
+      if (node.isBlock && node.attrs.id === message.lineId) {
+        nodeToUpdate = node;
+        nodeToUpdatePos = pos;
+      }
+    });
 
-// props.isOpen 변경 감지
-watch(() => props.isOpen, async (newVal) => {
-  if (newVal) {
-    await initializeEditor()
-    startAutoSave()
-  } else {
-    stopAutoSave()
-    cleanup()
-  }
-})
+    if (nodeToUpdate) {
+      editor.value.chain()
+        .deleteRange({ from: nodeToUpdatePos, to: nodeToUpdatePos + nodeToUpdate.nodeSize })
+        .insertContentAt(nodeToUpdatePos, message.content)
+        .run();
+    }
 
-// 문서 변경 감지 (부모로부터)
-watch(() => props.document, (newDoc) => {
-  if (newDoc && editor.value) {
-    // 문서 내용이 변경되었을 경우 에디터 업데이트
-    const newContent = newDoc.content.join('\n')
-    if (editor.value.getHTML() !== newContent) {
-      editor.value.commands.setContent(newContent)
-      documentStore.setModified(false)
+  } else if (message.messageType === 'DELETE') {
+    console.log('[Delete Debug] Received DELETE message for line ID:', message.lineId);
+    let nodeToDelete = null;
+    let nodeToDeletePos = -1;
+    editor.value.state.doc.descendants((node, pos) => {
+      if (node.isBlock && node.attrs.id === message.lineId) {
+        nodeToDelete = node;
+        nodeToDeletePos = pos;
+      }
+    });
+    
+    console.log(`[Delete Debug] Found node to delete in local editor:`, nodeToDelete);
+
+    if (nodeToDelete) {
+      console.log(`[Delete Debug] Deleting node at pos: ${nodeToDeletePos}`);
+      editor.value.chain()
+        .deleteRange({ from: nodeToDeletePos, to: nodeToDeletePos + nodeToDelete.nodeSize })
+        .run();
+    }
+
+  } else if (message.messageType === 'CURSOR_UPDATE') {
+    const cursorData = JSON.parse(message.content);
+    
+    // 1. lineId를 기반으로 절대 위치(pos) 계산
+    let absolutePos = -1;
+    editor.value.state.doc.descendants((node, pos) => {
+      if (absolutePos === -1 && node.isBlock && node.attrs.id === cursorData.lineId) {
+        absolutePos = pos + cursorData.offset;
+      }
+    });
+
+    // 2. 계산된 위치에 커서 정보 업데이트
+    if (absolutePos !== -1) {
+      remoteCursorsMap.value = {
+        ...remoteCursorsMap.value,
+        [message.senderId]: {
+          user: cursorData.user,
+          pos: absolutePos,
+        }
+      };
     }
   }
-}, { deep: true })
+
+  // 3. "상대 위치"를 기반으로 커서 위치 복원
+  if (anchorNodeId && (message.messageType === 'CREATE' || message.messageType === 'UPDATE')) {
+    let newAnchorPos = -1;
+    editor.value.state.doc.descendants((node, pos) => {
+        if (newAnchorPos === -1 && node.isBlock && node.attrs.id === anchorNodeId) {
+            newAnchorPos = pos;
+        }
+    });
+
+    if (newAnchorPos !== -1) {
+        const node = editor.value.state.doc.nodeAt(newAnchorPos);
+        const newAbsolutePos = newAnchorPos + startOffset;
+        const finalPos = Math.max(newAnchorPos + 1, Math.min(newAbsolutePos, newAnchorPos + node.nodeSize -1));
+        editor.value.commands.setTextSelection(finalPos);
+    }
+  }
+
+  setTimeout(() => {
+    isUpdatingFromRemote.value = false;
+  }, 50);
+};
 </script>
 
 <style scoped>
 .shared-doc-editor {
-  height: 100vh;
   display: flex;
   flex-direction: column;
+  height: 100vh;
+  background-color: #fafafa;
 }
 
-/* 헤더 */
 .editor-header {
   display: flex;
-  align-items: center;
   justify-content: space-between;
-  padding: 16px 24px;
-  background: rgb(var(--v-theme-surface));
-  border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.1);
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  align-items: center;
+  padding: 12px 16px;
+  background-color: white;
+  border-bottom: 1px solid #e0e0e0;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
 }
 
 .header-left {
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 12px;
 }
 
 .back-btn {
-  color: rgba(var(--v-theme-on-surface), 0.7);
-}
-
-.document-info {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
+  margin-right: 8px;
 }
 
 .document-title {
-  font-size: 20px;
-  font-weight: 600;
-  color: rgb(var(--v-theme-on-surface));
   margin: 0;
-}
-
-.document-meta {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 14px;
-  color: rgba(var(--v-theme-on-surface), 0.6);
-}
-
-.lock-icon {
-  color: #ff9800;
+  font-size: 1.2em;
+  font-weight: 500;
 }
 
 .connection-status {
-  font-size: 12px;
-}
-
-.header-center {
-  flex: 1;
-  display: flex;
-  justify-content: center;
-}
-
-.collaborators {
   display: flex;
   align-items: center;
-  gap: 8px;
 }
 
-.collaborators-label {
-  font-size: 14px;
-  color: rgba(var(--v-theme-on-surface), 0.7);
-}
-
-.collaborator-avatars {
-  display: flex;
-  gap: 4px;
-}
-
-.collaborator-avatar {
-  color: white;
-  font-weight: 600;
-  font-size: 12px;
-}
-
-.header-right {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-}
-
-.save-status {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 14px;
-}
-
-.saving-icon {
-  animation: spin 1s linear infinite;
-}
-
-.status-text {
-  color: rgba(var(--v-theme-on-surface), 0.6);
-}
-
-.status-text.modified {
-  color: #ff9800;
-}
-
-.lock-btn {
-  color: rgba(var(--v-theme-on-surface), 0.7);
-}
-
-.lock-btn:hover {
-  color: #ff9800;
-  background: rgba(255, 152, 0, 0.1);
-}
-
-.download-btn {
-  color: rgba(var(--v-theme-on-surface), 0.7);
-}
-
-.save-btn {
-  text-transform: none;
-}
-
-/* 편집 영역 */
-.editor-content {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  background: rgba(var(--v-theme-on-surface), 0.02);
+.status-chip {
+  font-weight: 500;
 }
 
 .editor-toolbar {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 12px 24px;
-  background: rgb(var(--v-theme-surface));
-  border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.1);
-}
-
-.toolbar-left {
-  display: flex;
-  align-items: center;
+  padding: 8px 16px;
+  background-color: white;
+  border-bottom: 1px solid #e0e0e0;
   gap: 8px;
 }
 
-.toolbar-right {
-  display: flex;
-  align-items: center;
-  gap: 8px;
+.editor-toolbar .v-btn {
+  min-width: 36px;
 }
 
-.editor-main {
+.editor-toolbar .is-active {
+  background-color: #e3f2fd !important;
+  color: #1976d2 !important;
+}
+
+.editor-container {
   flex: 1;
-  padding: 24px;
-  overflow-y: auto;
-}
-
-.editor-wrapper {
-  width: 100%;
-  min-height: 500px;
-  background: rgb(var(--v-theme-surface));
+  position: relative;
+  background-color: white;
+  margin: 16px;
   border-radius: 8px;
-  padding: 24px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  overflow: hidden;
 }
 
-/* YJS 에디터 스타일 */
-.yjs-editor {
-  width: 100%;
-  min-height: 500px;
-  font-size: 16px;
-  line-height: 1.6;
-  color: rgb(var(--v-theme-on-surface));
-  font-family: 'Noto Sans KR', sans-serif;
-  border: none;
-  outline: none;
-  resize: none;
-  background: transparent;
-  padding: 0;
+.loading-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 200px;
+  gap: 16px;
 }
 
-.editor-wrapper :deep(.ProseMirror h1) {
-  font-size: 28px;
-  font-weight: 700;
-  margin: 24px 0 16px 0;
-  color: rgb(var(--v-theme-on-surface));
-}
-
-.editor-wrapper :deep(.ProseMirror h2) {
-  font-size: 24px;
-  font-weight: 600;
-  margin: 20px 0 12px 0;
-  color: rgb(var(--v-theme-on-surface));
-}
-
-.editor-wrapper :deep(.ProseMirror h3) {
-  font-size: 20px;
-  font-weight: 600;
-  margin: 16px 0 8px 0;
-  color: rgb(var(--v-theme-on-surface));
-}
-
-.editor-wrapper :deep(.ProseMirror p) {
-  margin: 8px 0;
-}
-
-.editor-wrapper :deep(.ProseMirror ul),
-.editor-wrapper :deep(.ProseMirror ol) {
-  margin: 8px 0;
-  padding-left: 24px;
-}
-
-.editor-wrapper :deep(.ProseMirror blockquote) {
-  border-left: 4px solid rgba(var(--v-theme-on-surface), 0.2);
-  padding-left: 16px;
-  margin: 16px 0;
-  color: rgba(var(--v-theme-on-surface), 0.7);
-  font-style: italic;
-}
-
-.editor-wrapper :deep(.ProseMirror code) {
-  background: rgba(var(--v-theme-on-surface), 0.1);
-  padding: 2px 6px;
-  border-radius: 4px;
-  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+.loading-text {
+  color: #666;
   font-size: 14px;
 }
 
-.editor-wrapper :deep(.ProseMirror pre) {
-  background: rgba(var(--v-theme-on-surface), 0.05);
-  padding: 16px;
-  border-radius: 8px;
-  overflow-x: auto;
-  margin: 16px 0;
+/* TipTap 에디터 스타일 */
+:deep(.ProseMirror) {
+  outline: none;
+  min-height: 400px;
+  padding: 24px;
+  font-size: 16px;
+  line-height: 1.6;
 }
 
-.editor-wrapper :deep(.ProseMirror pre code) {
-  background: none;
-  padding: 0;
+:deep(.ProseMirror p) {
+  margin: 8px 0;
 }
 
-/* 협업 커서 스타일 */
-.editor-wrapper :deep(.ProseMirror .collaboration-cursor__caret) {
-  position: relative;
-  margin-left: -1px;
-  margin-right: -1px;
-  border-left: 1px solid #0d7377;
-  border-right: 1px solid #0d7377;
-  word-break: normal;
-  pointer-events: none;
+:deep(.ProseMirror h1),
+:deep(.ProseMirror h2),
+:deep(.ProseMirror h3),
+:deep(.ProseMirror h4),
+:deep(.ProseMirror h5),
+:deep(.ProseMirror h6) {
+  margin: 16px 0 8px 0;
+  font-weight: bold;
 }
 
-.editor-wrapper :deep(.ProseMirror .collaboration-cursor__label) {
+:deep(.ProseMirror h1) { font-size: 2em; }
+:deep(.ProseMirror h2) { font-size: 1.5em; }
+:deep(.ProseMirror h3) { font-size: 1.17em; }
+:deep(.ProseMirror h4) { font-size: 1em; }
+:deep(.ProseMirror h5) { font-size: 0.83em; }
+:deep(.ProseMirror h6) { font-size: 0.67em; }
+
+:deep(.ProseMirror ul),
+:deep(.ProseMirror ol) {
+  padding-left: 24px;
+  margin: 8px 0;
+}
+
+:deep(.ProseMirror li) {
+  margin: 4px 0;
+}
+
+/* 원격 커서 스타일 */
+.remote-cursor {
   position: absolute;
-  top: -1.4em;
-  left: -1px;
-  font-size: 12px;
-  font-style: normal;
-  font-weight: 600;
-  line-height: normal;
-  user-select: none;
-  color: #0d7377;
-  padding: 0.1rem 0.3rem;
-  border-radius: 3px 3px 3px 0;
+  pointer-events: none;
+  width: 2px;
+  z-index: 10;
+  transform-origin: top left;
+}
+
+.cursor-flag {
+  position: absolute;
+  top: -1.5em;
+  left: 2px;
+  color: white;
+  font-size: 0.75em;
+  font-weight: bold;
+  padding: 2px 6px;
+  border-radius: 3px;
   white-space: nowrap;
-}
-
-/* 애니메이션 */
-@keyframes spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
-}
-
-/* 반응형 */
-@media (max-width: 768px) {
-  .editor-header {
-    flex-direction: column;
-    gap: 16px;
-    align-items: flex-start;
-  }
-  
-  .header-center {
-    order: 3;
-    width: 100%;
-    justify-content: flex-start;
-  }
-  
-  .header-right {
-    width: 100%;
-    justify-content: space-between;
-  }
-  
-  .editor-toolbar {
-    flex-direction: column;
-    gap: 12px;
-    align-items: flex-start;
-  }
-  
-  .toolbar-right {
-    width: 100%;
-    justify-content: flex-end;
-  }
+  box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+  line-height: 1.2;
 }
 </style>

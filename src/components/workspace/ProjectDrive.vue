@@ -1,5 +1,6 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { usePermissions, PERMISSIONS } from '@/composables/usePermissions'
 import { useProjectDriveStore } from '@/store/drive/projectDriveStore'
 import { useDraggable, useDropZone } from '@vueuse/core'
@@ -11,6 +12,7 @@ const props = defineProps({
 
 const { hasPermission, isManager, isSuper } = usePermissions()
 const driveStore = useProjectDriveStore()
+const router = useRouter()
 
 // 뷰 모드 (list, grid)
 const viewMode = ref('grid')
@@ -126,12 +128,14 @@ const parseSize = (sizeStr) => {
 // 공유문서 더블클릭으로 문서 편집기 진입
 const openSharedDoc = async (doc) => {
   if (doc.type === 'shared-doc') {
-    const result = await driveStore.loadDocumentContent(doc.id)
-    if (result.success) {
-      showDocEditor.value = true
-    } else {
-      console.error('문서 내용 로드 실패:', result.error)
-    }
+    // 라우트로 문서 편집기 페이지 이동
+    await router.push({
+      name: 'DocumentEditor',
+      params: {
+        driveChannelSeq: 2, // 하드코딩
+        documentSeq: doc.id
+      }
+    })
   }
 }
 
@@ -156,7 +160,7 @@ const saveDocument = async (docData) => {
 // 공유문서 편집기 닫기
 const closeDocEditor = () => {
   showDocEditor.value = false
-  driveStore.currentDocument = null
+  currentDocument.value = null
 }
 
 // 공유문서 잠금 해제/잠금
@@ -1415,6 +1419,28 @@ const loadDriveItems = async () => {
         </v-card-actions>
       </v-card>
     </v-dialog>
+
+    <!-- 공유문서 편집기 -->
+    <v-dialog v-model="showDocEditor" max-width="100%" max-height="100%" persistent>
+      <v-card class="doc-editor-modal">
+        <v-card-title class="modal-header">
+          <div class="header-content">
+            <v-icon class="header-icon" color="primary">mdi-file-document-edit</v-icon>
+            <h3 class="modal-title">{{ currentDocument?.name || '문서 편집' }}</h3>
+          </div>
+          <v-btn icon="mdi-close" variant="text" @click="closeDocEditor"></v-btn>
+        </v-card-title>
+        
+        <v-card-text class="modal-body" style="padding: 0; height: calc(100vh - 120px);">
+          <SharedDocEditor 
+            v-if="currentDocument"
+            :document-seq="currentDocument.id"
+            :drive-channel-seq="2"
+            :current-user="{ id: 1, name: '홍길동' }"
+          />
+        </v-card-text>
+      </v-card>
+    </v-dialog>
   </div>
 </template>
 
@@ -2218,6 +2244,23 @@ const loadDriveItems = async () => {
   padding: 12px 16px;
   color: rgba(var(--v-theme-on-surface), 0.6);
   font-size: 14px;
+}
+
+/* 공유문서 편집기 모달 스타일 */
+.doc-editor-modal {
+  height: 100vh;
+  max-height: 100vh;
+}
+
+.doc-editor-modal .v-card {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.doc-editor-modal .modal-body {
+  flex: 1;
+  overflow: hidden;
 }
 
 /* 삭제 버튼 스타일 */
