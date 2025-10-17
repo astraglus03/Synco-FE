@@ -58,7 +58,7 @@ export default {
 
     // 토큰 예시(실서비스는 저장소에서 읽어와라)
     this.token =
-      "eyJhbGciOiJIUzUxMiJ9.eyJzdWIiOiIyIiwiaWF0IjoxNzYwNjkyNzg4LCJleHAiOjE3NjA2OTQ1ODh9.ujk2o-1rMG0EeyhDDbUAwW3oJk_YXOTvch_dwYoAf6066ulxFVnQhVXPvRPB07NslNYw4u4EqB2D3_4ewi8l4Q";
+      "eyJhbGciOiJIUzUxMiJ9.eyJzdWIiOiIxIiwiaWF0IjoxNzYwNzAzNzI3LCJleHAiOjE3NjA3MDU1Mjd9.2V9Ad2M2QLSzpoLK-z-XBk27pcTo0kPQeaKGErm5PxmP-VBVLO_gb1yr3oKGadhfGZ0tHtLniNCubNZ3e1ynIQ";
 
     this.connectWebsocket();
   },

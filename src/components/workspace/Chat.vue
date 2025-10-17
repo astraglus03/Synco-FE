@@ -3,12 +3,22 @@ import { ref, computed, onMounted, onUnmounted } from "vue";
 import { usePermissions, PERMISSIONS } from "@/composables/usePermissions";
 import PollModal from "./PollModal.vue";
 import FileAttachmentModal from "./FileAttachmentModal.vue";
+import SockJS from "sockjs-client";
+import Stomp from "webstomp-client";
+import axios from "axios";
 
 const props = defineProps({
   currentChannel: String,
 });
 
 const { hasPermission, isManager, isSuper } = usePermissions();
+
+// WebSocket 관련 상태
+const stompClient = ref(null);
+const subscription = ref(null);
+const token = ref("");
+const channelSeq = ref(null);
+const memberSeq = ref(0);
 
 // 채널 목록
 const channels = ref([
@@ -20,128 +30,8 @@ const channels = ref([
 // 현재 채널
 const currentChannel = ref("general");
 
-// 각 채널별 메시지 데이터
-const channelMessages = {
-  general: [
-    {
-      id: 1,
-      user: "김민수",
-      content: "안녕하세요! 오늘 회의 일정 확인해주세요.",
-      time: "14:30",
-      avatar: "김",
-      isOwn: false,
-      unread: 1,
-    },
-    {
-      id: 2,
-      user: "나",
-      content: "네, 확인했습니다. 오후 2시에 시작하죠?",
-      time: "14:32",
-      avatar: "나",
-      isOwn: true,
-    },
-    {
-      id: 3,
-      user: "이지현",
-      content: "네, 맞습니다! 회의실은 3층이에요.",
-      time: "14:33",
-      avatar: "이",
-      isOwn: false,
-      unread: 1,
-    },
-    {
-      id: 4,
-      user: "박준영",
-      content: "프레젠테이션 자료는 준비됐나요?",
-      time: "14:35",
-      avatar: "박",
-      isOwn: false,
-      unread: 1,
-    },
-    {
-      id: 5,
-      user: "나",
-      content: "네, 모든 자료 준비 완료했습니다!",
-      time: "14:36",
-      avatar: "나",
-      isOwn: true,
-    },
-  ],
-  marketing: [
-    {
-      id: 1,
-      user: "이지현",
-      content: "새로운 마케팅 캠페인 아이디어가 있어요!",
-      time: "10:15",
-      avatar: "이",
-      isOwn: false,
-    },
-    {
-      id: 2,
-      user: "나",
-      content: "어떤 아이디어인가요?",
-      time: "10:18",
-      avatar: "나",
-      isOwn: true,
-    },
-    {
-      id: 3,
-      user: "이지현",
-      content: "소셜미디어 인플루언서와 협업하는 건 어떨까요?",
-      time: "10:20",
-      avatar: "이",
-      isOwn: false,
-    },
-    {
-      id: 4,
-      user: "최수진",
-      content: "좋은 아이디어네요! 예산은 어떻게 생각하세요?",
-      time: "10:25",
-      avatar: "최",
-      isOwn: false,
-    },
-  ],
-  development: [
-    {
-      id: 1,
-      user: "정현우",
-      content: "새 기능 개발이 완료되었습니다!",
-      time: "16:20",
-      avatar: "정",
-      isOwn: false,
-      unread: 1,
-    },
-    {
-      id: 2,
-      user: "나",
-      content: "수고하셨습니다! 테스트는 어떻게 되고 있나요?",
-      time: "16:25",
-      avatar: "나",
-      isOwn: true,
-    },
-    {
-      id: 3,
-      user: "정현우",
-      content: "현재 단위 테스트 진행 중이고, 내일 통합 테스트 예정입니다.",
-      time: "16:28",
-      avatar: "정",
-      isOwn: false,
-    },
-    {
-      id: 4,
-      user: "윤동현",
-      content: "성능 테스트도 함께 진행할까요?",
-      time: "16:30",
-      avatar: "윤",
-      isOwn: false,
-    },
-  ],
-};
-
-// 현재 채널의 메시지
-const messages = computed(() => {
-  return channelMessages[currentChannel.value] || [];
-});
+// 실제 메시지 데이터 (WebSocket에서 받아온 메시지들)
+const messages = ref([]);
 
 // 새 메시지
 const newMessage = ref("");
@@ -159,49 +49,141 @@ const showFileModal = ref(false);
 // 첨부된 파일들
 const attachedFiles = ref([]);
 
+// WebSocket 연결
+const connectWebsocket = () => {
+  if (stompClient.value && stompClient.value.connected) return;
+
+  const sockJs = new SockJS(
+    `${import.meta.env.VITE_API_URL}/chat-service/connect`
+  );
+  stompClient.value = Stomp.over(sockJs);
+
+  stompClient.value.connect(
+    { Authorization: `Bearer ${token.value}` },
+    () => {
+      console.log("WebSocket 연결 성공!");
+      // 구독
+      subscription.value = stompClient.value.subscribe(
+        `/topic/${channelSeq.value}`,
+        (message) => {
+          try {
+            const parsed = JSON.parse(message.body);
+            console.log("메시지 수신:", parsed);
+
+            // 메시지 형식을 Chat.vue 형식으로 변환
+            const formattedMessage = {
+              id: parsed.chatMessageSeq || Date.now(),
+              user: parsed.senderName || parsed.senderSeq,
+              content: parsed.chatMessageText,
+              time: new Date().toLocaleTimeString("ko-KR", {
+                hour: "2-digit",
+                minute: "2-digit",
+              }),
+              avatar: (parsed.senderName || parsed.senderSeq).charAt(0),
+              isOwn: parsed.senderSeq === memberSeq.value,
+              unread: parsed.senderSeq !== memberSeq.value ? 1 : 0,
+            };
+
+            // 자신이 보낸 메시지가 아닌 경우에만 추가 (중복 방지)
+            if (parsed.senderSeq !== memberSeq.value) {
+              messages.value.push(formattedMessage);
+              console.log("메시지 추가됨:", formattedMessage);
+              scrollToBottom();
+            }
+          } catch (e) {
+            console.error("메시지 파싱 실패:", e, message.body);
+          }
+        },
+        { Authorization: `Bearer ${token.value}` }
+      );
+    },
+    (error) => {
+      console.error("WebSocket 연결 실패:", error);
+    }
+  );
+};
+
+// WebSocket 연결 해제
+const disconnectWebsocket = async () => {
+  try {
+    // 읽음 처리 API
+    await axios.post(
+      `${import.meta.env.VITE_API_URL}/chat/room/${channelSeq.value}/read`
+    );
+  } catch (e) {
+    console.warn("읽음 처리 실패:", e);
+  }
+
+  try {
+    if (subscription.value) {
+      subscription.value.unsubscribe();
+      subscription.value = null;
+    }
+    if (stompClient.value && stompClient.value.connected) {
+      stompClient.value.disconnect(() => {
+        // disconnected
+      });
+    }
+  } catch (e) {
+    console.warn("WebSocket 해제 중 오류:", e);
+  } finally {
+    stompClient.value = null;
+  }
+};
+
+// 스크롤을 맨 아래로
+const scrollToBottom = () => {
+  setTimeout(() => {
+    const chatBox = document.querySelector(".messages-container");
+    if (chatBox) chatBox.scrollTop = chatBox.scrollHeight;
+  }, 100);
+};
+
 // 메시지 전송
 const sendMessage = () => {
-  if (newMessage.value.trim() || attachedFiles.value.length > 0) {
-    const newMsg = {
-      id: Date.now(),
-      user: "나",
-      content: newMessage.value,
-      time: new Date().toLocaleTimeString("ko-KR", {
-        hour: "2-digit",
-        minute: "2-digit",
-      }),
-      avatar: "나",
-      isOwn: true,
-      files: attachedFiles.value.length > 0 ? [...attachedFiles.value] : null,
-    };
-
-    channelMessages[currentChannel.value].push(newMsg);
-    newMessage.value = "";
-    attachedFiles.value = [];
-    isTyping.value = false;
-    showAttachmentMenu.value = false;
-
-    // 상대방 타이핑 시뮬레이션
-    setTimeout(() => {
-      otherTyping.value = true;
-      setTimeout(() => {
-        otherTyping.value = false;
-        // 상대방 메시지 추가
-        const otherMsg = {
-          id: Date.now() + 1,
-          user: "김민수",
-          content: "네, 알겠습니다!",
-          time: new Date().toLocaleTimeString("ko-KR", {
-            hour: "2-digit",
-            minute: "2-digit",
-          }),
-          avatar: "김",
-          isOwn: false,
-        };
-        channelMessages[currentChannel.value].push(otherMsg);
-      }, 2000);
-    }, 1000);
+  if (!stompClient.value || !stompClient.value.connected) {
+    console.error("WebSocket 연결이 없습니다!");
+    return;
   }
+  if (newMessage.value.trim() === "") return;
+
+  const message = {
+    senderSeq: memberSeq.value,
+    messageType: "TEXT",
+    chatMessageText: newMessage.value,
+  };
+
+  // 즉시 UI에 메시지 표시 (자신이 보낸 메시지)
+  const immediateMessage = {
+    id: Date.now(),
+    user: "나",
+    content: newMessage.value,
+    time: new Date().toLocaleTimeString("ko-KR", {
+      hour: "2-digit",
+      minute: "2-digit",
+    }),
+    avatar: "나",
+    isOwn: true,
+    unread: 0,
+  };
+
+  messages.value.push(immediateMessage);
+  console.log("메시지 전송:", message);
+  console.log("즉시 메시지 추가:", immediateMessage);
+
+  // webstomp-client: send(destination, body, headers)
+  stompClient.value.send(
+    `/publish/${channelSeq.value}`,
+    JSON.stringify(message),
+    { Authorization: `Bearer ${token.value}` }
+  );
+
+  newMessage.value = "";
+  attachedFiles.value = [];
+  isTyping.value = false;
+  showAttachmentMenu.value = false;
+
+  scrollToBottom();
 };
 
 // 채널 생성
@@ -221,11 +203,27 @@ const createChannel = () => {
   }
 };
 
+// 채널 변경 시 WebSocket 재연결
+const changeChannel = (channelId) => {
+  if (currentChannel.value === channelId) return;
+
+  // 기존 연결 해제
+  disconnectWebsocket();
+
+  // 새 채널로 변경
+  currentChannel.value = channelId;
+  channelSeq.value = channelId;
+  messages.value = [];
+
+  // 새 채널로 연결
+  connectWebsocket();
+};
+
 // 하위 채널 선택 이벤트 처리
 const handleSubChannelSelect = (event) => {
   const { parentId, subChannelId } = event.detail;
   if (parentId === "chat") {
-    currentChannel.value = subChannelId;
+    changeChannel(subChannelId);
   }
 };
 
@@ -269,7 +267,7 @@ const handleCreatePoll = (pollData) => {
     pollData: pollData,
   };
 
-  channelMessages[currentChannel.value].push(pollMessage);
+  messages.value.push(pollMessage);
   newMessage.value = "";
   isTyping.value = false;
   showAttachmentMenu.value = false;
@@ -324,10 +322,28 @@ const handleInputChange = () => {
 // 이벤트 리스너 등록/해제
 onMounted(() => {
   window.addEventListener("select-chat-channel", handleSubChannelSelect);
+
+  // 초기화
+  channelSeq.value = currentChannel.value;
+  memberSeq.value = Number(localStorage.getItem("memberSeq")) || 0;
+
+  console.log("Chat 컴포넌트 초기화:");
+  console.log("- channelSeq:", channelSeq.value);
+  console.log("- memberSeq:", memberSeq.value);
+  console.log("- currentChannel:", currentChannel.value);
+
+  // 토큰 설정 (실서비스에서는 저장소에서 읽어와야 함)
+  token.value =
+    "eyJhbGciOiJIUzUxMiJ9.eyJzdWIiOiIxIiwiaWF0IjoxNzYwNzAzNzI3LCJleHAiOjE3NjA3MDU1Mjd9.2V9Ad2M2QLSzpoLK-z-XBk27pcTo0kPQeaKGErm5PxmP-VBVLO_gb1yr3oKGadhfGZ0tHtLniNCubNZ3e1ynIQ";
+
+  // WebSocket 연결
+  console.log("WebSocket 연결 시도...");
+  connectWebsocket();
 });
 
 onUnmounted(() => {
   window.removeEventListener("select-chat-channel", handleSubChannelSelect);
+  disconnectWebsocket();
 });
 </script>
 
@@ -339,7 +355,17 @@ onUnmounted(() => {
       <div class="chat-header">
         <div class="channel-info">
           <v-icon>mdi-pound</v-icon>
-          <span>{{ channels.find((c) => c.id === currentChannel)?.name }}</span>
+          <v-select
+            v-model="currentChannel"
+            :items="channels"
+            item-title="name"
+            item-value="id"
+            variant="plain"
+            density="compact"
+            hide-details
+            @update:model-value="changeChannel"
+            class="channel-select"
+          />
         </div>
         <div class="channel-actions">
           <v-btn
@@ -586,6 +612,16 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   gap: 8px;
+  font-size: 16px;
+  font-weight: 600;
+  color: rgb(var(--v-theme-on-surface));
+}
+
+.channel-select {
+  min-width: 120px;
+}
+
+.channel-select :deep(.v-field__input) {
   font-size: 16px;
   font-weight: 600;
   color: rgb(var(--v-theme-on-surface));
