@@ -49,28 +49,26 @@ const showFileModal = ref(false);
 // 첨부된 파일들
 const attachedFiles = ref([]);
 
-// WebSocket 연결
+// ✅ WebSocket 연결
 const connectWebsocket = () => {
   if (stompClient.value && stompClient.value.connected) return;
 
-  const sockJs = new SockJS(
-    `${import.meta.env.VITE_API_URL}/chat-service/connect`
-  );
+  const sockJs = new SockJS(`${import.meta.env.VITE_API_URL}/chat-service/connect`);
   stompClient.value = Stomp.over(sockJs);
 
   stompClient.value.connect(
     { Authorization: `Bearer ${token.value}` },
     () => {
-      console.log("WebSocket 연결 성공!");
-      // 구독
+      console.log("✅ WebSocket 연결 성공!");
+
       subscription.value = stompClient.value.subscribe(
         `/topic/${channelSeq.value}`,
         (message) => {
           try {
             const parsed = JSON.parse(message.body);
-            console.log("메시지 수신:", parsed);
+            console.log("📩 메시지 수신:", parsed);
 
-            // 메시지 형식을 Chat.vue 형식으로 변환
+            // 💬 디자인 메시지 구조에 맞게 변환
             const formattedMessage = {
               id: parsed.chatMessageSeq || Date.now(),
               user: parsed.senderName || parsed.senderSeq,
@@ -79,17 +77,13 @@ const connectWebsocket = () => {
                 hour: "2-digit",
                 minute: "2-digit",
               }),
-              avatar: (parsed.senderName || parsed.senderSeq).charAt(0),
+              avatar: (parsed.senderName || parsed.senderSeq).toString().charAt(0),
               isOwn: parsed.senderSeq === memberSeq.value,
               unread: parsed.senderSeq !== memberSeq.value ? 1 : 0,
             };
 
-            // 자신이 보낸 메시지가 아닌 경우에만 추가 (중복 방지)
-            if (parsed.senderSeq !== memberSeq.value) {
-              messages.value.push(formattedMessage);
-              console.log("메시지 추가됨:", formattedMessage);
-              scrollToBottom();
-            }
+            messages.value.push(formattedMessage);
+            scrollToBottom();
           } catch (e) {
             console.error("메시지 파싱 실패:", e, message.body);
           }
@@ -98,15 +92,16 @@ const connectWebsocket = () => {
       );
     },
     (error) => {
-      console.error("WebSocket 연결 실패:", error);
+      console.error("❌ WebSocket 연결 실패:", error);
     }
   );
 };
 
-// WebSocket 연결 해제
+
+// ✅ WebSocket 연결 해제
 const disconnectWebsocket = async () => {
   try {
-    // 읽음 처리 API
+    // 🟡 읽음 처리 API 호출
     await axios.post(
       `${import.meta.env.VITE_API_URL}/chat/room/${channelSeq.value}/read`
     );
@@ -121,7 +116,7 @@ const disconnectWebsocket = async () => {
     }
     if (stompClient.value && stompClient.value.connected) {
       stompClient.value.disconnect(() => {
-        // disconnected
+        console.log("🔌 WebSocket 연결 해제 완료");
       });
     }
   } catch (e) {
@@ -139,7 +134,7 @@ const scrollToBottom = () => {
   }, 100);
 };
 
-// 메시지 전송
+// ✅ 메시지 전송
 const sendMessage = () => {
   if (!stompClient.value || !stompClient.value.connected) {
     console.error("WebSocket 연결이 없습니다!");
@@ -153,7 +148,7 @@ const sendMessage = () => {
     chatMessageText: newMessage.value,
   };
 
-  // 즉시 UI에 메시지 표시 (자신이 보낸 메시지)
+  // 💬 자신이 보낸 메시지 즉시 표시
   const immediateMessage = {
     id: Date.now(),
     user: "나",
@@ -166,10 +161,6 @@ const sendMessage = () => {
     isOwn: true,
     unread: 0,
   };
-
-  messages.value.push(immediateMessage);
-  console.log("메시지 전송:", message);
-  console.log("즉시 메시지 추가:", immediateMessage);
 
   // webstomp-client: send(destination, body, headers)
   stompClient.value.send(
@@ -323,23 +314,39 @@ const handleInputChange = () => {
 onMounted(() => {
   window.addEventListener("select-chat-channel", handleSubChannelSelect);
 
-  // 초기화
-  channelSeq.value = currentChannel.value;
-  memberSeq.value = Number(localStorage.getItem("memberSeq")) || 0;
+  // ✅ 워크스페이스 & 채널 고정
+  const workspaceSeq = 4;
+  channelSeq.value = 1;
 
-  console.log("Chat 컴포넌트 초기화:");
+  // ✅ 테스트용 멤버 3명 하드코딩
+  const TEST_USERS = [
+    { memberSeq: 1, token: "eyJhbGciOiJIUzUxMiJ9.eyJzdWIiOiIxIiwiaWF0IjoxNzYwODQxMzU4LCJleHAiOjE3NjA4NzEzNTh9.T5VkgV-2y0VrsCXs_3gPs4XyKWuiNY4fN8xAA1mrsqA0aCv7ac5JpwlC8NXJCxnwXRoebqxUf8f9V-CHS96Blw" },
+    { memberSeq: 2, token: "eyJhbGciOiJIUzUxMiJ9.eyJzdWIiOiIyIiwiaWF0IjoxNzYwODQ3Njg4LCJleHAiOjE3NjA4Nzc2ODh9.03ykRlWZQ7smnICyW1qBGZHYkadte4BFn0SMs9V0R4YP82R_I8MwdzRvEHRyNMzcaOf69cFIN4vtQQmXZI4CWw" },
+    { memberSeq: 3, token: "eyJhbGciOiJIUzUxMiJ9.eyJzdWIiOiIzIiwiaWF0IjoxNzYwODQ3NzAxLCJleHAiOjE3NjA4Nzc3MDF9.UTkFvu-F96BijpDt1cQJ6p7RuEUcGlHxOjhoZCr8-r9E2JsLe61WwMzOsry1kBAMouvsgCt8o7saZvKE9_Q8Mg" },
+  ];
+
+  // ✅ 브라우저별 index (없으면 랜덤 생성)
+  let index = localStorage.getItem("chatTesterIndex");
+  if (!index) {
+    index = Math.floor(Math.random() * 3); // 0~2 중 랜덤
+    localStorage.setItem("chatTesterIndex", index);
+  }
+
+  // ✅ 선택된 유저로 설정
+  const selectedUser = TEST_USERS[index];
+  memberSeq.value = selectedUser.memberSeq;
+  token.value = selectedUser.token;
+
+  console.log("🟢 Chat 테스트 시작");
+  console.log("- workspaceSeq:", workspaceSeq);
   console.log("- channelSeq:", channelSeq.value);
   console.log("- memberSeq:", memberSeq.value);
-  console.log("- currentChannel:", currentChannel.value);
+  console.log("- token.sub:", JSON.parse(atob(token.value.split('.')[1])).sub);
 
-  // 토큰 설정 (실서비스에서는 저장소에서 읽어와야 함)
-  token.value =
-    "eyJhbGciOiJIUzUxMiJ9.eyJzdWIiOiIxIiwiaWF0IjoxNzYwNzAzNzI3LCJleHAiOjE3NjA3MDU1Mjd9.2V9Ad2M2QLSzpoLK-z-XBk27pcTo0kPQeaKGErm5PxmP-VBVLO_gb1yr3oKGadhfGZ0tHtLniNCubNZ3e1ynIQ";
-
-  // WebSocket 연결
-  console.log("WebSocket 연결 시도...");
+  // ✅ WebSocket 연결
   connectWebsocket();
 });
+
 
 onUnmounted(() => {
   window.removeEventListener("select-chat-channel", handleSubChannelSelect);
@@ -401,19 +408,10 @@ onUnmounted(() => {
             }"
           >
             <div class="message-content">
-              <!-- 프로필 아바타 (상대방 메시지의 첫 번째만) -->
-              <div
-                v-if="
-                  !message.isOwn &&
-                  (index === 0 ||
-                    messages[index - 1].user !== message.user ||
-                    messages[index - 1].isOwn)
-                "
-                class="message-avatar"
-              >
+              <div v-if="!message.isOwn" class="message-avatar">
                 {{ message.avatar }}
               </div>
-
+              
               <div class="message-group">
                 <!-- 발신자 이름 (상대방 메시지의 첫 번째만) -->
                 <div
@@ -742,12 +740,12 @@ onUnmounted(() => {
   gap: 2px;
   margin-top: 4px;
   position: absolute;
-  right: -35px;
+  right: -50px;
   bottom: 0;
 }
 
 .message-item.own-message .message-meta {
-  left: -35px;
+  left: -50px;
   right: auto;
 }
 
@@ -755,6 +753,7 @@ onUnmounted(() => {
   font-size: 10px;
   color: rgba(var(--v-theme-on-surface), 0.6);
   white-space: nowrap;
+  padding: 0px 0px;
 }
 
 .unread-count {
