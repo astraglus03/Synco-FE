@@ -1,5 +1,5 @@
 import axios from 'axios'
-// import { useAuthStore } from '@/store/auth'
+import { useAuthStore } from '@/store/authStore'
 import { handleApiResponse } from '@/models/common/ApiResponse'
 
 // ----------------------
@@ -9,6 +9,7 @@ const apiClient = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080',
   timeout: 10000,
   headers: { 'Content-Type': 'application/json' },
+  withCredentials: true, // ✅ 쿠키 전송 활성화
 })
 
 // 요청 인터셉터 (토큰 자동 주입) - 테스트용으로 주석처리
@@ -27,31 +28,38 @@ apiClient.interceptors.request.use((config) => {
   return config
 })
 
-// // 응답 인터셉터 (401 → refresh 토큰) - 주석처리
-// // 401 에러 시 자동으로 토큰 갱신 시도
-// apiClient.interceptors.response.use(
-//   (res) => res,
-//   async (error) => {
-//     const authStore = useAuthStore()
-//     const originalRequest = error.config
+// 응답 인터셉터 (401 → refresh 토큰)
+// 401 에러 시 자동으로 토큰 갱신 시도
+apiClient.interceptors.response.use(
+  (res) => res,
+  async (error) => {
+    const authStore = useAuthStore()
+    const originalRequest = error.config
 
-//     if (error.response?.status === 401 && !originalRequest._retry) {
-//       originalRequest._retry = true
-//       try {
-//         const { data } = await axios.post(
-//           `${import.meta.env.VITE_API_URL}/auth/refresh`,
-//           { refreshToken: authStore.refreshToken }
-//         )
-//         authStore.setAccessToken(data.accessToken)
-//         originalRequest.headers.Authorization = `Bearer ${data.accessToken}`
-//         return apiClient(originalRequest)
-//       } catch {
-//         authStore.logout()
-//       }
-//     }
-//     return Promise.reject(error)
-//   }
-// )
+    if (error.response?.status === 401 && !originalRequest._retry) {
+      originalRequest._retry = true
+      try {
+        const baseUrl = (import.meta.env.VITE_API_URL || 'http://localhost:8080').replace(/\/+$/, '')
+        // ✅ RT는 Cookie로 자동 전송됨 (body 필요 없음)
+        const { data } = await axios.post(
+          `${baseUrl}/workspace-service/member/refreshAt`,
+          {}, // body 비움
+          { withCredentials: true } // 쿠키 전송
+        )
+        // 백엔드 ResponseDto 구조: data.data.accessToken
+        const newAccessToken = data?.data?.accessToken || data?.accessToken
+        authStore.setAccessToken(newAccessToken)
+        originalRequest.headers.Authorization = `Bearer ${newAccessToken}`
+        return apiClient(originalRequest)
+      } catch (refreshError) {
+        authStore.logout()
+        window.location.href = '/'
+        return Promise.reject(refreshError)
+      }
+    }
+    return Promise.reject(error)
+  }
+)
 
 // ----------------------
 // CRUD + 자동 응답 처리

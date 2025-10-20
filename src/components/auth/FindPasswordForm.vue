@@ -2,11 +2,10 @@
   <div class="find-password-container">
     <!-- 헤더 -->
     <div class="find-password-header">
-      <div class="icon-wrapper">
-        <v-icon size="48" color="primary">mdi-lock-reset</v-icon>
+      <div class="brand-logo">
+        <h1 class="brand-name">Synco</h1>
       </div>
-      <h1 class="title">비밀번호 찾기</h1>
-      <p class="subtitle">회원ID로 임시 비밀번호를 발송받으세요</p>
+      <p class="welcome-text">비밀번호를 찾아보세요</p>
     </div>
 
     <!-- 비밀번호 찾기 폼 -->
@@ -16,9 +15,24 @@
         <div class="input-wrapper">
           <v-icon class="input-icon">mdi-account</v-icon>
           <v-text-field
-            v-model="formData.userId"
+            v-model="formData.memberId"
             placeholder="회원ID를 입력하세요"
-            :rules="userIdRules"
+            :rules="memberIdRules"
+            variant="plain"
+            hide-details="auto"
+            class="custom-input"
+          />
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">이메일</label>
+        <div class="input-wrapper">
+          <v-icon class="input-icon">mdi-email</v-icon>
+          <v-text-field
+            v-model="formData.email"
+            placeholder="이메일을 입력하세요"
+            :rules="emailRules"
             variant="plain"
             hide-details="auto"
             class="custom-input"
@@ -34,7 +48,7 @@
         :loading="isLoading"
         :disabled="!isFormValid"
         color="primary"
-        class="find-button"
+        class="find-password-button"
         elevation="0"
       >
         <v-icon left>mdi-email-send</v-icon>
@@ -127,15 +141,15 @@
     </div>
 
     <!-- 로그인 링크 -->
-    <div class="back-link">
+    <div class="login-link">
+      <span class="login-text">로그인 페이지로</span>
       <v-btn
         variant="text"
         color="primary"
         @click="$emit('switch-to-login')"
-        class="back-button"
+        class="login-button"
       >
-        <v-icon left>mdi-arrow-left</v-icon>
-        로그인으로 돌아가기
+        돌아가기
       </v-btn>
     </div>
   </div>
@@ -143,6 +157,7 @@
 
 <script setup>
 import { ref } from 'vue'
+import { findPassword } from '@/api/member/auth'
 
 // Props & Emits
 const emit = defineEmits(['switch-to-login'])
@@ -155,13 +170,19 @@ const passwordSent = ref(false)
 const resending = ref(false)
 
 const formData = ref({
-  userId: ''
+  memberId: '',
+  email: ''
 })
 
 // Validation rules
-const userIdRules = [
+const memberIdRules = [
   v => !!v || '회원ID를 입력해주세요',
   v => (v && v.length >= 3) || '회원ID는 3자 이상이어야 합니다'
+]
+
+const emailRules = [
+  v => !!v || '이메일을 입력해주세요',
+  v => /.+@.+\..+/.test(v) || '올바른 이메일 형식이 아닙니다'
 ]
 
 // Methods
@@ -170,12 +191,30 @@ const handleFindPassword = async () => {
 
   isLoading.value = true
   try {
-    // 임시 성공 처리 (UI 테스트용)
-    await new Promise(resolve => setTimeout(resolve, 1500))
+    const requestData = {
+      memberId: formData.value.memberId,
+      email: formData.value.email
+    }
+    
+    await findPassword(requestData)
     
     passwordSent.value = true
+    
   } catch (error) {
     console.error('비밀번호 찾기 실패:', error)
+    
+    // 에러 메시지 추출 및 표시
+    let errorMessage = '비밀번호를 찾을 수 없습니다.'
+    
+    if (error.response?.data?.message) {
+      errorMessage = error.response.data.message
+    } else if (error.response?.data?.error) {
+      errorMessage = error.response.data.error
+    } else if (error.message) {
+      errorMessage = error.message
+    }
+    
+    alert(errorMessage)
   } finally {
     isLoading.value = false
   }
@@ -184,7 +223,8 @@ const handleFindPassword = async () => {
 const resetForm = () => {
   passwordSent.value = false
   formData.value = {
-    userId: ''
+    memberId: '',
+    email: ''
   }
   findPasswordForm.value?.reset()
 }
@@ -192,13 +232,28 @@ const resetForm = () => {
 const resendEmail = async () => {
   resending.value = true
   try {
-    // 임시 성공 처리 (UI 테스트용)
-    await new Promise(resolve => setTimeout(resolve, 1000))
+    const requestData = {
+      memberId: formData.value.memberId,
+      email: formData.value.email
+    }
     
-    // 재발송 성공 알림 (실제로는 토스트 메시지 등 사용)
-    console.log('이메일이 다시 발송되었습니다.')
+    await findPassword(requestData)
+    alert('임시 비밀번호가 다시 발송되었습니다.')
+    
   } catch (error) {
     console.error('재발송 실패:', error)
+    
+    let errorMessage = '재발송에 실패했습니다.'
+    
+    if (error.response?.data?.message) {
+      errorMessage = error.response.data.message
+    } else if (error.response?.data?.error) {
+      errorMessage = error.response.data.error
+    } else if (error.message) {
+      errorMessage = error.message
+    }
+    
+    alert(errorMessage)
   } finally {
     resending.value = false
   }
@@ -208,7 +263,7 @@ const resendEmail = async () => {
 <style scoped>
 .find-password-container {
   width: 100%;
-  max-width: 500px;
+  max-width: 400px;
   margin: 0 auto;
   padding: 2rem;
 }
@@ -219,23 +274,24 @@ const resendEmail = async () => {
   margin-bottom: 2rem;
 }
 
-.icon-wrapper {
-  width: 80px;
-  height: 80px;
+.brand-logo {
   display: flex;
   align-items: center;
   justify-content: center;
-  margin: 0 auto 1rem;
+  margin-bottom: 1rem;
 }
 
-.title {
-  font-size: 1.75rem;
+.brand-name {
+  font-size: 2rem;
   font-weight: 700;
-  color: #374151;
-  margin: 0 0 0.5rem 0;
+  background: linear-gradient(135deg, #3b82f6 0%, #6366f1 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  margin: 0;
 }
 
-.subtitle {
+.welcome-text {
   color: #6b7280;
   font-size: 1rem;
   margin: 0;
@@ -265,6 +321,10 @@ const resendEmail = async () => {
   border-radius: 8px;
   padding: 0.5rem 0.75rem;
   transition: all 0.2s ease;
+  min-height: 48px;
+  display: flex;
+  align-items: center;
+  overflow: visible;
 }
 
 .input-wrapper:focus-within {
@@ -286,28 +346,49 @@ const resendEmail = async () => {
 
 .custom-input {
   padding-left: 2rem;
+  position: static;
+  width: 100%;
 }
 
 .custom-input :deep(.v-field) {
   background: transparent;
   box-shadow: none;
   border: none;
+  min-height: auto;
+  height: auto;
+  display: flex;
+  align-items: center;
 }
 
 .custom-input :deep(.v-field__input) {
   color: #374151;
   font-size: 0.875rem;
-  line-height: 1.5;
-  display: flex;
-  align-items: center;
+  line-height: 1.5 !important;
+  min-height: auto;
+  height: auto;
+  padding: 0 !important;
+  margin: 0 !important;
+  opacity: 1 !important;
 }
 
 .custom-input :deep(.v-field__input::placeholder) {
-  color: #9ca3af;
+  color: #9ca3af !important;
+  opacity: 1 !important;
+}
+
+.custom-input :deep(.v-input__details) {
+  position: absolute;
+  left: 0;
+  top: 100%;
+  padding-top: 4px;
+  padding-left: 0;
+  margin: 0;
+  width: 100%;
+  text-align: right;
 }
 
 /* 찾기 버튼 */
-.find-button {
+.find-password-button {
   height: 48px;
   font-weight: 600;
   font-size: 1rem;
@@ -319,7 +400,7 @@ const resendEmail = async () => {
   box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
 }
 
-.find-button:hover {
+.find-password-button:hover {
   box-shadow: 0 6px 16px rgba(59, 130, 246, 0.4);
   transform: translateY(-1px);
   color: white !important;
@@ -479,14 +560,20 @@ const resendEmail = async () => {
   text-transform: none;
 }
 
-/* 뒤로가기 링크 */
-.back-link {
+/* 로그인 링크 */
+.login-link {
   text-align: center;
   padding-top: 1rem;
   border-top: 1px solid #e5e7eb;
 }
 
-.back-button {
+.login-text {
+  color: #6b7280;
+  font-size: 0.875rem;
+  margin-right: 0.5rem;
+}
+
+.login-button {
   font-weight: 600;
   text-decoration: none;
 }

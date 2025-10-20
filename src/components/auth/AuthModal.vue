@@ -199,8 +199,9 @@ const handleLoginSuccess = (userData) => {
 }
 
 const handleSignupSuccess = (userData) => {
+  // 회원가입 성공 후 로그인 탭으로 전환 (모달은 닫지 않음)
+  activeTab.value = 'login'
   emit('signup-success', userData)
-  closeModal()
 }
 </script>
 
