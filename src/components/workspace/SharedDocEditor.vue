@@ -629,6 +629,185 @@ const UniqueIdExtension = Extension.create({
           }
         },
       }),
+      // 락된 라인 삭제 차단 플러그인
+      new Plugin({
+        key: new PluginKey('lockProtection'),
+        props: {
+          handleKeyDown: (view, event) => {
+            // 삭제 키 (Delete, Backspace) 확인
+            if (event.key === 'Delete' || event.key === 'Backspace') {
+              const { from, to } = view.state.selection;
+              
+              // 선택 범위 내의 모든 라인 확인
+              const selectedLines = new Set();
+              view.state.doc.nodesBetween(from, to, (node, pos) => {
+                if (node.isBlock && node.attrs.id) {
+                  selectedLines.add(node.attrs.id);
+                }
+              });
+              
+              // 락된 라인이 포함되어 있는지 확인
+              for (const lineId of selectedLines) {
+                if (isLineLocked(lineId)) {
+                  const lockInfo = getLineLockUser(lineId);
+                  if (lockInfo && lockInfo.userId !== user.id) {
+                    console.log('🚫 락된 라인 삭제 차단:', lineId, lockInfo.userName);
+                    
+                    // 에러 메시지 표시
+                    showLockError(`${lockInfo.userName}님이 편집 중입니다.`);
+                    
+                    event.preventDefault();
+                    event.stopPropagation();
+                    return true; // 이벤트 차단
+                  }
+                }
+              }
+            }
+            
+            // 타이핑 차단 (기존 로직 유지)
+            const { from } = view.state.selection;
+            const resolvedPos = view.state.doc.resolve(from);
+            let currentLineId = null;
+            
+            for (let i = resolvedPos.depth; i > 0; i--) {
+              const node = resolvedPos.node(i);
+              if (node.isBlock && node.attrs.id) {
+                currentLineId = node.attrs.id;
+                break;
+              }
+            }
+            
+            if (currentLineId && isLineLocked(currentLineId)) {
+              const lockInfo = getLineLockUser(currentLineId);
+              if (lockInfo && lockInfo.userId !== user.id) {
+                console.log('🚫 락된 라인 타이핑 차단:', currentLineId, lockInfo.userName);
+                event.preventDefault();
+                event.stopPropagation();
+                return true; // 이벤트 차단
+              }
+            }
+            
+            return false;
+          },
+          handleDOMEvents: {
+            mousedown: (view, event) => {
+              const target = event.target;
+              const lineElement = target.closest('[data-id]');
+              if (lineElement) {
+                const lineId = lineElement.getAttribute('data-id');
+                if (isLineLocked(lineId)) {
+                  const lockInfo = getLineLockUser(lineId);
+                  if (lockInfo && lockInfo.userId !== user.id) {
+                    console.log('🚫 락된 라인 마우스다운 차단:', lineId, lockInfo.userName);
+                    event.preventDefault();
+                    event.stopPropagation();
+                    event.stopImmediatePropagation();
+                    return true; // 이벤트 차단
+                  }
+                }
+              }
+              return false;
+            },
+            click: (view, event) => {
+              const target = event.target;
+              const lineElement = target.closest('[data-id]');
+              if (lineElement) {
+                const lineId = lineElement.getAttribute('data-id');
+                if (isLineLocked(lineId)) {
+                  const lockInfo = getLineLockUser(lineId);
+                  if (lockInfo && lockInfo.userId !== user.id) {
+                    console.log('🚫 락된 라인 클릭 차단:', lineId, lockInfo.userName);
+                    event.preventDefault();
+                    event.stopPropagation();
+                    event.stopImmediatePropagation();
+                    return true; // 이벤트 차단
+                  }
+                }
+              }
+              return false;
+            },
+            selectstart: (view, event) => {
+              // 드래그 선택 시작 차단
+              const target = event.target;
+              const lineElement = target.closest('[data-id]');
+              if (lineElement) {
+                const lineId = lineElement.getAttribute('data-id');
+                if (isLineLocked(lineId)) {
+                  const lockInfo = getLineLockUser(lineId);
+                  if (lockInfo && lockInfo.userId !== user.id) {
+                    console.log('🚫 락된 라인 선택시작 차단:', lineId, lockInfo.userName);
+                    event.preventDefault();
+                    event.stopPropagation();
+                    event.stopImmediatePropagation();
+                    return true; // 이벤트 차단
+                  }
+                }
+              }
+              return false;
+            },
+            mousemove: (view, event) => {
+              // 드래그 중 실시간 차단
+              if (event.buttons === 1) { // 왼쪽 마우스 버튼이 눌린 상태
+                const target = event.target;
+                const lineElement = target.closest('[data-id]');
+                if (lineElement) {
+                  const lineId = lineElement.getAttribute('data-id');
+                  if (isLineLocked(lineId)) {
+                    const lockInfo = getLineLockUser(lineId);
+                    if (lockInfo && lockInfo.userId !== user.id) {
+                      console.log('🚫 드래그 중 락된 라인 차단:', lineId, lockInfo.userName);
+                      event.preventDefault();
+                      event.stopPropagation();
+                      event.stopImmediatePropagation();
+                      
+                      // 선택 강제 해제
+                      if (window.getSelection) {
+                        window.getSelection().removeAllRanges();
+                      }
+                      
+                      return true; // 이벤트 차단
+                    }
+                  }
+                }
+              }
+              return false;
+            },
+            mouseup: (view, event) => {
+              // 드래그 종료 시 선택 범위 검사
+              const { from, to } = view.state.selection;
+              if (from !== to) { // 선택이 있는 경우
+                const selectedLines = new Set();
+                view.state.doc.nodesBetween(from, to, (node, pos) => {
+                  if (node.isBlock && node.attrs.id) {
+                    selectedLines.add(node.attrs.id);
+                  }
+                });
+                
+                // 락된 라인이 포함되어 있는지 확인
+                for (const lineId of selectedLines) {
+                  if (isLineLocked(lineId)) {
+                    const lockInfo = getLineLockUser(lineId);
+                    if (lockInfo && lockInfo.userId !== user.id) {
+                      console.log('🚫 드래그 종료 시 락된 라인 선택 차단:', lineId, lockInfo.userName);
+                      
+                      // 선택 강제 해제
+                      if (window.getSelection) {
+                        window.getSelection().removeAllRanges();
+                      }
+                      
+                      event.preventDefault();
+                      event.stopPropagation();
+                      event.stopImmediatePropagation();
+                      return true; // 이벤트 차단
+                    }
+                  }
+                }
+              }
+              return false;
+            }
+          }
+        }
+      }),
     ];
   },
 });
@@ -664,6 +843,15 @@ const isLineLockedByOthers = (lineId) => {
 // 락된 라인의 사용자 정보를 가져오는 computed
 const getLineLockUser = (lineId) => {
   return lineLocks.value.get(lineId);
+};
+
+// 락 에러 메시지 표시 함수
+const showLockError = (message) => {
+  // 간단한 알림으로 표시 (나중에 더 예쁜 토스트로 교체 가능)
+  alert(`🚫 ${message}`);
+  
+  // 또는 Vuetify 스낵바 사용 (더 예쁜 UI)
+  // this.$toast.error(message);
 };
 
 // 락 라벨 생성 함수
@@ -760,6 +948,52 @@ const updateLineLockStatus = () => {
 const handleClickOutside = (event) => {
   if (showParticipants.value && !event.target.closest('.participants-toggle')) {
     showParticipants.value = false;
+  }
+};
+
+// 전역 드래그 차단 핸들러
+const handleGlobalSelectStart = (event) => {
+  const target = event.target;
+  const lineElement = target.closest('[data-id]');
+  if (lineElement) {
+    const lineId = lineElement.getAttribute('data-id');
+    if (isLineLocked(lineId)) {
+      const lockInfo = getLineLockUser(lineId);
+      if (lockInfo && lockInfo.userId !== user.id) {
+        console.log('🚫 전역 선택시작 차단:', lineId, lockInfo.userName);
+        event.preventDefault();
+        event.stopPropagation();
+        event.stopImmediatePropagation();
+        return false;
+      }
+    }
+  }
+};
+
+const handleGlobalMouseMove = (event) => {
+  // 드래그 중 실시간 차단
+  if (event.buttons === 1) { // 왼쪽 마우스 버튼이 눌린 상태
+    const target = event.target;
+    const lineElement = target.closest('[data-id]');
+    if (lineElement) {
+      const lineId = lineElement.getAttribute('data-id');
+      if (isLineLocked(lineId)) {
+        const lockInfo = getLineLockUser(lineId);
+        if (lockInfo && lockInfo.userId !== user.id) {
+          console.log('🚫 전역 드래그 중 차단:', lineId, lockInfo.userName);
+          event.preventDefault();
+          event.stopPropagation();
+          event.stopImmediatePropagation();
+          
+          // 선택 강제 해제
+          if (window.getSelection) {
+            window.getSelection().removeAllRanges();
+          }
+          
+          return false;
+        }
+      }
+    }
   }
 };
 
@@ -1121,6 +1355,10 @@ onMounted(async () => {
 
     // 외부 클릭 이벤트 리스너 추가
     document.addEventListener('click', handleClickOutside);
+    
+    // 드래그 차단을 위한 전역 이벤트 리스너 추가
+    document.addEventListener('selectstart', handleGlobalSelectStart);
+    document.addEventListener('mousemove', handleGlobalMouseMove);
   });
 
 onBeforeUnmount(() => {
@@ -1129,6 +1367,8 @@ onBeforeUnmount(() => {
   
   // 이벤트 리스너 제거
   document.removeEventListener('click', handleClickOutside);
+  document.removeEventListener('selectstart', handleGlobalSelectStart);
+  document.removeEventListener('mousemove', handleGlobalMouseMove);
   
   disconnectStomp();
   if (editor.value) {
