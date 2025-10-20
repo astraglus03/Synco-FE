@@ -31,12 +31,18 @@ export const useAuthStore = defineStore('auth', () => {
 
   // 사용자 정보 설정
   const setUser = (userData) => {
+    // 강제로 반응성 트리거
+    user.value = null
     user.value = userData
+    
     if (userData) {
       localStorage.setItem('user', JSON.stringify(userData))
     } else {
       localStorage.removeItem('user')
     }
+    
+    // 디버깅용 로그
+    console.log('authStore setUser:', userData)
   }
 
   // 로그인 (RT는 Cookie로 관리되므로 제외)

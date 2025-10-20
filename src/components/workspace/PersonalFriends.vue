@@ -19,38 +19,6 @@
       </div>
     </div>
 
-    <!-- 통계 카드 -->
-    <div class="stats-cards">
-      <div class="stat-card stat-card-primary">
-        <div class="stat-content">
-          <div class="stat-text">
-            <h3 class="stat-title">총 친구 수</h3>
-            <div class="stat-number">{{ totalFriends }}</div>
-          </div>
-          <v-icon class="stat-icon">mdi-account-group</v-icon>
-        </div>
-      </div>
-      
-      <div class="stat-card stat-card-warning">
-        <div class="stat-content">
-          <div class="stat-text">
-            <h3 class="stat-title">받은 요청</h3>
-            <div class="stat-number">{{ pendingReceived }}</div>
-          </div>
-          <v-icon class="stat-icon">mdi-inbox-arrow-down</v-icon>
-        </div>
-      </div>
-      
-      <div class="stat-card stat-card-success">
-        <div class="stat-content">
-          <div class="stat-text">
-            <h3 class="stat-title">보낸 요청</h3>
-            <div class="stat-number">{{ pendingSent }}</div>
-          </div>
-          <v-icon class="stat-icon">mdi-inbox-arrow-up</v-icon>
-        </div>
-      </div>
-    </div>
 
     <!-- 탭 네비게이션 (3개) -->
     <div class="tab-navigation">
@@ -60,6 +28,7 @@
         @click="changeTab('friendList')"
       >
         친구 목록
+        <span class="tab-count">{{ totalFriends }}</span>
       </button>
       <button
         class="tab-button"
@@ -67,6 +36,7 @@
         @click="changeTab('receivedRequests')"
       >
         받은 요청
+        <span class="tab-count">{{ pendingReceived }}</span>
       </button>
       <button
         class="tab-button"
@@ -74,6 +44,7 @@
         @click="changeTab('sentRequests')"
       >
         보낸 요청
+        <span class="tab-count">{{ pendingSent }}</span>
       </button>
     </div>
 
@@ -130,13 +101,14 @@
                 <span v-else>{{ friend.name?.charAt(0) || 'U' }}</span>
               </v-avatar>
               <!-- 실시간 상태 배지 -->
-              <FriendStatusBadge 
-                :friend-name="friend.name"
-                :current-status="friend.activeStatus"
-                :size="12"
-                :tooltip="true"
-                class="friend-status-badge"
-              />
+              <div class="status-badge-wrapper">
+                <FriendStatusBadge 
+                  :friend-name="friend.name"
+                  :current-status="friend.activeStatus"
+                  :tooltip="true"
+                  class="friend-status-badge"
+                />
+              </div>
             </div>
             <div class="friend-info">
               <div class="friend-name">{{ friend.name }}</div>
@@ -285,8 +257,8 @@
     </div>
     
     <!-- 친구 추가 모달 -->
-    <v-dialog v-model="showAddFriendModal" max-width="600px" @click:outside="closeModal">
-      <v-card class="add-friend-modal">
+    <v-dialog v-model="showAddFriendModal" max-width="600px" @click:outside="closeModal" class="no-scroll-dialog">
+      <v-card class="add-friend-modal fixed-modal">
         <!-- 모달 헤더 -->
         <div class="modal-header">
           <div class="modal-header-content">
@@ -324,66 +296,100 @@
             </div>
           </div>
           
-          <!-- 로딩 -->
-          <div v-if="modalLoading" class="loading-state">
-            <v-progress-circular indeterminate color="primary" />
-          </div>
-          
-          <!-- 검색 결과 -->
-          <div v-else-if="modalSearchResults.length > 0" class="search-results">
-            <div class="results-header">
-              <h4 class="results-title">검색 결과</h4>
-              <span class="results-count">{{ modalSearchResults.length }}명</span>
+          <!-- 콘텐츠 영역 (고정 높이) -->
+          <div class="modal-content-area">
+            <!-- 로딩 -->
+            <div v-if="modalLoading" class="loading-state">
+              <v-progress-circular indeterminate color="primary" />
             </div>
-            <div class="results-list">
-              <div
-                v-for="user in modalSearchResults"
-                :key="user.memberSeq"
-                class="result-item"
-              >
-                <div class="result-avatar">
-                  <v-avatar size="48" color="primary">
-                    <v-img 
-                      v-if="user.profileImageUrl" 
-                      :src="user.profileImageUrl"
-                      cover
-                    />
-                    <span v-else>{{ user.name?.charAt(0) || 'U' }}</span>
-                  </v-avatar>
-                </div>
-                <div class="result-info">
-                  <div class="result-name">{{ user.name }}</div>
-                  <div class="result-userid">@{{ user.memberId }}</div>
-                </div>
-                <v-btn
-                  color="primary"
-                  size="small"
-                  class="request-btn"
-                  @click="sendFriendRequest(user.memberId)"
+            
+            <!-- 검색 결과 -->
+            <div v-else-if="modalSearchResults.length > 0" class="search-results">
+              <div class="results-header">
+                <h4 class="results-title">검색 결과</h4>
+                <span class="results-count">{{ modalSearchResults.length }}명</span>
+              </div>
+              <div class="results-list">
+                <div
+                  v-for="user in modalSearchResults"
+                  :key="user.memberSeq"
+                  class="result-item"
+                  :class="getSearchResultStatus(user)"
                 >
-                  <v-icon left>mdi-account-plus</v-icon>
-                  요청 보내기
-                </v-btn>
+                  <div class="result-avatar">
+                    <v-avatar size="48" color="primary">
+                      <v-img 
+                        v-if="user.profileImageUrl" 
+                        :src="user.profileImageUrl"
+                        cover
+                      />
+                      <span v-else>{{ user.name?.charAt(0) || 'U' }}</span>
+                    </v-avatar>
+                    <!-- 상태 배지 -->
+                    <div v-if="getSearchResultStatus(user) !== 'none'" class="status-badge">
+                      <v-icon v-if="getSearchResultStatus(user) === 'sent'" size="16">mdi-clock-outline</v-icon>
+                      <v-icon v-else-if="getSearchResultStatus(user) === 'received'" size="16">mdi-arrow-down</v-icon>
+                    </div>
+                  </div>
+                  <div class="result-info">
+                    <div class="result-name">{{ user.name }}</div>
+                    <div class="result-userid">@{{ user.memberId }}</div>
+                    <div v-if="getSearchResultStatus(user) !== 'none'" class="result-status">
+                      <span v-if="getSearchResultStatus(user) === 'sent'">요청 대기 중</span>
+                      <span v-else-if="getSearchResultStatus(user) === 'received'">나에게 요청함</span>
+                    </div>
+                  </div>
+                  <div class="result-actions">
+                    <v-btn
+                      v-if="getSearchResultStatus(user) === 'none'"
+                      color="primary"
+                      size="small"
+                      class="request-btn"
+                      @click="sendFriendRequest(user.memberId)"
+                    >
+                      <v-icon left>mdi-account-plus</v-icon>
+                      요청 보내기
+                    </v-btn>
+                    <v-btn
+                      v-else-if="getSearchResultStatus(user) === 'received'"
+                      color="success"
+                      size="small"
+                      class="accept-btn"
+                      @click="acceptFriendRequestFromSearch(user)"
+                    >
+                      <v-icon left>mdi-check</v-icon>
+                      수락
+                    </v-btn>
+                    <v-btn
+                      v-else
+                      disabled
+                      size="small"
+                      class="disabled-btn"
+                    >
+                      대기 중
+                    </v-btn>
+                  </div>
+                </div>
               </div>
             </div>
-          </div>
-          
-          <!-- 빈 상태 -->
-          <div v-else-if="modalSearchQuery && modalSearchResults.length === 0 && !modalLoading" class="empty-state">
-            <div class="empty-icon">
-              <v-icon>mdi-account-search</v-icon>
+            
+            <!-- 빈 상태 -->
+            <div v-else-if="modalSearchQuery && modalSearchResults.length === 0 && !modalLoading" class="empty-state">
+              <div class="empty-icon">
+                <v-icon>mdi-account-search</v-icon>
+              </div>
+              <h4 class="empty-title">검색 결과가 없습니다</h4>
+              <p class="empty-subtitle">다른 회원 ID로 검색해보세요</p>
             </div>
-            <h4 class="empty-title">검색 결과가 없습니다</h4>
-            <p class="empty-subtitle">다른 회원 ID로 검색해보세요</p>
-          </div>
-          
-          <!-- 초기 상태 -->
-          <div v-else class="initial-state">
-            <div class="initial-icon">
-              <v-icon>mdi-account-search</v-icon>
+            
+            <!-- 초기 상태 -->
+            <div v-else class="initial-state">
+              <div class="initial-icon">
+                <v-icon>mdi-account-search</v-icon>
+              </div>
+              <h4 class="initial-title">친구를 찾아보세요</h4>
+              <p class="initial-subtitle">회원 ID를 입력하여 친구를 검색하고 요청을 보내세요</p>
             </div>
-            <h4 class="initial-title">친구를 찾아보세요</h4>
-            <p class="initial-subtitle">회원 ID를 입력하여 친구를 검색하고 요청을 보내세요</p>
           </div>
         </div>
       </v-card>
@@ -521,8 +527,11 @@ const sendFriendRequest = async (memberId) => {
   try {
     await friendApi.sendFriendRequest(memberId)
     
-    // 검색 결과에서 제거
-    modalSearchResults.value = modalSearchResults.value.filter(u => u.memberId !== memberId)
+    // 검색 결과에서 해당 사용자의 상태를 'sent'로 변경
+    const user = modalSearchResults.value.find(u => u.memberId === memberId)
+    if (user) {
+      user.requestStatus = 'sent'
+    }
     
     // 보낸 요청 목록 새로고침
     await loadSentRequests()
@@ -531,6 +540,33 @@ const sendFriendRequest = async (memberId) => {
   } catch (error) {
     console.error('친구 요청 실패:', error)
     alert('친구 요청에 실패했습니다.')
+  }
+}
+
+// 검색 결과에서 친구 요청 수락
+const acceptFriendRequestFromSearch = async (user) => {
+  try {
+    const request = receivedRequests.value.find(r => r.requesterId === user.memberId)
+    if (!request) {
+      alert('요청을 찾을 수 없습니다.')
+      return
+    }
+    
+    await friendApi.acceptFriendRequest(request.friendSeq)
+    
+    // 받은 요청에서 제거
+    receivedRequests.value = receivedRequests.value.filter(r => r.friendSeq !== request.friendSeq)
+    
+    // 검색 결과에서 제거
+    modalSearchResults.value = modalSearchResults.value.filter(u => u.memberSeq !== user.memberSeq)
+    
+    // 친구 목록 새로고침
+    await loadFriendList()
+    
+    alert('친구 요청을 수락했습니다.')
+  } catch (error) {
+    console.error('친구 요청 수락 실패:', error)
+    alert('친구 요청 수락에 실패했습니다.')
   }
 }
 
@@ -601,7 +637,12 @@ const deleteFriend = async (memberSeq) => {
   }
 }
 
-// 상태 라벨
+// 검색 결과 상태 확인 함수 - 백엔드에서 받은 requestStatus 사용
+const getSearchResultStatus = (user) => {
+  return user.requestStatus || 'none'
+}
+
+// 상태 라벨 (백엔드 ActiveStatus enum 매핑)
 const getStatusLabel = (status) => {
   switch (status) {
     case 'ONLINE': return '온라인'
@@ -751,148 +792,6 @@ onUnmounted(() => {
   padding: 12px 24px;
 }
 
-/* 통계 카드 */
-.stats-cards {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 16px;
-  margin-bottom: 16px;
-}
-
-.stat-card {
-  background: #ffffff;
-  border-radius: 10px;
-  padding: 16px;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
-  transition: all 0.3s ease;
-  min-height: 80px;
-  border: 1px solid rgba(25, 118, 210, 0.1);
-  position: relative;
-  overflow: hidden;
-}
-
-.stat-card::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 3px;
-  background: linear-gradient(90deg, #1976d2, #42a5f5);
-  opacity: 0;
-  transition: opacity 0.3s ease;
-}
-
-.stat-card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-  border-color: rgba(25, 118, 210, 0.3);
-}
-
-.stat-card:hover::before {
-  opacity: 1;
-}
-
-.dark-mode .stat-card {
-  background: #2d2d2d;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
-  border-color: rgba(100, 181, 246, 0.2);
-}
-
-.dark-mode .stat-card:hover {
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
-  border-color: rgba(100, 181, 246, 0.4);
-}
-
-.stat-content {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  height: 100%;
-}
-
-.stat-text {
-  flex: 1;
-}
-
-.stat-title {
-  font-size: 12px;
-  font-weight: 500;
-  color: #666666;
-  margin-bottom: 4px;
-  transition: color 0.3s ease;
-}
-
-.dark-mode .stat-title {
-  color: #cccccc;
-}
-
-.stat-number {
-  font-size: 20px;
-  font-weight: 700;
-  color: #1a1a1a;
-  transition: color 0.3s ease;
-}
-
-.dark-mode .stat-number {
-  color: #ffffff;
-}
-
-.stat-icon {
-  font-size: 24px;
-  color: #1976d2;
-  margin-left: 12px;
-  opacity: 0.8;
-}
-
-/* 카드별 색상 스타일 */
-.stat-card-primary {
-  border-color: rgba(25, 118, 210, 0.2);
-}
-
-.stat-card-primary::before {
-  background: linear-gradient(90deg, #1976d2, #42a5f5);
-}
-
-.stat-card-primary .stat-icon {
-  color: #1976d2;
-}
-
-.stat-card-warning {
-  border-color: rgba(255, 152, 0, 0.2);
-}
-
-.stat-card-warning::before {
-  background: linear-gradient(90deg, #ff9800, #ffb74d);
-}
-
-.stat-card-warning .stat-icon {
-  color: #ff9800;
-}
-
-.stat-card-success {
-  border-color: rgba(76, 175, 80, 0.2);
-}
-
-.stat-card-success::before {
-  background: linear-gradient(90deg, #4caf50, #81c784);
-}
-
-.stat-card-success .stat-icon {
-  color: #4caf50;
-}
-
-.dark-mode .stat-card-primary {
-  border-color: rgba(100, 181, 246, 0.3);
-}
-
-.dark-mode .stat-card-warning {
-  border-color: rgba(255, 183, 77, 0.3);
-}
-
-.dark-mode .stat-card-success {
-  border-color: rgba(129, 199, 132, 0.3);
-}
 
 /* 탭 네비게이션 */
 .tab-navigation {
@@ -922,6 +821,10 @@ onUnmounted(() => {
   border-radius: 6px;
   cursor: pointer;
   transition: all 0.3s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
 }
 
 .tab-button:hover {
@@ -946,6 +849,37 @@ onUnmounted(() => {
 
 .dark-mode .tab-button.active {
   background: #1976d2;
+  color: white;
+}
+
+/* 탭 카운트 스타일 */
+.tab-count {
+  background: rgba(255, 255, 255, 0.2);
+  color: rgba(0, 0, 0, 0.6);
+  font-size: 12px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 12px;
+  min-width: 20px;
+  text-align: center;
+  transition: all 0.3s ease;
+}
+
+.dark-mode .tab-count {
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.tab-button:hover .tab-count {
+  background: rgba(255, 255, 255, 0.3);
+  color: #1976d2;
+}
+
+.dark-mode .tab-button:hover .tab-count {
+  color: #64b5f6;
+}
+
+.tab-button.active .tab-count {
+  background: rgba(255, 255, 255, 0.3);
   color: white;
 }
 
@@ -1086,11 +1020,15 @@ onUnmounted(() => {
   position: relative;
 }
 
-.friend-status-badge {
+.status-badge-wrapper {
   position: absolute;
   bottom: -2px;
   right: -2px;
   z-index: 1;
+}
+
+.friend-status-badge {
+  display: inline-block;
 }
 
 
@@ -1330,6 +1268,34 @@ onUnmounted(() => {
   box-shadow: 0 20px 40px rgba(0, 0, 0, 0.15);
 }
 
+/* 고정 크기 모달 */
+.fixed-modal {
+  width: 600px !important;
+  height: 600px !important;
+  min-height: 600px !important;
+  max-height: 600px !important;
+}
+
+/* v-dialog 스크롤바 숨김 */
+.fixed-modal::-webkit-scrollbar {
+  display: none;
+}
+
+.fixed-modal {
+  -ms-overflow-style: none;  /* IE and Edge */
+  scrollbar-width: none;  /* Firefox */
+}
+
+/* v-dialog 전체 스크롤바 숨김 */
+.no-scroll-dialog .v-overlay__content::-webkit-scrollbar {
+  display: none;
+}
+
+.no-scroll-dialog .v-overlay__content {
+  -ms-overflow-style: none;  /* IE and Edge */
+  scrollbar-width: none;  /* Firefox */
+}
+
 .modal-header {
   display: flex;
   justify-content: space-between;
@@ -1386,8 +1352,50 @@ onUnmounted(() => {
 }
 
 .modal-content {
-  padding: 32px;
+  padding: 32px 32px 0 32px;
   background: #ffffff;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  flex: 1;
+}
+
+/* 모달 콘텐츠 영역 */
+.modal-content-area {
+  flex: 1;
+  min-height: 370px;
+  max-height: 370px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  scrollbar-width: thin;
+  scrollbar-color: #c0c0c0 transparent;
+  margin-bottom: 32px;
+}
+
+.modal-content-area::-webkit-scrollbar {
+  width: 8px;
+}
+
+.modal-content-area::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.modal-content-area::-webkit-scrollbar-thumb {
+  background: #c0c0c0;
+  border-radius: 4px;
+}
+
+.modal-content-area::-webkit-scrollbar-thumb:hover {
+  background: #a0a0a0;
+}
+
+.dark-mode .modal-content-area::-webkit-scrollbar-thumb {
+  background: #555555;
+}
+
+.dark-mode .modal-content-area::-webkit-scrollbar-thumb:hover {
+  background: #777777;
 }
 
 .dark-mode .modal-content {
@@ -1412,7 +1420,7 @@ onUnmounted(() => {
 
 /* 검색 결과 */
 .search-results {
-  max-height: 400px;
+  flex: 1;
   overflow-y: auto;
 }
 
@@ -1482,8 +1490,58 @@ onUnmounted(() => {
   box-shadow: 0 8px 25px rgba(0, 0, 0, 0.3);
 }
 
+/* 상태별 스타일 */
+.result-item.sent {
+  background: #fff3e0;
+  border-color: #ff9800;
+}
+
+.dark-mode .result-item.sent {
+  background: #4a3d2d;
+  border-color: #ff9800;
+}
+
+.result-item.received {
+  background: #e3f2fd;
+  border-color: #2196f3;
+}
+
+.dark-mode .result-item.received {
+  background: #2d3a4a;
+  border-color: #2196f3;
+}
+
 .result-avatar {
   position: relative;
+}
+
+/* 상태 배지 */
+.status-badge {
+  position: absolute;
+  bottom: -2px;
+  right: -2px;
+  width: 20px;
+  height: 20px;
+  background: #1976d2;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid white;
+  z-index: 1;
+}
+
+.status-badge .v-icon {
+  color: white;
+  font-size: 12px;
+}
+
+.result-item.sent .status-badge {
+  background: #ff9800;
+}
+
+.result-item.received .status-badge {
+  background: #2196f3;
 }
 
 .result-info {
@@ -1507,11 +1565,52 @@ onUnmounted(() => {
   font-weight: 600;
 }
 
+/* 상태 텍스트 */
+.result-status {
+  font-size: 12px;
+  color: #666666;
+  margin-top: 4px;
+  font-weight: 500;
+}
+
+.dark-mode .result-status {
+  color: #cccccc;
+}
+
+.result-item.sent .result-status {
+  color: #ff9800;
+}
+
+.result-item.received .result-status {
+  color: #2196f3;
+}
+
+/* 액션 버튼들 */
+.result-actions {
+  display: flex;
+  align-items: center;
+}
+
 .request-btn {
   border-radius: 20px;
   text-transform: none;
   font-weight: 600;
   padding: 8px 20px;
+}
+
+.accept-btn {
+  border-radius: 20px;
+  text-transform: none;
+  font-weight: 600;
+  padding: 8px 20px;
+}
+
+.disabled-btn {
+  border-radius: 20px;
+  text-transform: none;
+  font-weight: 600;
+  padding: 8px 20px;
+  opacity: 0.6;
 }
 
 /* 빈 상태 */
@@ -1522,6 +1621,7 @@ onUnmounted(() => {
   justify-content: center;
   padding: 60px 20px;
   text-align: center;
+  flex: 1;
 }
 
 .initial-icon {

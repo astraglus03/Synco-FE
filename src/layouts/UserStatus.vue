@@ -33,14 +33,13 @@ const fetchUserInfo = async () => {
     userStatus.value = data.activeStatus || 'OFFLINE'
     profileImageUrl.value = data.profileImageUrl || ''
     
-    // authStore에도 상태 업데이트
-    if (authStore.user) {
-      authStore.setUser({
-        ...authStore.user,
-        name: data.name,
-        activeStatus: data.activeStatus
-      })
-    }
+    // authStore에도 저장
+    authStore.setUser({
+      ...authStore.user,
+      name: data.name,
+      profileImageUrl: data.profileImageUrl,
+      activeStatus: data.activeStatus
+    })
   } catch (error) {
     console.error('사용자 정보 조회 실패:', error)
   }
@@ -60,14 +59,6 @@ const changeStatus = async (status) => {
     await authApi.updateActiveStatus(status)
     
     statusMenuOpen.value = false
-    
-    // authStore 업데이트
-    if (authStore.user) {
-      authStore.setUser({
-        ...authStore.user,
-        activeStatus: status
-      })
-    }
   } catch (error) {
     console.error('상태 변경 실패:', error)
     // 실패 시 이전 상태로 복구
@@ -82,26 +73,29 @@ const currentStatus = computed(() => {
   return statusOptions.find(option => option.value === userStatus.value) || statusOptions[2]
 })
 
-// 사용자 이름 표시 (authStore 또는 로컬 상태)
+// 사용자 이름 표시 (authStore 우선, 없으면 API 데이터)
 const displayName = computed(() => {
-  return userName.value || authStore.user?.name || '사용자'
+  return authStore.user?.name || userName.value || '사용자'
 })
 
-// 프로필 이미지 표시
+// 프로필 이미지 표시 (authStore 우선, 없으면 API 데이터)
 const displayProfileImage = computed(() => {
-  return profileImageUrl.value || authStore.user?.profileImageUrl
+  // authStore에 user가 있고 profileImageUrl이 명시적으로 설정된 경우 (null 포함)
+  if (authStore.user && 'profileImageUrl' in authStore.user) {
+    return authStore.user.profileImageUrl
+  }
+  // 그렇지 않으면 API 데이터 사용
+  return profileImageUrl.value
 })
 
 // 사용자 이름 첫 글자
 const userInitial = computed(() => {
-  return displayName.value.charAt(0).toUpperCase()
+  return displayName.value.charAt(0)
 })
 
 // 컴포넌트 마운트 시 사용자 정보 로드
 onMounted(() => {
-  if (authStore.isAuthenticated) {
-    fetchUserInfo()
-  }
+  fetchUserInfo()
 })
 </script>
 

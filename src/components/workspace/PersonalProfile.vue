@@ -122,8 +122,9 @@
                   variant="outlined"
                   class="mb-3"
                   placeholder="010-0000-0000"
-                  hint="010-0000-0000 형식으로 입력하세요"
                   persistent-hint
+                  @input="formatPhoneNumber"
+                  maxlength="13"
                 />
                 <v-text-field
                   v-model="editForm.birthDate"
@@ -378,7 +379,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/store/authStore'
 import * as authApi from '@/api/member/auth'
@@ -442,6 +443,30 @@ const showSnackbar = (message, color = 'success') => {
   snackbar.value = true
 }
 
+// 날짜 포맷팅 함수 (시간 제거)
+const formatDateOnly = (dateString) => {
+  if (!dateString) return ''
+  const date = new Date(dateString)
+  return date.toLocaleDateString('ko-KR', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  })
+}
+
+// 전화번호 포맷팅 함수
+const formatPhoneNumber = (event) => {
+  let value = event.target.value.replace(/[^\d]/g, '') // 숫자만 추출
+  
+  if (value.length >= 7) {
+    value = value.slice(0, 3) + '-' + value.slice(3, 7) + '-' + value.slice(7, 11)
+  } else if (value.length >= 3) {
+    value = value.slice(0, 3) + '-' + value.slice(3)
+  }
+  
+  editForm.value.phone = value
+}
+
 // 마이페이지 정보 조회
 const fetchMyPage = async () => {
   try {
@@ -456,7 +481,8 @@ const fetchMyPage = async () => {
       profileImageUrl: data.profileImageUrl || '',
       statusMessage: data.statusMessage || '',
       birthDate: data.birthDate || '',
-      activeStatus: data.activeStatus || 'OFFLINE'
+      activeStatus: data.activeStatus || 'OFFLINE',
+      joinDate: data.createdAt ? formatDateOnly(data.createdAt) : ''
     }
     
     editForm.value = { ...userInfo.value }
@@ -576,7 +602,8 @@ const saveProfile = async () => {
       profileImageUrl: data.profileImageUrl || '',
       statusMessage: data.statusMessage || '',
       birthDate: data.birthDate || '',
-      activeStatus: data.activeStatus || 'OFFLINE'
+      activeStatus: data.activeStatus || 'OFFLINE',
+      joinDate: data.createdAt ? formatDateOnly(data.createdAt) : userInfo.value.joinDate
     }
     
     editMode.value = false
@@ -584,10 +611,17 @@ const saveProfile = async () => {
     showSnackbar('프로필이 성공적으로 수정되었습니다.')
     
     // authStore의 user 정보도 업데이트
-    authStore.setUser({
+    const updatedUser = {
       ...authStore.user,
       name: data.name,
-      email: data.email
+      email: data.email,
+      profileImageUrl: data.profileImageUrl
+    }
+    authStore.setUser(updatedUser)
+    
+    // 강제로 반응성 트리거
+    nextTick(() => {
+      authStore.setUser({ ...updatedUser })
     })
   } catch (error) {
     console.error('프로필 수정 실패:', error)
