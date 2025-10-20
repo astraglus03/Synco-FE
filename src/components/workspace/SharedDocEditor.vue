@@ -508,7 +508,12 @@ onMounted(async () => {
         }
       });
       
-      // 2. "수정"된 라인 찾아 UPDATE 메시지 전송
+      // 변경사항 수집
+      const updates = [];
+      const deletes = [];
+      const creates = [];
+      
+      // 2. "수정"된 라인 찾기
       for (const [id, nodeJSON] of previousNodesById.value.entries()) {
         const currentNode = currentNodesById.get(id);
         if (currentNode) {
@@ -518,75 +523,155 @@ onMounted(async () => {
           const attrsChanged = JSON.stringify(currentNode.attrs) !== JSON.stringify(nodeJSON.attrs);
           
           if (contentChanged || typeChanged || attrsChanged) {
-            nextTick(() => {
-              const element = document.querySelector(`[data-id="${id}"]`);
-              if (element) {
-                const cleanedHtml = element.outerHTML.replace(/<br class="ProseMirror-trailingBreak">/g, '');
-                sendStompMessage({
-                  destination: '/publish/document/update',
-                  body: {
-                    messageType: 'UPDATE',
-                    documentId: props.documentSeq.toString(),
-                    senderId: user.name,
-                    lineId: id,
-                    content: cleanedHtml,
-                  },
-                });
-              }
-            });
+            updates.push(id);
           }
         }
       }
 
-      // 3. "삭제"된 라인 찾아 DELETE 메시지 전송
+      // 3. "삭제"된 라인 찾기
       const previousIds = Array.from(previousNodesById.value.keys());
       for (let i = 0; i < previousIds.length; i++) {
         const oldId = previousIds[i];
         if (!currentNodesById.has(oldId)) {
-          const prevLineId = i > 0 ? previousIds[i - 1] : null;
-          console.log(`[Delete Debug] Line deleted. ID: ${oldId}, prevLineId: ${prevLineId}. Sending DELETE message...`);
-          sendStompMessage({
-            destination: '/publish/document/delete',
-            body: {
-              messageType: 'DELETE',
-              documentId: props.documentSeq.toString(),
-              senderId: user.name,
-              lineId: oldId,
-              prevLineId: prevLineId,
-            },
-          });
+          // 아직 존재하는 이전 라인 찾기
+          let prevLineId = null;
+          for (let j = i - 1; j >= 0; j--) {
+            if (currentNodesById.has(previousIds[j])) {
+              prevLineId = previousIds[j];
+              break;
+            }
+          }
+          deletes.push({ lineId: oldId, prevLineId });
         }
       }
 
-      // 4. "생성"된 라인 찾아 CREATE 메시지 전송
+      // 4. "생성"된 라인 찾기
       for (let i = 0; i < currentNodes.length; i++) {
         const currentNode = currentNodes[i];
         const id = currentNode.attrs.id;
 
         if (!previousNodesById.value.has(id)) {
           const prevLineId = i > 0 ? currentNodes[i-1].attrs.id : null;
-          
-          nextTick(() => {
+          creates.push({ lineId: id, prevLineId });
+        }
+      }
+
+      // 5. 변경사항 전송 (배치 또는 단일)
+      nextTick(() => {
+        // UPDATE 전송
+        if (updates.length > 0) {
+          if (updates.length === 1) {
+            const id = updates[0];
             const element = document.querySelector(`[data-id="${id}"]`);
             if (element) {
               const cleanedHtml = element.outerHTML.replace(/<br class="ProseMirror-trailingBreak">/g, '');
+              sendStompMessage({
+                destination: '/publish/document/update',
+                body: {
+                  messageType: 'UPDATE',
+                  documentId: props.documentSeq.toString(),
+                  senderId: user.name,
+                  lineId: id,
+                  content: cleanedHtml,
+                },
+              });
+            }
+          } else {
+            const changes = updates.map(id => {
+              const element = document.querySelector(`[data-id="${id}"]`);
+              return element ? {
+                lineId: id,
+                content: element.outerHTML.replace(/<br class="ProseMirror-trailingBreak">/g, ''),
+              } : null;
+            }).filter(c => c);
+
+            console.log(`📦 BATCH_UPDATE: ${changes.length}개`);
+            sendStompMessage({
+              destination: '/publish/document/batch-update',
+              body: {
+                messageType: 'BATCH_UPDATE',
+                documentId: props.documentSeq.toString(),
+                senderId: user.name,
+                changes,
+              },
+            });
+          }
+        }
+
+        // DELETE 전송
+        if (deletes.length > 0) {
+          if (deletes.length === 1) {
+            const { lineId, prevLineId } = deletes[0];
+            console.log(`❌ DELETE: ${lineId}`);
+            sendStompMessage({
+              destination: '/publish/document/delete',
+              body: {
+                messageType: 'DELETE',
+                documentId: props.documentSeq.toString(),
+                senderId: user.name,
+                lineId,
+                prevLineId,
+              },
+            });
+          } else {
+            console.log(`📦 BATCH_DELETE: ${deletes.length}개`);
+            sendStompMessage({
+              destination: '/publish/document/batch-delete',
+              body: {
+                messageType: 'BATCH_DELETE',
+                documentId: props.documentSeq.toString(),
+                senderId: user.name,
+                changes: deletes,
+              },
+            });
+          }
+        }
+
+        // CREATE 전송
+        if (creates.length > 0) {
+          if (creates.length === 1) {
+            const { lineId, prevLineId } = creates[0];
+            const element = document.querySelector(`[data-id="${lineId}"]`);
+            if (element) {
+              const cleanedHtml = element.outerHTML.replace(/<br class="ProseMirror-trailingBreak">/g, '');
+              console.log(`✅ CREATE: ${lineId}`);
               sendStompMessage({
                 destination: '/publish/document/create',
                 body: {
                   messageType: 'CREATE',
                   documentId: props.documentSeq.toString(),
                   senderId: user.name,
-                  lineId: id,
-                  prevLineId: prevLineId,
+                  lineId,
+                  prevLineId,
                   content: cleanedHtml,
                 },
               });
             }
-          });
-        }
-      }
+          } else {
+            const changes = creates.map(({ lineId, prevLineId }) => {
+              const element = document.querySelector(`[data-id="${lineId}"]`);
+              return element ? {
+                lineId,
+                prevLineId,
+                content: element.outerHTML.replace(/<br class="ProseMirror-trailingBreak">/g, ''),
+              } : null;
+            }).filter(c => c);
 
-      // 5. 현재 상태를 "이전 상태"로 갱신
+            console.log(`📦 BATCH_CREATE: ${changes.length}개`);
+            sendStompMessage({
+              destination: '/publish/document/batch-create',
+              body: {
+                messageType: 'BATCH_CREATE',
+                documentId: props.documentSeq.toString(),
+                senderId: user.name,
+                changes,
+              },
+            });
+          }
+        }
+      });
+
+      // 6. 현재 상태를 "이전 상태"로 갱신
       previousNodesById.value = currentNodesById;
     },
     onSelectionUpdate: ({ editor }) => {
@@ -736,6 +821,95 @@ const handleIncomingMessage = (message) => {
         
         // 이전 상태 맵에서 제거
         previousNodesById.value.delete(message.lineId);
+      }
+
+    } else if (message.messageType === 'BATCH_CREATE') {
+      console.log('📦 BATCH_CREATE 처리:', message.changes?.length);
+      if (message.changes) {
+        message.changes.forEach(change => {
+          let insertPos = 1;
+          if (change.prevLineId) {
+            let found = false;
+            editor.value.state.doc.descendants((node, pos) => {
+              if (!found && node.isBlock && node.attrs.id === change.prevLineId) {
+                insertPos = pos + node.nodeSize;
+                found = true;
+              }
+            });
+            if (!found) {
+              insertPos = editor.value.state.doc.content.size;
+            }
+          }
+          editor.value.chain().insertContentAt(insertPos, change.content).run();
+        });
+        
+        // 이전 상태 맵 업데이트
+        nextTick(() => {
+          message.changes.forEach(change => {
+            editor.value.state.doc.descendants((node) => {
+              if (node.isBlock && node.attrs.id === change.lineId) {
+                previousNodesById.value.set(node.attrs.id, node.toJSON());
+              }
+            });
+          });
+        });
+      }
+
+    } else if (message.messageType === 'BATCH_UPDATE') {
+      console.log('📦 BATCH_UPDATE 처리:', message.changes?.length);
+      if (message.changes) {
+        message.changes.forEach(change => {
+          let nodeToUpdate = null;
+          let nodeToUpdatePos = -1;
+          editor.value.state.doc.descendants((node, pos) => {
+            if (node.isBlock && node.attrs.id === change.lineId) {
+              nodeToUpdate = node;
+              nodeToUpdatePos = pos;
+            }
+          });
+
+          if (nodeToUpdate) {
+            editor.value.chain()
+              .deleteRange({ from: nodeToUpdatePos, to: nodeToUpdatePos + nodeToUpdate.nodeSize })
+              .insertContentAt(nodeToUpdatePos, change.content)
+              .run();
+          }
+        });
+        
+        // 이전 상태 맵 업데이트
+        nextTick(() => {
+          message.changes.forEach(change => {
+            editor.value.state.doc.descendants((node) => {
+              if (node.isBlock && node.attrs.id === change.lineId) {
+                previousNodesById.value.set(node.attrs.id, node.toJSON());
+              }
+            });
+          });
+        });
+      }
+
+    } else if (message.messageType === 'BATCH_DELETE') {
+      console.log('📦 BATCH_DELETE 처리:', message.changes?.length);
+      if (message.changes) {
+        message.changes.forEach(change => {
+          let nodeToDelete = null;
+          let nodeToDeletePos = -1;
+          editor.value.state.doc.descendants((node, pos) => {
+            if (node.isBlock && node.attrs.id === change.lineId) {
+              nodeToDelete = node;
+              nodeToDeletePos = pos;
+            }
+          });
+
+          if (nodeToDelete) {
+            editor.value.chain()
+              .deleteRange({ from: nodeToDeletePos, to: nodeToDeletePos + nodeToDelete.nodeSize })
+              .run();
+            
+            // 이전 상태 맵에서 제거
+            previousNodesById.value.delete(change.lineId);
+          }
+        });
       }
 
     } else if (message.messageType === 'CURSOR_UPDATE') {
