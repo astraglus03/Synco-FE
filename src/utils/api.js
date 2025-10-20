@@ -1,14 +1,15 @@
 import axios from 'axios'
-import { useAuthStore } from '@/store/auth'
+import { useAuthStore } from '@/store/authStore'
 import { handleApiResponse } from '@/models/common/ApiResponse'
 
 // ----------------------
 // Axios 인스턴스
 // ----------------------
 const apiClient = axios.create({
-  baseURL: import.meta.env.VITE_API_URL,
+  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:8080',
   timeout: 10000,
   headers: { 'Content-Type': 'application/json' },
+  withCredentials: true, // ✅ 쿠키 전송 활성화
 })
 
 // 요청 인터셉터 (토큰 자동 주입) - 주석처리
@@ -21,7 +22,7 @@ apiClient.interceptors.request.use((config) => {
   return config
 })
 
-// 응답 인터셉터 (401 → refresh 토큰) - 주석처리
+// 응답 인터셉터 (401 → refresh 토큰)
 // 401 에러 시 자동으로 토큰 갱신 시도
 apiClient.interceptors.response.use(
   (res) => res,
@@ -32,15 +33,22 @@ apiClient.interceptors.response.use(
     if (error.response?.status === 401 && !originalRequest._retry) {
       originalRequest._retry = true
       try {
+        const baseUrl = (import.meta.env.VITE_API_URL || 'http://localhost:8080').replace(/\/+$/, '')
+        // ✅ RT는 Cookie로 자동 전송됨 (body 필요 없음)
         const { data } = await axios.post(
-          `${import.meta.env.VITE_API_URL}/auth/refresh`,
-          { refreshToken: authStore.refreshToken }
+          `${baseUrl}/workspace-service/member/refreshAt`,
+          {}, // body 비움
+          { withCredentials: true } // 쿠키 전송
         )
-        authStore.setAccessToken(data.accessToken)
-        originalRequest.headers.Authorization = `Bearer ${data.accessToken}`
+        // 백엔드 ResponseDto 구조: data.data.accessToken
+        const newAccessToken = data?.data?.accessToken || data?.accessToken
+        authStore.setAccessToken(newAccessToken)
+        originalRequest.headers.Authorization = `Bearer ${newAccessToken}`
         return apiClient(originalRequest)
-      } catch {
+      } catch (refreshError) {
         authStore.logout()
+        window.location.href = '/'
+        return Promise.reject(refreshError)
       }
     }
     return Promise.reject(error)
