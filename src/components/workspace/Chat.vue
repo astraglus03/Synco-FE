@@ -53,7 +53,9 @@ const attachedFiles = ref([]);
 const connectWebsocket = () => {
   if (stompClient.value && stompClient.value.connected) return;
 
-  const sockJs = new SockJS(`${import.meta.env.VITE_API_URL}/chat-service/connect`);
+  const sockJs = new SockJS(
+    `${import.meta.env.VITE_API_URL}/chat-service/connect`
+  );
   stompClient.value = Stomp.over(sockJs);
 
   stompClient.value.connect(
@@ -67,16 +69,36 @@ const connectWebsocket = () => {
           try {
             const parsed = JSON.parse(message.body);
             console.log("📩 메시지 수신:", parsed);
+            console.log("📩 백엔드에서 받은 메시지 구조:", {
+              chatMessageSeq: parsed.chatMessageSeq,
+              senderSeq: parsed.senderSeq,
+              senderName: parsed.senderName,
+              chatMessageText: parsed.chatMessageText,
+              chatMessageFileUrls: parsed.chatMessageFileUrls,
+              messageType: parsed.messageType,
+            });
 
             // ✅ 파일 URL 파싱 추가
             const fileList =
-              parsed.chatMessageFileUrls && parsed.chatMessageFileUrls.length > 0
+              parsed.chatMessageFileUrls &&
+              parsed.chatMessageFileUrls.length > 0
                 ? parsed.chatMessageFileUrls.split(",").map((url) => ({
                     name: url.split("/").pop(),
                     url,
                     type: "file",
                   }))
                 : [];
+
+            // 📁 첨부된 파일 로그 출력
+            if (fileList.length > 0) {
+              console.log("📁 첨부된 파일들:", fileList);
+              console.log(
+                "📁 원본 파일 URL 문자열:",
+                parsed.chatMessageFileUrls
+              );
+            } else {
+              console.log("📁 첨부된 파일 없음");
+            }
 
             // 💬 메시지 구조 변환
             const formattedMessage = {
@@ -87,7 +109,9 @@ const connectWebsocket = () => {
                 hour: "2-digit",
                 minute: "2-digit",
               }),
-              avatar: (parsed.senderName || parsed.senderSeq).toString().charAt(0),
+              avatar: (parsed.senderName || parsed.senderSeq)
+                .toString()
+                .charAt(0),
               isOwn: parsed.senderSeq === memberSeq.value,
               unread: parsed.senderSeq !== memberSeq.value ? 1 : 0,
               files: fileList, // ✅ 추가
@@ -101,14 +125,12 @@ const connectWebsocket = () => {
         },
         { Authorization: `Bearer ${token.value}` }
       );
-
     },
     (error) => {
       console.error("❌ WebSocket 연결 실패:", error);
     }
   );
 };
-
 
 // ✅ WebSocket 연결 해제
 const disconnectWebsocket = async () => {
@@ -150,10 +172,26 @@ const scrollToBottom = () => {
 const uploadFilesToS3 = async () => {
   if (attachedFiles.value.length === 0) return [];
 
-  const formData = new FormData();
-  attachedFiles.value.forEach((file) => formData.append("files", file));
+  console.log(
+    "📤 파일 업로드 시작:",
+    attachedFiles.value.map((f) => f.name)
+  );
 
-  const url = `${import.meta.env.VITE_API_URL}/chat/files/upload/${channelSeq.value}`;
+  const formData = new FormData();
+  attachedFiles.value.forEach((file) => {
+    formData.append("files", file);
+    console.log("📤 FormData에 추가:", file.name, file.size, "bytes");
+  });
+
+  const url = `${import.meta.env.VITE_API_URL}/chat/files/upload/${
+    channelSeq.value
+  }`;
+
+  console.log("📤 업로드 URL:", url);
+  console.log(
+    "📤 Authorization 헤더:",
+    `Bearer ${token.value.substring(0, 20)}...`
+  );
 
   try {
     const res = await axios.post(url, formData, {
@@ -162,10 +200,12 @@ const uploadFilesToS3 = async () => {
         Authorization: `Bearer ${token.value}`,
       },
     });
-    console.log("✅ 파일 업로드 성공:", res.data.uploadedUrls);
+    console.log("✅ 파일 업로드 성공:", res.data);
+    console.log("✅ 업로드된 URL들:", res.data.uploadedUrls);
     return res.data.uploadedUrls; // [S3 URL 리스트]
   } catch (err) {
     console.error("❌ 파일 업로드 실패:", err);
+    console.error("❌ 에러 응답:", err.response?.data);
     return [];
   }
 };
@@ -176,20 +216,32 @@ const sendMessage = async () => {
     console.error("WebSocket 연결이 없습니다!");
     return;
   }
-  if (newMessage.value.trim() === "" && attachedFiles.value.length === 0) return;
+  if (newMessage.value.trim() === "" && attachedFiles.value.length === 0)
+    return;
 
   // 1️⃣ S3 업로드
   const uploadedUrls = await uploadFilesToS3();
 
-  // 2️⃣ 메시지 생성
+  // 📁 업로드된 파일 로그 출력
+  if (uploadedUrls.length > 0) {
+    console.log("📁 업로드된 파일 URL들:", uploadedUrls);
+    console.log("📁 업로드된 파일 개수:", uploadedUrls.length);
+  }
+
+  // 2️⃣ 메시지 생성 (백엔드 saveMessage() 메서드에 맞춤)
   const message = {
     senderSeq: memberSeq.value,
     messageType: attachedFiles.value.length > 0 ? "FILE" : "TEXT",
     chatMessageText: newMessage.value,
-    chatMessageFileUrls: uploadedUrls.join(","),
+    chatMessageFileUrls:
+      uploadedUrls.length > 0 ? uploadedUrls.join(",") : null,
+    replyToSeq: null, // 답장 기능은 추후 구현
   };
 
-  // 3️⃣ 전송
+  // 3️⃣ 전송 (백엔드 saveMessage()로 전송)
+  console.log("📤 백엔드로 전송할 메시지 데이터:", message);
+  console.log("📤 전송 경로:", `/publish/${channelSeq.value}`);
+
   stompClient.value.send(
     `/publish/${channelSeq.value}`,
     JSON.stringify(message),
@@ -325,17 +377,67 @@ const formatFileSize = (bytes) => {
   return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
 };
 
-const getFileIcon = (fileType) => {
-  if (fileType.startsWith("image/")) return "mdi-image";
-  if (fileType.startsWith("video/")) return "mdi-video";
-  if (fileType.startsWith("audio/")) return "mdi-music";
-  if (fileType.includes("pdf")) return "mdi-file-pdf-box";
-  if (fileType.includes("word")) return "mdi-file-word-box";
-  if (fileType.includes("excel") || fileType.includes("spreadsheet"))
-    return "mdi-file-excel-box";
-  if (fileType.includes("powerpoint") || fileType.includes("presentation"))
-    return "mdi-file-powerpoint-box";
+const getFileIcon = (fileName) => {
+  const extension = fileName.split(".").pop()?.toLowerCase();
+
+  if (!extension) return "mdi-file";
+
+  // 이미지 파일
+  if (["jpg", "jpeg", "png", "gif", "bmp", "webp", "svg"].includes(extension)) {
+    return "mdi-image";
+  }
+  // 비디오 파일
+  if (["mp4", "avi", "mov", "wmv", "flv", "webm", "mkv"].includes(extension)) {
+    return "mdi-video";
+  }
+  // 오디오 파일
+  if (["mp3", "wav", "flac", "aac", "ogg", "m4a"].includes(extension)) {
+    return "mdi-music";
+  }
+  // 문서 파일
+  if (["pdf"].includes(extension)) return "mdi-file-pdf-box";
+  if (["doc", "docx"].includes(extension)) return "mdi-file-word-box";
+  if (["xls", "xlsx"].includes(extension)) return "mdi-file-excel-box";
+  if (["ppt", "pptx"].includes(extension)) return "mdi-file-powerpoint-box";
+  if (["txt"].includes(extension)) return "mdi-file-document";
+  if (["zip", "rar", "7z"].includes(extension)) return "mdi-zip-box";
+
   return "mdi-file";
+};
+
+const getFileIconColor = (fileName) => {
+  const extension = fileName.split(".").pop()?.toLowerCase();
+
+  if (!extension) return "grey";
+
+  // 이미지 파일
+  if (["jpg", "jpeg", "png", "gif", "bmp", "webp", "svg"].includes(extension)) {
+    return "green";
+  }
+  // 비디오 파일
+  if (["mp4", "avi", "mov", "wmv", "flv", "webm", "mkv"].includes(extension)) {
+    return "purple";
+  }
+  // 오디오 파일
+  if (["mp3", "wav", "flac", "aac", "ogg", "m4a"].includes(extension)) {
+    return "orange";
+  }
+  // 문서 파일
+  if (["pdf"].includes(extension)) return "red";
+  if (["doc", "docx"].includes(extension)) return "blue";
+  if (["xls", "xlsx"].includes(extension)) return "green";
+  if (["ppt", "pptx"].includes(extension)) return "orange";
+  if (["txt"].includes(extension)) return "grey";
+  if (["zip", "rar", "7z"].includes(extension)) return "brown";
+
+  return "grey";
+};
+
+const downloadFile = (file) => {
+  console.log("📥 파일 다운로드:", file);
+
+  // 새 탭에서 파일 열기
+  window.open(file.url, "_blank");
 };
 
 const removeAttachedFile = (index) => {
@@ -367,9 +469,21 @@ onMounted(() => {
 
   // ✅ 테스트용 멤버 3명 하드코딩
   const TEST_USERS = [
-    { memberSeq: 1, token: "eyJhbGciOiJIUzUxMiJ9.eyJzdWIiOiIxIiwiaWF0IjoxNzYwODY0NDM3LCJleHAiOjE3NjExNjQ0Mzd9.M7Oku06t1gUwDLllyAd1soYb4ofW-jbG6yv_kyWQB5xb-jLbqckOrfKCltqZ-ipraXsgzmdnaT37B_0uR7U4bA" },
-    { memberSeq: 2, token: "eyJhbGciOiJIUzUxMiJ9.eyJzdWIiOiIyIiwiaWF0IjoxNzYwODY0NDYwLCJleHAiOjE3NjExNjQ0NjB9.AJECsb6te0WnyEzJxg_-C0y9o5UHwM6avCAwX089x9oLGpGfLLwmuKJsZc3Vx2nYoLMFtQ8RB4Hen7JBnsu28g" },
-    { memberSeq: 3, token: "eyJhbGciOiJIUzUxMiJ9.eyJzdWIiOiIzIiwiaWF0IjoxNzYwODY0NDgwLCJleHAiOjE3NjExNjQ0ODB9.2PXzUnGY___UGolXGT7eLwyaaXVXcmppbytGb0I0LOp2LeKFy1-DSD4Dzc3NQV0PLXYZpVORvkTiunL-KLH1UQ" },
+    {
+      memberSeq: 1,
+      token:
+        "eyJhbGciOiJIUzUxMiJ9.eyJzdWIiOiIxIiwiaWF0IjoxNzYwOTMxNzYwLCJleHAiOjE3NjEyMzE3NjB9.uVbu8nL7NZGnj0Sl0Qq498sbEusDeFWvUC8OuVQkO3JABJpJAernrI3VDv6nBB5WG8lAK9M4rDF72_q6nNwbkA",
+    },
+    {
+      memberSeq: 2,
+      token:
+        "eyJhbGciOiJIUzUxMiJ9.eyJzdWIiOiIyIiwiaWF0IjoxNzYwOTMxNzg2LCJleHAiOjE3NjEyMzE3ODZ9.R7S_Z5VXbuxF6AmoYZjwWlQ3v92jdSEZ_Mqfnj-p8VlRTbAIDWXwtJGUtQwh0zYq2wOd1g8NoMr_gn-AJw51Fw",
+    },
+    {
+      memberSeq: 3,
+      token:
+        "eyJhbGciOiJIUzUxMiJ9.eyJzdWIiOiIzIiwiaWF0IjoxNzYwOTMxODIwLCJleHAiOjE3NjEyMzE4MjB9.1xYQiWumFQmf0qO5-YPFGvgudjCV2ygaeh_v22mv-YR9Ajqggnj-WL6dwBmoQyIGA2R0jaYRVtyFu-giPzioMQ",
+    },
   ];
 
   // ✅ 브라우저별 index (없으면 랜덤 생성)
@@ -388,12 +502,11 @@ onMounted(() => {
   console.log("- workspaceSeq:", workspaceSeq);
   console.log("- channelSeq:", channelSeq.value);
   console.log("- memberSeq:", memberSeq.value);
-  console.log("- token.sub:", JSON.parse(atob(token.value.split('.')[1])).sub);
+  console.log("- token.sub:", JSON.parse(atob(token.value.split(".")[1])).sub);
 
   // ✅ WebSocket 연결
   connectWebsocket();
 });
-
 
 onUnmounted(() => {
   window.removeEventListener("select-chat-channel", handleSubChannelSelect);
@@ -458,7 +571,7 @@ onUnmounted(() => {
               <div v-if="!message.isOwn" class="message-avatar">
                 {{ message.avatar }}
               </div>
-              
+
               <div class="message-group">
                 <!-- 발신자 이름 (상대방 메시지의 첫 번째만) -->
                 <div
@@ -479,19 +592,51 @@ onUnmounted(() => {
                   </div>
 
                   <!-- 첨부된 파일들 표시 -->
-                  <div v-if="Array.isArray(message.files) && message.files.length" class="message-files">
-                      <div v-for="(file, i) in message.files" :key="i" class="message-file-item">
-                        <v-icon class="mr-2">mdi-file</v-icon>
-                        <a
-                          :href="file.url"
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          class="file-name"
-                        >
-                          {{ file.name }}
-                        </a>
+                  <div
+                    v-if="Array.isArray(message.files) && message.files.length"
+                    class="message-files"
+                  >
+                    <div class="files-header">
+                      <v-icon class="files-icon">mdi-paperclip</v-icon>
+                      <span class="files-count"
+                        >{{ message.files.length }}개 파일</span
+                      >
+                    </div>
+                    <div class="files-list">
+                      <div
+                        v-for="(file, i) in message.files"
+                        :key="i"
+                        class="message-file-item"
+                      >
+                        <div class="file-icon-wrapper">
+                          <v-icon
+                            class="file-icon"
+                            :color="getFileIconColor(file.name)"
+                          >
+                            {{ getFileIcon(file.name) }}
+                          </v-icon>
+                        </div>
+                        <div class="file-info">
+                          <div class="file-name">{{ file.name }}</div>
+                          <div class="file-url" v-if="!message.isOwn">
+                            {{ file.url }}
+                          </div>
+                        </div>
+                        <div class="file-actions">
+                          <v-btn
+                            icon
+                            size="small"
+                            variant="text"
+                            color="primary"
+                            @click="downloadFile(file)"
+                            class="download-btn"
+                          >
+                            <v-icon>mdi-download</v-icon>
+                          </v-btn>
+                        </div>
                       </div>
                     </div>
+                  </div>
                 </div>
 
                 <!-- 메시지 메타 정보 (시간, 안읽음수) -->
@@ -1091,31 +1236,100 @@ onUnmounted(() => {
 /* 메시지 내 파일 표시 */
 .message-files {
   margin-top: 8px;
-  padding-top: 8px;
-  border-top: 1px solid rgba(var(--v-theme-on-surface), 0.1);
+  padding: 12px;
+  background: rgba(var(--v-theme-primary), 0.05);
+  border-radius: 8px;
+  border: 1px solid rgba(var(--v-theme-primary), 0.1);
+}
+
+.files-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: rgb(var(--v-theme-primary));
+}
+
+.files-icon {
+  font-size: 16px;
+}
+
+.files-count {
+  opacity: 0.8;
+}
+
+.files-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
 }
 
 .message-file-item {
   display: flex;
   align-items: center;
-  padding: 6px 8px;
-  background: rgba(var(--v-theme-on-surface), 0.05);
+  padding: 8px 12px;
+  background: rgba(var(--v-theme-surface), 0.8);
   border-radius: 6px;
-  margin-bottom: 4px;
-  font-size: 13px;
+  border: 1px solid rgba(var(--v-theme-on-surface), 0.1);
+  transition: all 0.2s ease;
 }
 
-.message-file-item:last-child {
-  margin-bottom: 0;
+.message-file-item:hover {
+  background: rgba(var(--v-theme-surface), 1);
+  border-color: rgba(var(--v-theme-primary), 0.3);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 
-.message-file-item .file-name {
-  font-size: 13px;
-  margin-right: 6px;
+.file-icon-wrapper {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  margin-right: 12px;
 }
 
-.message-file-item .file-size {
+.file-icon {
+  font-size: 20px;
+}
+
+.file-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.file-name {
+  font-size: 14px;
+  font-weight: 500;
+  color: rgb(var(--v-theme-on-surface));
+  margin-bottom: 2px;
+  word-break: break-all;
+}
+
+.file-url {
   font-size: 11px;
+  color: rgba(var(--v-theme-on-surface), 0.6);
+  word-break: break-all;
+  font-family: monospace;
+}
+
+.file-actions {
+  display: flex;
+  align-items: center;
+  margin-left: 8px;
+}
+
+.download-btn {
+  opacity: 0.7;
+  transition: all 0.2s ease;
+}
+
+.download-btn:hover {
+  opacity: 1;
+  transform: scale(1.1);
 }
 
 /* 반응형 디자인 */
