@@ -14,6 +14,51 @@
         <h2 class="document-title">문서 편집</h2>
       </div>
       
+      <!-- 참여자 토글 버튼 -->
+      <div class="participants-toggle">
+        <v-btn
+          variant="text"
+          size="small"
+          @click="showParticipants = !showParticipants"
+          class="participants-btn"
+        >
+          <v-icon start>mdi-account-multiple</v-icon>
+          {{ participants.length }}명
+          <v-icon end>{{ showParticipants ? 'mdi-chevron-up' : 'mdi-chevron-down' }}</v-icon>
+        </v-btn>
+        
+        <!-- 참여자 드롭다운 -->
+        <v-card
+          v-if="showParticipants"
+          class="participants-dropdown"
+          elevation="4"
+        >
+          <div class="participants-header">
+            <v-icon>mdi-account-multiple</v-icon>
+            <span>참여자 ({{ participants.length }}명)</span>
+          </div>
+          <div class="participants-list">
+            <div
+              v-for="participant in participants"
+              :key="participant.userId"
+              class="participant-item"
+              :class="{ 'is-current-user': participant.userId === user.id }"
+            >
+              <div class="participant-avatar">
+                {{ participant.userName.charAt(0).toUpperCase() }}
+              </div>
+              <div class="participant-info">
+                <div class="participant-name">{{ participant.userName }}</div>
+                <div class="participant-status">
+                  <v-icon size="small" color="success">mdi-circle</v-icon>
+                  온라인
+                </div>
+              </div>
+            </div>
+          </div>
+        </v-card>
+      </div>
+
       <!-- 연결 상태 표시 -->
       <div class="connection-status" :class="connectionStatusClass">
         <v-chip 
@@ -149,6 +194,7 @@ import { Plugin, PluginKey } from 'prosemirror-state';
 import StarterKit from '@tiptap/starter-kit';
 import { connectStomp, sendStompMessage, disconnectStomp } from '@/services/editorStompService';
 import { documentApi } from '@/api/document/documentApi';
+import { projectDriveApi } from '@/api/drive/driveApi';
 
 // Props 정의 (라우트 파라미터에서 받음)
 const props = defineProps({
@@ -227,6 +273,87 @@ const loadDocument = async () => {
     documentContent.value = '<p>문서를 불러오는 중 오류가 발생했습니다.</p>';
   } finally {
     isLoading.value = false;
+  }
+};
+
+// 참여자 목록 초기 조회 함수
+const loadParticipants = async () => {
+  try {
+    const documentSeq = Number(props.documentSeq);
+    console.log('👥 참여자 목록 조회 시작:', documentSeq);
+    
+    const result = await projectDriveApi.getDocumentParticipants(documentSeq);
+    
+    if (result.success && result.data) {
+      console.log('👥 참여자 목록 조회 성공:', result.data);
+      
+      // 백엔드 ParticipantsResponseDto 구조에 맞게 처리
+      const participantsData = result.data.participants || [];
+      
+      // 현재 참여자 목록 초기화 후 추가
+      participants.value = participantsData.map(participant => ({
+        userId: participant.userId,
+        userName: participant.userName,
+        joinTime: Date.now() // 초기 조회 시점으로 설정
+      }));
+      
+      console.log('👥 초기 참여자 목록 설정 완료:', participants.value);
+    } else {
+      console.warn('👥 참여자 목록 조회 실패:', result.error);
+      // 실패해도 빈 배열로 초기화
+      participants.value = [];
+    }
+  } catch (error) {
+    console.error('👥 참여자 목록 조회 중 오류:', error);
+    // 오류 발생 시에도 빈 배열로 초기화
+    participants.value = [];
+  }
+};
+
+// 라인 락 상태 초기 조회 함수
+const loadLineLocks = async () => {
+  try {
+    const driveChannelSeq = Number(props.driveChannelSeq);
+    const documentSeq = Number(props.documentSeq);
+    console.log('🔒 라인 락 상태 조회 시작:', { driveChannelSeq, documentSeq });
+    
+    const result = await projectDriveApi.getDocumentLocks(driveChannelSeq, documentSeq);
+    
+    if (result.success && result.data) {
+      console.log('🔒 라인 락 상태 조회 성공:', result.data);
+      
+      // 라인 락 맵 초기화
+      lineLocks.value.clear();
+      
+      // 백엔드 LineLocksResponseDto 구조에 맞게 처리
+      if (result.data.locks && Array.isArray(result.data.locks)) {
+        result.data.locks.forEach(lock => {
+          lineLocks.value.set(lock.lineId, {
+            userId: lock.userId,
+            userName: lock.userName,
+            timestamp: lock.timestamp
+          });
+        });
+      }
+      
+      console.log('🔒 초기 라인 락 상태 설정 완료:', Array.from(lineLocks.value.entries()));
+      
+      // 초기 락 상태 로딩 후 UI 업데이트
+      setTimeout(() => {
+        updateLineLockStatus();
+      }, 1000); // 에디터가 완전히 로드된 후 실행
+      
+      // 추가로 2초 후에도 한 번 더 업데이트 (DOM이 완전히 렌더링된 후)
+      setTimeout(() => {
+        updateLineLockStatus();
+      }, 3000);
+    } else {
+      console.warn('🔒 라인 락 상태 조회 실패:', result.error);
+      lineLocks.value.clear();
+    }
+  } catch (error) {
+    console.error('🔒 라인 락 상태 조회 중 오류:', error);
+    lineLocks.value.clear();
   }
 };
 
@@ -318,6 +445,116 @@ function randomUUID() {
   return 'line-' + Math.random().toString(36).substring(2, 11);
 }
 
+// 참여자 관련 함수들
+const addParticipant = (userInfo) => {
+  const existingIndex = participants.value.findIndex(p => p.userId === userInfo.userId);
+  if (existingIndex === -1) {
+    participants.value.push({
+      userId: userInfo.userId,
+      userName: userInfo.userName,
+      joinTime: Date.now()
+    });
+    console.log(`👋 참여자 추가: ${userInfo.userName}`);
+  }
+};
+
+const removeParticipant = (userId) => {
+  const index = participants.value.findIndex(p => p.userId === userId);
+  if (index !== -1) {
+    const removedUser = participants.value.splice(index, 1)[0];
+    console.log(`👋 참여자 제거: ${removedUser.userName}`);
+  }
+};
+
+const joinDocument = () => {
+  // STOMP로 참여 알림 (간단하게)
+  sendStompMessage({
+    destination: `/publish/document/${props.documentSeq}/join`,
+    body: {
+      userId: user.id,
+      userName: user.name
+    },
+  });
+};
+
+const leaveDocument = () => {
+  // 현재 락된 라인이 있다면 해제
+  if (currentUserLockedLineId.value) {
+    unlockLine(currentUserLockedLineId.value);
+  }
+  
+  // STOMP로 떠남 알림 (간단하게)
+  sendStompMessage({
+    destination: `/publish/document/${props.documentSeq}/leave`,
+    body: {
+      userId: user.id,
+      userName: user.name
+    },
+  });
+};
+
+// 라인 락 함수
+const lockLine = (lineId) => {
+  console.log('🔒 라인 락 시도:', lineId);
+  console.log('🔒 현재 사용자:', { id: user.id, name: user.name });
+  
+  const lockMessage = {
+    messageType: 'LOCK',
+    documentId: props.documentSeq.toString(),
+    lineId: lineId,
+    userId: user.id,
+    userName: user.name
+  };
+  
+  console.log('🔒 락 메시지 전송:', lockMessage);
+  
+  sendStompMessage({
+    destination: '/publish/document/lock',
+    body: lockMessage,
+  });
+};
+
+// 라인 락 해제 함수
+const unlockLine = (lineId) => {
+  if (!lineId) {
+    return;
+  }
+  
+  console.log('🔓 라인 락 해제 시도:', lineId);
+  
+  sendStompMessage({
+    destination: '/publish/document/unlock',
+    body: {
+      messageType: 'UNLOCK',
+      documentId: props.documentSeq.toString(),
+      lineId: lineId,
+      userId: user.id,
+      userName: user.name
+    },
+  });
+};
+
+// 라인 락 전환 함수
+const switchLineLock = (newLineId) => {
+  console.log('🔄 라인 락 전환 시도:', {
+    from: currentUserLockedLineId.value,
+    to: newLineId
+  });
+  
+  // 이전 라인 락 해제
+  if (currentUserLockedLineId.value && currentUserLockedLineId.value !== newLineId) {
+    console.log('🔓 이전 라인 락 해제:', currentUserLockedLineId.value);
+    unlockLine(currentUserLockedLineId.value);
+  }
+  
+  // 새 라인 락
+  if (newLineId && currentUserLockedLineId.value !== newLineId) {
+    console.log('🔒 새 라인 락 설정:', newLineId);
+    currentUserLockedLineId.value = newLineId;
+    lockLine(newLineId);
+  }
+};
+
 // 고유 ID 확장
 const UniqueIdExtension = Extension.create({
   name: 'uniqueId',
@@ -405,6 +642,127 @@ const remoteCursorsMap = ref({}); // 다른 사용자 커서 정보 객체
 const lastCursorUpdate = ref(0); // 커서 업데이트 throttle용
 const previousNodesById = ref(new Map()); // "이전 상태"를 저장
 
+// 참여자 관련 상태
+const participants = ref([]); // 참여자 목록
+const showParticipants = ref(false); // 참여자 목록 표시 여부
+
+// 라인 락 상태 관리
+const lineLocks = ref(new Map()); // lineId -> {userId, userName, timestamp}
+const currentUserLockedLineId = ref(null); // 현재 사용자가 락한 라인 ID
+
+// 락된 라인인지 확인하는 computed
+const isLineLocked = (lineId) => {
+  return lineLocks.value.has(lineId);
+};
+
+// 라인이 다른 사용자에게 락되어 있는지 확인하는 computed
+const isLineLockedByOthers = (lineId) => {
+  const lock = lineLocks.value.get(lineId);
+  return lock && lock.userId !== user.id;
+};
+
+// 락된 라인의 사용자 정보를 가져오는 computed
+const getLineLockUser = (lineId) => {
+  return lineLocks.value.get(lineId);
+};
+
+// 락 라벨 생성 함수
+const createLockLabel = (lineElement, userName) => {
+  const lineId = lineElement.getAttribute('data-id');
+  
+  // 기존 라벨 제거 (에디터 컨테이너에서)
+  const existingLabel = document.querySelector(`.lock-label[data-line-id="${lineId}"]`);
+  if (existingLabel) {
+    existingLabel.remove();
+  }
+  
+  // 새 라벨 생성
+  const label = document.createElement('div');
+  label.className = 'lock-label';
+  label.setAttribute('data-line-id', lineId);
+  label.textContent = `${userName}가 편집 중`;
+  
+  // 라인 요소의 위치 계산
+  const rect = lineElement.getBoundingClientRect();
+  const editorContainer = document.querySelector('.editor-container');
+  const containerRect = editorContainer.getBoundingClientRect();
+  
+  // 라벨 스타일 적용
+  label.style.cssText = `
+    position: fixed;
+    top: ${rect.top - 20}px;
+    left: ${rect.left}px;
+    background-color: #ff9800;
+    color: white;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: bold;
+    z-index: 1000;
+    pointer-events: none;
+    white-space: nowrap;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+  `;
+  
+  // 에디터 컨테이너에 라벨 추가
+  editorContainer.appendChild(label);
+  
+  console.log('🏷️ 락 라벨 생성:', userName, '위치:', rect.top, rect.left);
+};
+
+// 라인 락 상태 업데이트 함수
+const updateLineLockStatus = () => {
+  // DOM이 완전히 업데이트될 때까지 기다린 후 실행
+  setTimeout(() => {
+    nextTick(() => {
+      // 모든 라인 요소에 대해 락 상태 적용
+      const allLines = document.querySelectorAll('[data-id]');
+      console.log('🔒 락 상태 업데이트 시작 - 총 라인 수:', allLines.length);
+      
+      allLines.forEach(lineElement => {
+        const lineId = lineElement.getAttribute('data-id');
+        if (!lineId) return;
+        
+        // 기존 락 클래스 제거 (모든 line-locked-by-* 패턴 제거)
+        const classList = Array.from(lineElement.classList);
+        classList.forEach(className => {
+          if (className.startsWith('line-locked-by-')) {
+            lineElement.classList.remove(className);
+          }
+        });
+        
+        // 기존 락 라벨 제거 (에디터 컨테이너에서)
+        const existingLabel = document.querySelector(`.lock-label[data-line-id="${lineId}"]`);
+        if (existingLabel) {
+          existingLabel.remove();
+        }
+        
+        if (isLineLocked(lineId)) {
+          const lockInfo = getLineLockUser(lineId);
+          if (lockInfo) {
+            // 사용자 ID를 포함한 클래스명으로 락 상태 표시
+            lineElement.classList.add(`line-locked-by-${lockInfo.userId}`);
+            lineElement.setAttribute('data-locked-by', `${lockInfo.userName}가 편집 중`);
+            console.log('🔒 라인 락 적용:', lineId, lockInfo.userName, `line-locked-by-${lockInfo.userId}`);
+            
+            // ::before 대신 실제 DOM 요소로 라벨 생성
+            createLockLabel(lineElement, lockInfo.userName);
+          }
+        }
+      });
+      
+      console.log('🔒 락 상태 업데이트 완료');
+    });
+  }, 100); // 100ms 지연으로 DOM 업데이트 보장
+};
+
+// 드롭다운 외부 클릭 시 닫기
+const handleClickOutside = (event) => {
+  if (showParticipants.value && !event.target.closest('.participants-toggle')) {
+    showParticipants.value = false;
+  }
+};
+
 // 문서 로딩 상태
 const isLoading = ref(true);
 const documentContent = ref('');
@@ -477,6 +835,12 @@ onMounted(async () => {
 
   // 먼저 문서 로딩
   await loadDocument();
+  
+  // 참여자 목록 초기 조회
+  await loadParticipants();
+  
+  // 라인 락 상태 초기 조회
+  await loadLineLocks();
 
   editor.value = new Editor({
     extensions: [
@@ -495,6 +859,24 @@ onMounted(async () => {
     onUpdate: ({ editor, transaction }) => {
       if (isUpdatingFromRemote.value || !transaction.docChanged) {
         return;
+      }
+
+      // 타이핑 중인 라인에 락 유지
+      const { from } = editor.state.selection;
+      const resolvedPos = editor.state.doc.resolve(from);
+      let currentLineId = null;
+      
+      for (let i = resolvedPos.depth; i > 0; i--) {
+        const node = resolvedPos.node(i);
+        if (node.isBlock && node.attrs.id) {
+          currentLineId = node.attrs.id;
+          break;
+        }
+      }
+      
+      // 현재 라인에 락이 없다면 락 설정
+      if (currentLineId && currentUserLockedLineId.value !== currentLineId) {
+        switchLineLock(currentLineId);
       }
 
       // 1. 현재 상태 수집
@@ -699,6 +1081,9 @@ onMounted(async () => {
 
       // 2. 계산된 정보로 메시지 전송
       if (cursorLineId) {
+        // 커서 위치 변경 시 라인 락 전환
+        switchLineLock(cursorLineId);
+        
         sendStompMessage({
           destination: '/publish/document/cursor',
           body: {
@@ -722,15 +1107,29 @@ onMounted(async () => {
     }
   );
 
-  setTimeout(() => {
-    if (connectionStatus.value === 'connecting') {
-      connectionStatus.value = 'offline';
-      editor.value.setOptions({ editable: false });
-    }
-  }, 5000);
-});
+    setTimeout(() => {
+      if (connectionStatus.value === 'connecting') {
+        connectionStatus.value = 'offline';
+        editor.value.setOptions({ editable: false });
+      }
+    }, 5000);
+
+    // 문서 참여
+    setTimeout(() => {
+      joinDocument();
+    }, 1000);
+
+    // 외부 클릭 이벤트 리스너 추가
+    document.addEventListener('click', handleClickOutside);
+  });
 
 onBeforeUnmount(() => {
+  // 문서에서 떠남
+  leaveDocument();
+  
+  // 이벤트 리스너 제거
+  document.removeEventListener('click', handleClickOutside);
+  
   disconnectStomp();
   if (editor.value) {
     editor.value.destroy();
@@ -740,7 +1139,14 @@ onBeforeUnmount(() => {
 const handleIncomingMessage = (message) => {
   console.log('📥 메시지 수신:', message);
   
-  if (!editor.value || message.senderId === user.name) {
+  // 락 메시지는 본인 메시지라도 처리해야 함 (상태 동기화를 위해)
+  if (!editor.value) {
+    console.log('🚫 메시지 무시 - 에디터 없음');
+    return;
+  }
+  
+  // 락 메시지가 아닌 경우에만 본인 메시지 무시
+  if (message.messageType !== 'LOCK' && message.messageType !== 'UNLOCK' && message.senderId === user.name) {
     console.log('🚫 메시지 무시 - 본인 메시지');
     return;
   }
@@ -932,6 +1338,41 @@ const handleIncomingMessage = (message) => {
           }
         };
       }
+    } else if (message.messageType === 'USER_JOIN') {
+      // 사용자 참여 메시지 처리 (간단하게)
+      console.log('👋 사용자 참여 메시지:', message);
+      addParticipant({
+        userId: message.userId,
+        userName: message.userName
+      });
+    } else if (message.messageType === 'USER_LEAVE') {
+      // 사용자 떠남 메시지 처리 (간단하게)
+      console.log('👋 사용자 떠남 메시지:', message);
+      removeParticipant(message.userId);
+    } else if (message.messageType === 'LOCK') {
+      // 라인 락 메시지 처리
+      console.log('🔒 라인 락 메시지 수신:', message);
+      console.log('🔒 현재 락 상태 (락 전):', Array.from(lineLocks.value.entries()));
+      
+      lineLocks.value.set(message.lineId, {
+        userId: message.userId,
+        userName: message.userName,
+        timestamp: Date.now()
+      });
+      
+      console.log('🔒 락 상태 업데이트 후:', Array.from(lineLocks.value.entries()));
+      console.log('🔒 UI 업데이트 시작...');
+      updateLineLockStatus();
+    } else if (message.messageType === 'UNLOCK') {
+      // 라인 락 해제 메시지 처리
+      console.log('🔓 라인 락 해제 메시지 수신:', message);
+      console.log('🔓 현재 락 상태 (해제 전):', Array.from(lineLocks.value.entries()));
+      
+      lineLocks.value.delete(message.lineId);
+      
+      console.log('🔓 락 상태 업데이트 후:', Array.from(lineLocks.value.entries()));
+      console.log('🔓 UI 업데이트 시작...');
+      updateLineLockStatus();
     }
   } catch (error) {
     console.error('❌ 메시지 처리 오류:', error);
@@ -1001,9 +1442,114 @@ const handleIncomingMessage = (message) => {
   min-width: 36px;
 }
 
-.editor-toolbar .is-active {
-  background-color: #e3f2fd !important;
-  color: #1976d2 !important;
+/* 참여자 토글 스타일 */
+.participants-toggle {
+  position: relative;
+  margin-right: 16px;
+}
+
+.participants-btn {
+  background-color: #f5f5f5 !important;
+  border-radius: 20px !important;
+  padding: 0 12px !important;
+  height: 32px !important;
+  font-size: 14px !important;
+  font-weight: 500 !important;
+  color: #333 !important;
+  text-transform: none !important;
+}
+
+.participants-btn:hover {
+  background-color: #e0e0e0 !important;
+}
+
+.participants-dropdown {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  margin-top: 8px;
+  min-width: 280px;
+  z-index: 1000;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.participants-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 16px;
+  background-color: #f8f9fa;
+  border-bottom: 1px solid #e0e0e0;
+  font-weight: 600;
+  color: #333;
+}
+
+.participants-list {
+  padding: 8px;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.participant-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  border-radius: 8px;
+  transition: background-color 0.2s ease;
+}
+
+.participant-item:hover {
+  background-color: #f8f9fa;
+}
+
+.participant-item.is-current-user {
+  background-color: #e3f2fd;
+  border: 1px solid #1976d2;
+}
+
+.participant-item.is-current-user:hover {
+  background-color: #bbdefb;
+}
+
+.participant-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-weight: bold;
+  font-size: 16px;
+  flex-shrink: 0;
+  background-color: #1976d2;
+}
+
+.participant-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.participant-name {
+  font-size: 15px;
+  font-weight: 500;
+  color: #333;
+  margin-bottom: 2px;
+}
+
+.participant-item.is-current-user .participant-name {
+  color: #1976d2;
+  font-weight: 600;
+}
+
+.participant-status {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: #666;
 }
 
 .editor-container {
@@ -1092,4 +1638,14 @@ const handleIncomingMessage = (message) => {
   box-shadow: 0 2px 4px rgba(0,0,0,0.2);
   line-height: 1.2;
 }
+
+/* 라인 락 관련 스타일 - 사용자 ID별 클래스 */
+:deep([class*="line-locked-by-"]) {
+  position: relative !important;
+  background-color: #fff3e0 !important;
+  border-left: 4px solid #ff9800 !important;
+  opacity: 0.7 !important;
+  pointer-events: none !important;
+}
+
 </style>

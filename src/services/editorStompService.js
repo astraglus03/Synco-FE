@@ -10,9 +10,8 @@ let lockSubscription = null; // 락 구독
  * @param {string} documentId - 문서 ID
  * @param {function} onMessageCallback - 메시지 수신 콜백
  * @param {function} onConnectCallback - 연결 성공 콜백
- * @param {function} onLockMessageCallback - 락 메시지 수신 콜백
  */
-export const connectStomp = (documentId, onMessageCallback, onConnectCallback, onLockMessageCallback) => {
+export const connectStomp = (documentId, onMessageCallback, onConnectCallback) => {
   // 이미 연결되어 있으면 재연결 시도 안함
   if (client && client.active) {
     console.log('STOMP is already connected');
@@ -78,17 +77,32 @@ export const connectStomp = (documentId, onMessageCallback, onConnectCallback, o
     console.log(`📡 구독 완료: /topic/document/${documentId}/document-update`);
     
     // 락 메시지 구독
-    if (onLockMessageCallback) {
-      lockSubscription = client.subscribe(`/topic/document/${documentId}/line-locks`, (message) => {
+    lockSubscription = client.subscribe(`/topic/document/${documentId}/line-locks`, (message) => {
+      try {
+        const parsedMessage = JSON.parse(message.body);
+        console.log('🔒 락 메시지 수신:', parsedMessage);
+        if (onMessageCallback) {
+          onMessageCallback(parsedMessage);
+        }
+      } catch (error) {
+        console.error('락 메시지 파싱 에러:', error, message.body);
+      }
+    });
+    
+    console.log(`🔒 락 구독 완료: /topic/document/${documentId}/line-locks`);
+
+    // 온라인 사용자 메시지 구독
+    if (onMessageCallback) {
+      const onlineUsersSubscription = client.subscribe(`/topic/document/${documentId}/online-users`, (message) => {
         try {
           const parsedMessage = JSON.parse(message.body);
-          onLockMessageCallback(parsedMessage);
+          onMessageCallback(parsedMessage);
         } catch (error) {
-          console.error('락 메시지 파싱 에러:', error, message.body);
+          console.error('온라인 사용자 메시지 파싱 에러:', error, message.body);
         }
       });
       
-      console.log(`🔒 락 구독 완료: /topic/document/${documentId}/line-locks`);
+      console.log(`👥 온라인 사용자 구독 완료: /topic/document/${documentId}/online-users`);
     }
     
     // 연결 성공 콜백 실행

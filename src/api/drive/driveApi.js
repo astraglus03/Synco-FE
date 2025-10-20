@@ -18,6 +18,8 @@ const API_ENDPOINTS = {
   PROJECT_DOCUMENT_LOCK: '/drive-service/drive/project/documents/lock',
   PROJECT_DOCUMENT_DOWNLOAD: (channelSeq, docSeq) => `/drive-service/drive/project/${channelSeq}/documents/${docSeq}/download`,
   PROJECT_ALL_FOLDERS: (channelSeq) => `/drive-service/drive/project/${channelSeq}/folders/tree`,
+  PROJECT_DOCUMENT_PARTICIPANTS: (documentId) => `/drive-service/drive/project/documents/${documentId}/participants`,
+  PROJECT_DOCUMENT_LOCKS: (channelSeq, documentSeq) => `/drive-service/drive/project/${channelSeq}/document/${documentSeq}/locks`,
   
   // 개인 드라이브
   PERSONAL_ITEMS: (channelSeq) => `/drive-service/drive/personal/${channelSeq}/items`,
@@ -134,6 +136,8 @@ class DriveApiBase {
       documentLock: API_ENDPOINTS.PROJECT_DOCUMENT_LOCK,
       documentDownload: API_ENDPOINTS.PROJECT_DOCUMENT_DOWNLOAD,
       allFolders: API_ENDPOINTS.PROJECT_ALL_FOLDERS,
+      documentParticipants: API_ENDPOINTS.PROJECT_DOCUMENT_PARTICIPANTS,
+      documentLocks: API_ENDPOINTS.PROJECT_DOCUMENT_LOCKS,
     }
   }
 
@@ -385,6 +389,28 @@ class DriveApiBase {
       return handleApiError(error, '폴더 목록 조회에 실패했습니다.')
     }
   }
+
+  // 문서 참여자 목록 조회
+  async getDocumentParticipants(documentId) {
+    try {
+      const response = await axios.get(this.endpoints.documentParticipants(documentId))
+      
+      return createApiResponse(true, response.data.data)
+    } catch (error) {
+      return handleApiError(error, '참여자 목록 조회에 실패했습니다.')
+    }
+  }
+
+  // 문서 라인 락 목록 조회
+  async getDocumentLocks(driveChannelSeq, documentSeq) {
+    try {
+      const response = await axios.get(this.endpoints.documentLocks(driveChannelSeq, documentSeq))
+      
+      return createApiResponse(true, response.data.data)
+    } catch (error) {
+      return handleApiError(error, '라인 락 목록 조회에 실패했습니다.')
+    }
+  }
 }
 
 // 프로젝트 드라이브 API 인스턴스
@@ -486,5 +512,17 @@ export const driveApi = {
   async reorderFolder(folderId, newOrder, driveChannelSeq, isPersonal = false) {
     const api = isPersonal ? personalDriveApi : projectDriveApi
     return api.reorderFolder(folderId, newOrder, driveChannelSeq)
+  },
+
+  // 문서 참여자 목록 조회
+  async getDocumentParticipants(documentId, isPersonal = false) {
+    const api = isPersonal ? personalDriveApi : projectDriveApi
+    return api.getDocumentParticipants(documentId)
+  },
+
+  // 문서 라인 락 목록 조회
+  async getDocumentLocks(driveChannelSeq, documentSeq, isPersonal = false) {
+    const api = isPersonal ? personalDriveApi : projectDriveApi
+    return api.getDocumentLocks(driveChannelSeq, documentSeq)
   }
 }
