@@ -2,11 +2,10 @@
   <div class="find-id-container">
     <!-- 헤더 -->
     <div class="find-id-header">
-      <div class="icon-wrapper">
-        <v-icon size="48" color="primary">mdi-account-search</v-icon>
+      <div class="brand-logo">
+        <h1 class="brand-name">Synco</h1>
       </div>
-      <h1 class="title">ID 찾기</h1>
-      <p class="subtitle">이름과 이메일로 회원ID를 찾아보세요</p>
+      <p class="welcome-text">회원 ID를 찾아보세요</p>
     </div>
 
     <!-- ID 찾기 폼 -->
@@ -49,7 +48,7 @@
         :loading="isLoading"
         :disabled="!isFormValid"
         color="primary"
-        class="find-button"
+        class="find-id-button"
         elevation="0"
       >
         <v-icon left>mdi-magnify</v-icon>
@@ -67,7 +66,7 @@
         <div class="result-content">
           <p class="result-text">회원ID:</p>
           <div class="id-display">
-            <span class="id-text">{{ maskedId }}</span>
+            <span class="id-text">{{ foundId }}</span>
             <v-btn
               icon
               variant="text"
@@ -114,22 +113,23 @@
     </div>
 
     <!-- 로그인 링크 -->
-    <div class="back-link">
+    <div class="login-link">
+      <span class="login-text">로그인 페이지로</span>
       <v-btn
         variant="text"
         color="primary"
         @click="$emit('switch-to-login')"
-        class="back-button"
+        class="login-button"
       >
-        <v-icon left>mdi-arrow-left</v-icon>
-        로그인으로 돌아가기
+        돌아가기
       </v-btn>
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref } from 'vue'
+import { findMemberId } from '@/api/member/auth'
 
 // Props & Emits
 const emit = defineEmits(['switch-to-login'])
@@ -156,27 +156,37 @@ const emailRules = [
   v => /.+@.+\..+/.test(v) || '올바른 이메일 형식이 아닙니다'
 ]
 
-// Computed
-const maskedId = computed(() => {
-  if (!foundId.value) return ''
-  const id = foundId.value
-  const visibleLength = Math.ceil(id.length / 2)
-  const maskedLength = id.length - visibleLength
-  return id.substring(0, visibleLength) + '*'.repeat(maskedLength)
-})
-
 // Methods
 const handleFindId = async () => {
   if (!isFormValid.value) return
 
   isLoading.value = true
   try {
-    // 임시 성공 처리 (UI 테스트용)
-    await new Promise(resolve => setTimeout(resolve, 1500))
+    const requestData = {
+      name: formData.value.name,
+      email: formData.value.email
+    }
     
-    foundId.value = 'testuser123'
+    const response = await findMemberId(requestData)
+    
+    // 응답에서 찾은 ID 설정
+    foundId.value = response.memberId
+    
   } catch (error) {
     console.error('ID 찾기 실패:', error)
+    
+    // 에러 메시지 추출 및 표시
+    let errorMessage = 'ID를 찾을 수 없습니다.'
+    
+    if (error.response?.data?.message) {
+      errorMessage = error.response.data.message
+    } else if (error.response?.data?.error) {
+      errorMessage = error.response.data.error
+    } else if (error.message) {
+      errorMessage = error.message
+    }
+    
+    alert(errorMessage)
   } finally {
     isLoading.value = false
   }
@@ -195,7 +205,6 @@ const copyToClipboard = async () => {
   try {
     await navigator.clipboard.writeText(foundId.value)
     // 복사 성공 알림 (실제로는 토스트 메시지 등 사용)
-    console.log('ID가 클립보드에 복사되었습니다.')
   } catch (error) {
     console.error('복사 실패:', error)
   }
@@ -205,7 +214,7 @@ const copyToClipboard = async () => {
 <style scoped>
 .find-id-container {
   width: 100%;
-  max-width: 500px;
+  max-width: 400px;
   margin: 0 auto;
   padding: 2rem;
 }
@@ -216,23 +225,24 @@ const copyToClipboard = async () => {
   margin-bottom: 2rem;
 }
 
-.icon-wrapper {
-  width: 80px;
-  height: 80px;
+.brand-logo {
   display: flex;
   align-items: center;
   justify-content: center;
-  margin: 0 auto 1rem;
+  margin-bottom: 1rem;
 }
 
-.title {
-  font-size: 1.75rem;
+.brand-name {
+  font-size: 2rem;
   font-weight: 700;
-  color: #374151;
-  margin: 0 0 0.5rem 0;
+  background: linear-gradient(135deg, #3b82f6 0%, #6366f1 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  margin: 0;
 }
 
-.subtitle {
+.welcome-text {
   color: #6b7280;
   font-size: 1rem;
   margin: 0;
@@ -262,6 +272,10 @@ const copyToClipboard = async () => {
   border-radius: 8px;
   padding: 0.5rem 0.75rem;
   transition: all 0.2s ease;
+  min-height: 48px;
+  display: flex;
+  align-items: center;
+  overflow: visible;
 }
 
 .input-wrapper:focus-within {
@@ -283,28 +297,49 @@ const copyToClipboard = async () => {
 
 .custom-input {
   padding-left: 2rem;
+  position: static;
+  width: 100%;
 }
 
 .custom-input :deep(.v-field) {
   background: transparent;
   box-shadow: none;
   border: none;
+  min-height: auto;
+  height: auto;
+  display: flex;
+  align-items: center;
 }
 
 .custom-input :deep(.v-field__input) {
   color: #374151;
   font-size: 0.875rem;
-  line-height: 1.5;
-  display: flex;
-  align-items: center;
+  line-height: 1.5 !important;
+  min-height: auto;
+  height: auto;
+  padding: 0 !important;
+  margin: 0 !important;
+  opacity: 1 !important;
 }
 
 .custom-input :deep(.v-field__input::placeholder) {
-  color: #9ca3af;
+  color: #9ca3af !important;
+  opacity: 1 !important;
+}
+
+.custom-input :deep(.v-input__details) {
+  position: absolute;
+  left: 0;
+  top: 100%;
+  padding-top: 4px;
+  padding-left: 0;
+  margin: 0;
+  width: 100%;
+  text-align: right;
 }
 
 /* 찾기 버튼 */
-.find-button {
+.find-id-button {
   height: 48px;
   font-weight: 600;
   font-size: 1rem;
@@ -316,7 +351,7 @@ const copyToClipboard = async () => {
   box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
 }
 
-.find-button:hover {
+.find-id-button:hover {
   box-shadow: 0 6px 16px rgba(59, 130, 246, 0.4);
   transform: translateY(-1px);
   color: white !important;
@@ -430,14 +465,20 @@ const copyToClipboard = async () => {
   margin: 0;
 }
 
-/* 뒤로가기 링크 */
-.back-link {
+/* 로그인 링크 */
+.login-link {
   text-align: center;
   padding-top: 1rem;
   border-top: 1px solid #e5e7eb;
 }
 
-.back-button {
+.login-text {
+  color: #6b7280;
+  font-size: 0.875rem;
+  margin-right: 0.5rem;
+}
+
+.login-button {
   font-weight: 600;
   text-decoration: none;
 }
