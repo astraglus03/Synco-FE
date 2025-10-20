@@ -691,6 +691,10 @@ const UniqueIdExtension = Extension.create({
           },
           handleDOMEvents: {
             mousedown: (view, event) => {
+              // 드래그 시작 표시
+              isDragging.value = true;
+              console.log('🖱️ 드래그 시작');
+              
               const target = event.target;
               const lineElement = target.closest('[data-id]');
               if (lineElement) {
@@ -773,6 +777,10 @@ const UniqueIdExtension = Extension.create({
               return false;
             },
             mouseup: (view, event) => {
+              // 드래그 종료 표시
+              isDragging.value = false;
+              console.log('🖱️ 드래그 종료');
+              
               // 드래그 종료 시 선택 범위 검사
               const { from, to } = view.state.selection;
               if (from !== to) { // 선택이 있는 경우
@@ -828,6 +836,7 @@ const showParticipants = ref(false); // 참여자 목록 표시 여부
 // 라인 락 상태 관리
 const lineLocks = ref(new Map()); // lineId -> {userId, userName, timestamp}
 const currentUserLockedLineId = ref(null); // 현재 사용자가 락한 라인 ID
+const isDragging = ref(false); // 드래그 상태 추적
 
 // 락된 라인인지 확인하는 computed
 const isLineLocked = (lineId) => {
@@ -1315,8 +1324,10 @@ onMounted(async () => {
 
       // 2. 계산된 정보로 메시지 전송
       if (cursorLineId) {
-        // 커서 위치 변경 시 라인 락 전환
-        switchLineLock(cursorLineId);
+        // 드래그 중이 아닐 때만 라인 락 전환
+        if (!isDragging.value) {
+          switchLineLock(cursorLineId);
+        }
         
         sendStompMessage({
           destination: '/publish/document/cursor',
@@ -1799,7 +1810,8 @@ const handleIncomingMessage = (message) => {
   margin: 16px;
   border-radius: 8px;
   box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-  overflow: hidden;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
 .loading-container {
