@@ -65,6 +65,19 @@ const showFolderSelector = ref(false)
 const showDocEditor = ref(false)
 const currentDocument = ref(null)
 
+// 파일 업로드 폴더 선택 상태
+const uploadFolderLocation = ref(null)
+const showUploadFolderSelector = ref(false)
+
+// 폴더 생성 부모 폴더 선택 상태
+const newFolderParentLocation = ref(null)
+const showNewFolderParentSelector = ref(false)
+
+// 에러 모달 상태
+const showErrorModal = ref(false)
+const errorMessage = ref('')
+const errorTitle = ref('')
+
 // 계산된 속성들 - 스토어 데이터 사용 (백엔드에서 이미 정렬되어 있으므로 그대로 사용)
 const currentItems = computed(() => {
   return driveStore.items || []
@@ -201,7 +214,7 @@ const startDrag = (item, event) => {
 const handleDragOver = (item, event) => {
   event.preventDefault()
   
-  if (!draggedItem.value || draggedItem.value.id === item.id) return
+  if (!draggedItem.value || (draggedItem.value.id === item.id && draggedItem.value.type === item.type)) return
   
   // 드롭 가능한 경우만 표시
   let canDrop = false
@@ -240,7 +253,7 @@ const handleDrop = async (targetItem, event) => {
   if (!draggedItem.value || !targetItem) return
   
   // 같은 아이템으로 드롭하는 경우 무시
-  if (draggedItem.value.id === targetItem.id) {
+  if (draggedItem.value.id === targetItem.id && draggedItem.value.type === targetItem.type) {
     resetDragState()
     return
   }
@@ -359,10 +372,14 @@ const finishRename = async () => {
       await nextTick()
     } else {
       console.error('이름 변경 실패:', result.error)
+      // 에러 모달 표시
+      showError('이름 변경 실패', result.error || '이름 변경 중 오류가 발생했습니다.')
       // 실패 시 편집 모드 유지 (사용자가 다시 시도할 수 있도록)
     }
   } catch (error) {
     console.error('이름 변경 중 오류:', error)
+    // 에러 모달 표시
+    showError('이름 변경 실패', '이름 변경 중 오류가 발생했습니다.')
     // 에러 발생 시 편집 모드 유지
   }
 }
@@ -380,13 +397,13 @@ const enterFolder = (folder) => {
 }
 
 // 브레드크럼 클릭으로 폴더 이동
-const navigateToFolder = (folderId) => {
+const navigateToFolder = async (folderId) => {
   if (folderId === null) {
     // 홈으로 이동
     driveStore.goToRoot()
   } else {
     // 특정 폴더로 이동
-    driveStore.goToFolder(folderId)
+    await driveStore.goToFolder(folderId)
   }
 }
 
@@ -400,8 +417,10 @@ const loadAllFolders = async () => {
   loadingFolders.value = true
   try {
     const result = await driveStore.getAllFolders()
+    console.log('getAllFolders result:', result) // 디버깅용
     if (result.success) {
       allFolders.value = result.data
+      console.log('allFolders.value set to:', allFolders.value) // 디버깅용
     }
   } catch (error) {
     console.error('전체 폴더 목록 로드 실패:', error)
@@ -419,7 +438,11 @@ const buildFolderHierarchy = (folders) => {
 // 공유문서 생성 모달 열기
 const openSharedDocModal = () => {
   showSharedDocModal.value = true
-  loadAllFolders() // 전체 폴더 목록 로드
+  showFolderSelector.value = false // 폴더 선택기 닫기
+  // 폴더 목록이 없을 때만 로드
+  if (!allFolders.value || allFolders.value.length === 0) {
+    loadAllFolders()
+  }
 }
 
 // 아이템 삭제
@@ -463,14 +486,21 @@ const flattenedFolders = computed(() => {
   
   const flatten = (folders, level = 0) => {
     folders.forEach(folder => {
-      result.push({ ...folder, level })
+      result.push({ 
+        ...folder, 
+        level,
+        id: folder.id, // DriveItem에서 이미 변환된 id 사용
+        name: folder.name // DriveItem에서 이미 변환된 name 사용
+      })
       if (folder.children && folder.children.length > 0) {
         flatten(folder.children, level + 1)
       }
     })
   }
   
+  console.log('allFolders.value:', allFolders.value) // 디버깅용
   flatten(buildFolderHierarchy(allFolders.value))
+  console.log('flattenedFolders result:', result) // 디버깅용
   return result
 })
 
@@ -509,38 +539,141 @@ const toggleViewMode = () => {
   viewMode.value = viewMode.value === 'grid' ? 'list' : 'grid'
 }
 
+// 에러 모달 표시
+const showError = (title, message) => {
+  errorTitle.value = title
+  errorMessage.value = message
+  showErrorModal.value = true
+  // 모든 진행 중인 모달 닫기
+  closeModals()
+}
+
+// 에러 모달 닫기
+const closeErrorModal = () => {
+  showErrorModal.value = false
+  errorTitle.value = ''
+  errorMessage.value = ''
+}
+
+// 폴더 생성 모달 열기
+const openNewFolderModal = () => {
+  showNewFolderModal.value = true
+  newFolderParentLocation.value = null
+  showNewFolderParentSelector.value = false
+  // 폴더 목록이 없을 때만 로드
+  if (!allFolders.value || allFolders.value.length === 0) {
+    loadAllFolders()
+  }
+}
+
 // 폴더 생성
 const createFolder = async () => {
   if (!newFolderName.value.trim()) return
   
-  const result = await driveStore.createFolder(newFolderName.value.trim())
+  const parentFolderId = newFolderParentLocation.value
+  const result = await driveStore.createFolder(newFolderName.value.trim(), parentFolderId)
+  
   if (result.success) {
     newFolderName.value = ''
+    newFolderParentLocation.value = null
     showNewFolderModal.value = false
+    showNewFolderParentSelector.value = false
+    // 폴더 생성 후 현재 폴더 다시 로드
+    await loadDriveItems()
+    // 폴더 목록도 새로고침 (새 폴더가 추가되었으므로)
+    await loadAllFolders()
   } else {
-    console.error('폴더 생성 실패:', result.error)
+    showError('폴더 생성 실패', result.error || '폴더 생성 중 오류가 발생했습니다.')
   }
 }
+
+// 폴더 생성 부모 폴더 선택
+const selectNewFolderParent = (folder) => {
+  newFolderParentLocation.value = folder.id
+  showNewFolderParentSelector.value = false
+}
+
+// 현재 선택된 폴더 생성 부모 폴더 이름
+const selectedNewFolderParentName = computed(() => {
+  if (newFolderParentLocation.value === null) return '최상위 루트'
+  if (!newFolderParentLocation.value) return '폴더를 선택하세요'
+  
+  // 전체 폴더 목록에서 찾기
+  const findFolderInHierarchy = (folders, targetId) => {
+    for (const folder of folders) {
+      if (folder.id === targetId) {
+        return folder
+      }
+      if (folder.children && folder.children.length > 0) {
+        const found = findFolderInHierarchy(folder.children, targetId)
+        if (found) return found
+      }
+    }
+    return null
+  }
+  
+  const folder = findFolderInHierarchy(allFolders.value, newFolderParentLocation.value)
+  return folder ? folder.name : '알 수 없는 폴더'
+})
 
 // 파일 업로드
 const handleFileUpload = (event) => {
   const files = Array.from(event.target.files)
   uploadFiles.value = files
+  uploadFolderLocation.value = null
   showUploadModal.value = true
+  showUploadFolderSelector.value = false // 폴더 선택기 닫기
+  // 폴더 목록이 없을 때만 로드
+  if (!allFolders.value || allFolders.value.length === 0) {
+    loadAllFolders()
+  }
 }
 
 // 파일 업로드 처리
 const uploadFilesToDrive = async () => {
   if (uploadFiles.value.length === 0) return
   
-  const result = await driveStore.uploadFiles(uploadFiles.value)
+  const targetFolderId = uploadFolderLocation.value
+  const result = await driveStore.uploadFiles(uploadFiles.value, targetFolderId)
+  
   if (result.success) {
     uploadFiles.value = []
+    uploadFolderLocation.value = null
     showUploadModal.value = false
+    showUploadFolderSelector.value = false
   } else {
-    console.error('파일 업로드 실패:', result.error)
+    showError('파일 업로드 실패', result.error || '파일 업로드 중 오류가 발생했습니다.')
   }
 }
+
+// 파일 업로드 폴더 선택
+const selectUploadFolder = (folder) => {
+  uploadFolderLocation.value = folder.id
+  showUploadFolderSelector.value = false
+}
+
+// 현재 선택된 업로드 폴더 이름
+const selectedUploadFolderName = computed(() => {
+  if (uploadFolderLocation.value === null) return '최상위 루트'
+  if (!uploadFolderLocation.value) return '폴더를 선택하세요'
+  
+  // 전체 폴더 목록에서 찾기
+  const findFolderInHierarchy = (folders, targetId) => {
+    for (const folder of folders) {
+      if (folder.id === targetId) {
+        return folder
+      }
+      if (folder.children && folder.children.length > 0) {
+        const found = findFolderInHierarchy(folder.children, targetId)
+        if (found) return found
+      }
+    }
+    return null
+  }
+  
+  const folder = findFolderInHierarchy(allFolders.value, uploadFolderLocation.value)
+  return folder ? folder.name : '알 수 없는 폴더'
+})
 
 // 파일 타입 결정
 const getFileType = (mimeType) => {
@@ -606,7 +739,7 @@ const createSharedDoc = async () => {
     showSharedDocModal.value = false
     showFolderSelector.value = false
   } else {
-    console.error('공유문서 생성 실패:', result.error)
+    showError('공유문서 생성 실패', result.error || '공유문서 생성 중 오류가 발생했습니다.')
   }
 }
 
@@ -657,7 +790,22 @@ const selectFolderForSharedDoc = (folder) => {
 const selectedFolderName = computed(() => {
   if (sharedDocLocation.value === null) return '최상위 루트'
   if (!sharedDocLocation.value) return '폴더를 선택하세요'
-  const folder = driveStore.items.find(item => item.id === sharedDocLocation.value)
+  
+  // 전체 폴더 목록에서 찾기
+  const findFolderInHierarchy = (folders, targetId) => {
+    for (const folder of folders) {
+      if (folder.id === targetId) {
+        return folder
+      }
+      if (folder.children && folder.children.length > 0) {
+        const found = findFolderInHierarchy(folder.children, targetId)
+        if (found) return found
+      }
+    }
+    return null
+  }
+  
+  const folder = findFolderInHierarchy(allFolders.value, sharedDocLocation.value)
   return folder ? folder.name : '알 수 없는 폴더'
 })
 
@@ -667,11 +815,15 @@ const closeModals = () => {
   showNewFolderModal.value = false
   showSharedDocModal.value = false
   showFolderSelector.value = false
+  showUploadFolderSelector.value = false
+  showNewFolderParentSelector.value = false
   newFolderName.value = ''
   uploadFiles.value = []
   sharedDocTitle.value = ''
   sharedDocLocation.value = null
   sharedDocIsLocked.value = false
+  uploadFolderLocation.value = null
+  newFolderParentLocation.value = null
 }
 
 // 생명주기
@@ -708,8 +860,12 @@ const handleGlobalClick = (event) => {
 const loadDriveItems = async () => {
   if (!props.currentChannel) return
   
-  const driveChannelSeq = parseInt(props.currentChannel.replace('personal', ''))
-  await driveStore.loadItems(driveChannelSeq, null)
+  try {
+    const driveChannelSeq = parseInt(props.currentChannel.replace('personal', ''))
+    await driveStore.loadItems(driveChannelSeq, null)
+  } catch (error) {
+    showError('목록 조회 실패', '드라이브 목록을 불러오는 중 오류가 발생했습니다.')
+  }
 }
 </script>
 
@@ -801,7 +957,7 @@ const loadDriveItems = async () => {
           variant="text"
           size="small"
           class="new-folder-btn"
-          @click="showNewFolderModal = true"
+          @click="openNewFolderModal"
         >
           <v-icon>mdi-folder-plus</v-icon>
         </v-btn>
@@ -872,11 +1028,6 @@ const loadDriveItems = async () => {
       <div v-if="driveStore.isLoading" class="loading-container">
         <v-progress-circular indeterminate color="primary" />
         <p>로딩 중...</p>
-      </div>
-      
-      <!-- 에러 상태 -->
-      <div v-else-if="driveStore.error" class="error-container">
-        <v-alert type="error" :text="driveStore.error" />
       </div>
       
       <!-- 빈 상태 -->
@@ -1194,7 +1345,7 @@ const loadDriveItems = async () => {
     </v-dialog>
 
     <!-- 공유문서 생성 모달 -->
-    <v-dialog v-model="showSharedDocModal" max-width="600px" @click:outside="closeModals">
+    <v-dialog v-model="showSharedDocModal" max-width="700px" max-height="90vh" @click:outside="closeModals">
       <v-card class="shared-doc-modal">
         <v-card-title class="modal-header">
           <div class="header-content">
@@ -1294,7 +1445,7 @@ const loadDriveItems = async () => {
     </v-dialog>
 
     <!-- 파일 업로드 모달 -->
-    <v-dialog v-model="showUploadModal" max-width="600px" @click:outside="closeModals">
+    <v-dialog v-model="showUploadModal" max-width="700px" max-height="90vh" @click:outside="closeModals">
       <v-card class="upload-modal">
         <v-card-title class="modal-header">
           <div class="header-content">
@@ -1305,6 +1456,59 @@ const loadDriveItems = async () => {
         </v-card-title>
         
         <v-card-text class="modal-body">
+          <!-- 업로드할 폴더 선택 -->
+          <div class="folder-selection mb-4">
+            <label class="input-label">업로드 위치</label>
+            <div class="folder-selector" @click="showUploadFolderSelector = !showUploadFolderSelector">
+              <div class="selected-folder">
+                <v-icon class="folder-icon">mdi-folder</v-icon>
+                <span class="folder-name">{{ selectedUploadFolderName }}</span>
+                <v-icon class="dropdown-icon" :class="{ 'rotated': showUploadFolderSelector }">mdi-chevron-down</v-icon>
+              </div>
+            </div>
+            
+            <!-- 계층형 폴더 선택 드롭다운 -->
+            <div v-if="showUploadFolderSelector" class="folder-dropdown">
+              <div class="folder-list">
+                <!-- 로딩 상태 -->
+                <div v-if="loadingFolders" class="loading-state">
+                  <v-progress-circular size="20" indeterminate></v-progress-circular>
+                  <span>폴더 목록을 불러오는 중...</span>
+                </div>
+                
+                <!-- 최상위 루트 옵션 -->
+                <div 
+                  class="folder-item"
+                  :class="{ 'selected': uploadFolderLocation === null }"
+                  @click="selectUploadFolder({ folderSeq: null, folderName: '최상위 루트' })"
+                >
+                  <v-icon class="expand-placeholder"></v-icon>
+                  <v-icon class="folder-icon" color="#2196f3">mdi-home</v-icon>
+                  <span class="folder-name">최상위 루트</span>
+                  <span v-if="uploadFolderLocation === null" class="selected-indicator">
+                    <v-icon color="primary" size="16">mdi-check</v-icon>
+                  </span>
+                </div>
+                
+                <!-- 계층구조 폴더 목록 -->
+                <div 
+                  v-for="folder in flattenedFolders" 
+                  :key="folder.id"
+                  class="folder-item"
+                  :class="{ 'selected': uploadFolderLocation === folder.id }"
+                  :style="{ paddingLeft: `${20 + folder.level * 20}px` }"
+                  @click="selectUploadFolder(folder)"
+                >
+                  <v-icon class="folder-icon" color="#ff9800">mdi-folder</v-icon>
+                  <span class="folder-name">{{ folder.name }}</span>
+                  <span v-if="uploadFolderLocation === folder.id" class="selected-indicator">
+                    <v-icon color="primary" size="16">mdi-check</v-icon>
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+          
           <div v-if="uploadFiles.length > 0" class="upload-files">
             <div class="upload-files-header">
               <span class="files-count">{{ uploadFiles.length }}개 파일 선택됨</span>
@@ -1403,6 +1607,123 @@ const loadDriveItems = async () => {
         <v-card-actions class="modal-actions">
           <v-spacer></v-spacer>
           <v-btn variant="text" @click="closeDropModal">취소</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
+    <!-- 폴더 생성 모달 -->
+    <v-dialog v-model="showNewFolderModal" max-width="600px" max-height="90vh" @click:outside="closeModals">
+      <v-card class="new-folder-modal">
+        <v-card-title class="modal-header">
+          <div class="header-content">
+            <v-icon class="header-icon" color="primary">mdi-folder-plus</v-icon>
+            <h3 class="modal-title">새 폴더 만들기</h3>
+          </div>
+          <v-btn icon="mdi-close" variant="text" @click="closeModals"></v-btn>
+        </v-card-title>
+        
+        <v-card-text class="modal-body">
+          <v-text-field
+            v-model="newFolderName"
+            label="폴더 이름"
+            placeholder="폴더 이름을 입력하세요"
+            variant="outlined"
+            @keyup.enter="createFolder"
+            autofocus
+            class="mb-4"
+          />
+          
+          <!-- 부모 폴더 선택 -->
+          <div class="folder-selection mb-4">
+            <label class="input-label">생성 위치</label>
+            <div class="folder-selector" @click="showNewFolderParentSelector = !showNewFolderParentSelector">
+              <div class="selected-folder">
+                <v-icon class="folder-icon">mdi-folder</v-icon>
+                <span class="folder-name">{{ selectedNewFolderParentName }}</span>
+                <v-icon class="dropdown-icon" :class="{ 'rotated': showNewFolderParentSelector }">mdi-chevron-down</v-icon>
+              </div>
+            </div>
+            
+            <!-- 계층형 폴더 선택 드롭다운 -->
+            <div v-if="showNewFolderParentSelector" class="folder-dropdown">
+              <div class="folder-list">
+                <!-- 로딩 상태 -->
+                <div v-if="loadingFolders" class="loading-state">
+                  <v-progress-circular size="20" indeterminate></v-progress-circular>
+                  <span>폴더 목록을 불러오는 중...</span>
+                </div>
+                
+                <!-- 최상위 루트 옵션 -->
+                <div 
+                  class="folder-item"
+                  :class="{ 'selected': newFolderParentLocation === null }"
+                  @click="selectNewFolderParent({ folderSeq: null, folderName: '최상위 루트' })"
+                >
+                  <v-icon class="expand-placeholder"></v-icon>
+                  <v-icon class="folder-icon" color="#2196f3">mdi-home</v-icon>
+                  <span class="folder-name">최상위 루트</span>
+                  <span v-if="newFolderParentLocation === null" class="selected-indicator">
+                    <v-icon color="primary" size="16">mdi-check</v-icon>
+                  </span>
+                </div>
+                
+                <!-- 계층구조 폴더 목록 -->
+                <div 
+                  v-for="folder in flattenedFolders" 
+                  :key="folder.id"
+                  class="folder-item"
+                  :class="{ 'selected': newFolderParentLocation === folder.id }"
+                  :style="{ paddingLeft: `${20 + folder.level * 20}px` }"
+                  @click="selectNewFolderParent(folder)"
+                >
+                  <v-icon class="folder-icon" color="#ff9800">mdi-folder</v-icon>
+                  <span class="folder-name">{{ folder.name }}</span>
+                  <span v-if="newFolderParentLocation === folder.id" class="selected-indicator">
+                    <v-icon color="primary" size="16">mdi-check</v-icon>
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </v-card-text>
+        
+        <v-card-actions class="modal-actions">
+          <v-spacer></v-spacer>
+          <v-btn variant="text" @click="closeModals">취소</v-btn>
+          <v-btn 
+            color="primary" 
+            @click="createFolder"
+            :disabled="!newFolderName.trim()"
+          >
+            만들기
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
+    <!-- 에러 모달 -->
+    <v-dialog v-model="showErrorModal" max-width="500px" persistent class="error-dialog">
+      <v-card class="error-modal">
+        <v-card-title class="error-header">
+          <div class="error-title-content">
+            <v-icon class="error-icon" color="error">mdi-alert-circle</v-icon>
+            <h3 class="error-title">{{ errorTitle }}</h3>
+          </div>
+        </v-card-title>
+        
+        <v-card-text class="error-body">
+          <p class="error-message">{{ errorMessage }}</p>
+        </v-card-text>
+        
+        <v-card-actions class="error-actions">
+          <v-spacer></v-spacer>
+          <v-btn 
+            color="primary" 
+            variant="flat"
+            @click="closeErrorModal"
+          >
+            확인
+          </v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>
@@ -1595,7 +1916,6 @@ const loadDriveItems = async () => {
 }
 
 .loading-container,
-.error-container,
 .empty-container {
   display: flex;
   flex-direction: column;
@@ -1930,7 +2250,7 @@ const loadDriveItems = async () => {
   border-radius: 8px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
   z-index: 1000;
-  max-height: 200px;
+  max-height: 300px; /* 높이 더 증가 */
   overflow-y: auto;
   margin-top: 4px;
 }
@@ -2201,6 +2521,63 @@ const loadDriveItems = async () => {
   box-shadow: 0 0 0 2px rgba(var(--v-theme-primary), 0.2);
 }
 
+/* 공유문서 생성 모달 스타일 */
+.shared-doc-modal {
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.shared-doc-modal .modal-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 24px;
+}
+
+.shared-doc-modal .modal-actions {
+  flex-shrink: 0;
+  padding: 16px 24px;
+  border-top: 1px solid rgba(var(--v-theme-on-surface), 0.1);
+}
+
+/* 파일 업로드 모달 스타일 */
+.upload-modal {
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.upload-modal .modal-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 24px;
+}
+
+.upload-modal .modal-actions {
+  flex-shrink: 0;
+  padding: 16px 24px;
+  border-top: 1px solid rgba(var(--v-theme-on-surface), 0.1);
+}
+
+/* 폴더 생성 모달 스타일 */
+.new-folder-modal {
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.new-folder-modal .modal-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 24px;
+}
+
+.new-folder-modal .modal-actions {
+  flex-shrink: 0;
+  padding: 16px 24px;
+  border-top: 1px solid rgba(var(--v-theme-on-surface), 0.1);
+}
+
 /* 로딩 상태 스타일 */
 .loading-state {
   display: flex;
@@ -2218,5 +2595,49 @@ const loadDriveItems = async () => {
 
 .delete-btn:hover {
   background-color: rgba(244, 67, 54, 0.1) !important;
+}
+
+/* 에러 모달 스타일 */
+.error-modal {
+  border-radius: 12px;
+}
+
+.error-header {
+  background: linear-gradient(135deg, #ffebee 0%, #ffcdd2 100%);
+  border-radius: 12px 12px 0 0;
+  padding: 20px 24px;
+}
+
+.error-title-content {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.error-icon {
+  font-size: 24px;
+}
+
+.error-title {
+  margin: 0;
+  color: #d32f2f;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.error-body {
+  padding: 24px;
+}
+
+.error-message {
+  margin: 0;
+  color: rgb(var(--v-theme-on-surface));
+  font-size: 16px;
+  line-height: 1.5;
+}
+
+.error-actions {
+  padding: 16px 24px;
+  border-top: 1px solid rgba(var(--v-theme-on-surface), 0.1);
 }
 </style>

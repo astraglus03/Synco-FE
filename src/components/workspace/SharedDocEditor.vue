@@ -223,6 +223,80 @@ const goBack = () => {
   router.go(-1);
 };
 
+// 디바운싱 함수
+const debounce = (func, delay) => {
+  let timeoutId;
+  const debounced = (...args) => {
+    clearTimeout(timeoutId);
+    timeoutId = setTimeout(() => func.apply(null, args), delay);
+  };
+  
+  // 즉시 실행할 수 있는 flush 메서드 추가
+  debounced.flush = () => {
+    clearTimeout(timeoutId);
+    if (pendingUpdates.size > 0) {
+      sendUpdate(Array.from(pendingUpdates));
+      pendingUpdates.clear();
+    }
+  };
+  
+  return debounced;
+};
+
+// 디바운싱된 업데이트 함수들
+let debouncedUpdate = null;
+let debouncedBatchUpdate = null;
+let pendingUpdates = new Set();
+
+// 실제 업데이트 전송 함수
+const sendUpdate = (updates) => {
+  if (updates.length === 1) {
+    const id = updates[0];
+    const element = document.querySelector(`[data-id="${id}"]`);
+    if (element) {
+      const cleanedHtml = element.outerHTML.replace(/<br class="ProseMirror-trailingBreak">/g, '');
+      sendStompMessage({
+        destination: '/publish/document/update',
+        body: {
+          messageType: 'UPDATE',
+          documentId: props.documentSeq.toString(),
+          senderId: user.name,
+          lineId: id,
+          content: cleanedHtml,
+        },
+      });
+    }
+  } else {
+    const changes = updates.map(id => {
+      const element = document.querySelector(`[data-id="${id}"]`);
+      return element ? {
+        lineId: id,
+        content: element.outerHTML.replace(/<br class="ProseMirror-trailingBreak">/g, ''),
+      } : null;
+    }).filter(c => c);
+
+    console.log(`📦 BATCH_UPDATE: ${changes.length}개`);
+    sendStompMessage({
+      destination: '/publish/document/batch-update',
+      body: {
+        messageType: 'BATCH_UPDATE',
+        documentId: props.documentSeq.toString(),
+        senderId: user.name,
+        changes: changes,
+      },
+    });
+  }
+};
+
+// 디바운싱된 업데이트 함수 초기화
+const initDebouncedFunctions = () => {
+  debouncedUpdate = debounce((updates) => {
+    console.log(`⏰ 디바운싱된 업데이트 전송: ${updates.length}개`);
+    sendUpdate(updates);
+    pendingUpdates.clear();
+  }, 300); // 0.3초 디바운싱
+};
+
 // 문서 로딩 함수
 const loadDocument = async () => {
   try {
@@ -1076,6 +1150,9 @@ onMounted(async () => {
     currentUser: props.currentUser
   });
 
+  // 디바운싱 함수 초기화
+  initDebouncedFunctions();
+
   // 먼저 문서 로딩
   await loadDocument();
   
@@ -1181,45 +1258,16 @@ onMounted(async () => {
         }
       }
 
-      // 5. 변경사항 전송 (배치 또는 단일)
+      // 5. 변경사항 전송 (디바운싱 적용)
       nextTick(() => {
-        // UPDATE 전송
+        // UPDATE 전송 - 디바운싱 적용
         if (updates.length > 0) {
-          if (updates.length === 1) {
-            const id = updates[0];
-            const element = document.querySelector(`[data-id="${id}"]`);
-            if (element) {
-              const cleanedHtml = element.outerHTML.replace(/<br class="ProseMirror-trailingBreak">/g, '');
-              sendStompMessage({
-                destination: '/publish/document/update',
-                body: {
-                  messageType: 'UPDATE',
-                  documentId: props.documentSeq.toString(),
-                  senderId: user.name,
-                  lineId: id,
-                  content: cleanedHtml,
-                },
-              });
-            }
-          } else {
-            const changes = updates.map(id => {
-              const element = document.querySelector(`[data-id="${id}"]`);
-              return element ? {
-                lineId: id,
-                content: element.outerHTML.replace(/<br class="ProseMirror-trailingBreak">/g, ''),
-              } : null;
-            }).filter(c => c);
-
-            console.log(`📦 BATCH_UPDATE: ${changes.length}개`);
-            sendStompMessage({
-              destination: '/publish/document/batch-update',
-              body: {
-                messageType: 'BATCH_UPDATE',
-                documentId: props.documentSeq.toString(),
-                senderId: user.name,
-                changes,
-              },
-            });
+          // 대기 중인 업데이트에 추가
+          updates.forEach(id => pendingUpdates.add(id));
+          
+          // 디바운싱된 업데이트 호출
+          if (debouncedUpdate) {
+            debouncedUpdate(Array.from(pendingUpdates));
           }
         }
 
@@ -1373,6 +1421,12 @@ onMounted(async () => {
   });
 
 onBeforeUnmount(() => {
+  // 대기 중인 업데이트 즉시 전송
+  if (pendingUpdates.size > 0 && debouncedUpdate) {
+    console.log('🚀 페이지 이탈 - 대기 중인 업데이트 즉시 전송:', pendingUpdates.size);
+    debouncedUpdate.flush();
+  }
+  
   // 문서에서 떠남
   leaveDocument();
   

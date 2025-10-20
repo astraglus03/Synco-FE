@@ -13,6 +13,7 @@ export const usePersonalDriveStore = defineStore('personalDrive', () => {
   const isLoading = ref(false)
   const error = ref(null)
   const selectedItems = ref([])
+  const allFolders = ref([])
   
   // 현재 문서 정보
   const currentDocument = ref(null)
@@ -389,7 +390,10 @@ export const usePersonalDriveStore = defineStore('personalDrive', () => {
       const result = await personalDriveApi.getAllFolders(currentDriveChannelSeq.value)
       
       if (result.success) {
-        return { success: true, data: result.data }
+        // API 응답을 DriveItem 형태로 변환
+        const folders = result.data.map(folder => DriveItem.fromApiFormat(folder))
+        allFolders.value = folders
+        return { success: true, data: folders }
       } else {
         error.value = result.error
         return { success: false, error: result.error }
@@ -423,6 +427,36 @@ export const usePersonalDriveStore = defineStore('personalDrive', () => {
     currentPath.value = []
     currentParentId.value = null
     loadItems(currentDriveChannelSeq.value, null)
+  }
+
+  const goToFolder = async (folderId) => {
+    // 전체 폴더 목록이 없으면 먼저 로드
+    if (!allFolders.value || allFolders.value.length === 0) {
+      await getAllFolders()
+    }
+
+    // 폴더 경로를 찾아서 설정
+    const findFolderPath = (folders, targetId, currentPath = []) => {
+      for (const folder of folders) {
+        const newPath = [...currentPath, { id: folder.id, name: folder.name }]
+        if (folder.id === targetId) {
+          return newPath
+        }
+        if (folder.children && folder.children.length > 0) {
+          const found = findFolderPath(folder.children, targetId, newPath)
+          if (found) return found
+        }
+      }
+      return null
+    }
+
+    // 전체 폴더 목록에서 경로 찾기
+    const folderPath = findFolderPath(allFolders.value, folderId)
+    if (folderPath) {
+      currentPath.value = folderPath
+      currentParentId.value = folderId
+      loadItems(currentDriveChannelSeq.value, folderId)
+    }
   }
 
   // 아이템 선택
@@ -469,6 +503,7 @@ export const usePersonalDriveStore = defineStore('personalDrive', () => {
     selectedItems,
     currentDocument,
     documentContent,
+    allFolders,
     
     // 계산된 속성
     currentPathString,
@@ -496,6 +531,7 @@ export const usePersonalDriveStore = defineStore('personalDrive', () => {
     enterFolder,
     goBack,
     goToRoot,
+    goToFolder,
     selectItem,
     clearSelection,
     selectAll,
