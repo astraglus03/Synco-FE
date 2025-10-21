@@ -10,9 +10,9 @@ export const useWorkspaceStore = defineStore('workspace', () => {
   // 워크스페이스 목록
   const workspaces = ref([
     { id: 'personal', name: '내 워크스페이스', type: 'personal', icon: 'mdi-home' },
-    { id: 'team1', name: '스타트업 팀', type: 'team', icon: 'S', members: 6 },
-    { id: 'team2', name: '개발팀', type: 'team', icon: 'D', members: 8 },
-    { id: 'team3', name: '디자인팀', type: 'team', icon: 'G', members: 4 }
+    { id: 'project1', name: '스타트업 프로젝트', type: 'project', icon: 'S', members: 6 },
+    { id: 'project2', name: '개발 프로젝트', type: 'project', icon: 'D', members: 8 },
+    { id: 'project3', name: '디자인 프로젝트', type: 'project', icon: 'G', members: 4 }
   ])
 
   // 현재 워크스페이스 정보

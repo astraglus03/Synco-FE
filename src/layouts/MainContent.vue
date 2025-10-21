@@ -9,7 +9,7 @@ import PersonalChat from '@/components/workspace/PersonalChat.vue'
 import Dashboard from '@/components/workspace/Dashboard.vue'
 import Chat from '@/components/workspace/Chat.vue'
 import Schedule from '@/components/workspace/Schedule.vue'
-import Drive from '@/components/workspace/Drive.vue'
+import ProjectDrive from '@/components/workspace/ProjectDrive.vue'
 import Meeting from '@/components/workspace/Meeting.vue'
 import MemberSidebar from './MemberSidebar.vue'
 
@@ -72,7 +72,7 @@ const currentComponent = computed(() => {
       case 'dashboard': return Dashboard
       case 'chat': return Chat
       case 'schedule': return Schedule
-      case 'drive': return Drive
+      case 'drive': return ProjectDrive
       case 'meeting': return Meeting
       default: return Dashboard
     }

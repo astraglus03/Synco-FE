@@ -6,19 +6,25 @@ import { handleApiResponse } from '@/models/common/ApiResponse'
 // Axios 인스턴스
 // ----------------------
 const apiClient = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:8080',
+  baseURL: import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080',
   timeout: 10000,
   headers: { 'Content-Type': 'application/json' },
   withCredentials: true, // ✅ 쿠키 전송 활성화
 })
 
-// 요청 인터셉터 (토큰 자동 주입) - 주석처리
+// 요청 인터셉터 (토큰 자동 주입) - 테스트용으로 주석처리
 // 모든 API 요청에 자동으로 Authorization 헤더 추가
 apiClient.interceptors.request.use((config) => {
-  const authStore = useAuthStore()
-  if (authStore?.accessToken) {
-    config.headers.Authorization = `Bearer ${authStore.accessToken}`
-  }
+  // 테스트용으로 토큰 비활성화
+  // const mockToken = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c'
+  
+  // if (mockToken) {
+  //   config.headers.Authorization = `Bearer ${mockToken}`
+  // }
+  
+  // X-Member-Seq 헤더 추가 (백엔드에서 사용자 식별용)
+  config.headers['X-Member-Seq'] = '1'
+  
   return config
 })
 
@@ -102,6 +108,14 @@ export const apiPutFormData = async (endpoint, formData) => {
   return handleApiResponse(res).getData()
 }
 
+export const apiPatchModelAttr = async (endpoint, dataObj) => {
+  const res = await apiClient.patch(endpoint, toFormData(dataObj), {
+    headers: { 'Content-Type': 'multipart/form-data' },
+    timeout: 60000,
+  })
+  return handleApiResponse(res).getData()
+}
+
 // ----------------------
 // ModelAttribute 변환 (자동 FormData 변환)
 // ----------------------
@@ -135,10 +149,5 @@ export const apiPutModelAttr = async (endpoint, dataObj) => {
   return handleApiResponse(res).getData()
 }
 
-export const apiPatchModelAttr = async (endpoint, dataObj) => {
-  const res = await apiClient.patch(endpoint, toFormData(dataObj), {
-    headers: { 'Content-Type': 'multipart/form-data' },
-    timeout: 60000,
-  })
-  return handleApiResponse(res).getData()
-}
+// 기본 axios 인스턴스 export (드라이브 API에서 사용)
+export default apiClient

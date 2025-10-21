@@ -5,8 +5,8 @@ const props = defineProps({
   visible: Boolean
 })
 
-// 팀 멤버 목록 (임시 데이터)
-const teamMembers = ref([
+// 프로젝트 멤버 목록 (임시 데이터)
+const projectMembers = ref([
   { 
     id: 1, 
     name: '김민수', 
@@ -75,19 +75,19 @@ const getStatusLabel = (status) => {
 
 // 멤버별 그룹핑
 const onlineMembers = computed(() => 
-  teamMembers.value.filter(member => member.status === 'online')
+  projectMembers.value.filter(member => member.status === 'online')
 )
 
 const awayMembers = computed(() => 
-  teamMembers.value.filter(member => member.status === 'away')
+  projectMembers.value.filter(member => member.status === 'away')
 )
 
 const busyMembers = computed(() => 
-  teamMembers.value.filter(member => member.status === 'busy')
+  projectMembers.value.filter(member => member.status === 'busy')
 )
 
 const offlineMembers = computed(() => 
-  teamMembers.value.filter(member => member.status === 'offline')
+  projectMembers.value.filter(member => member.status === 'offline')
 )
 </script>
 
@@ -97,7 +97,7 @@ const offlineMembers = computed(() =>
     :class="{ 'visible': visible }"
   >
     <div class="member-header">
-      <h3>팀 멤버 ({{ teamMembers.length }}명)</h3>
+      <h3>프로젝트 멤버 ({{ projectMembers.length }}명)</h3>
       <v-btn 
         icon 
         size="small" 

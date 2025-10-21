@@ -9,7 +9,7 @@ import { useWorkspaceStore } from '@/store/workspaceStore'
  * 협업 프로젝트에서 검색 기능을 쉽게 사용할 수 있도록 도와주는 훅
  * 
  * @param {Object} options - 검색 옵션
- * @param {String} options.scope - 검색 범위 ('all', 'current-workspace', 'current-channel', 'personal', 'team')
+ * @param {String} options.scope - 검색 범위 ('all', 'current-workspace', 'current-channel', 'personal', 'project')
  * @param {Array} options.types - 검색할 타입들
  * @param {String} options.placeholder - placeholder 텍스트
  * @param {Boolean} options.autoNavigate - 자동 네비게이션 여부
@@ -184,7 +184,7 @@ export function useGlobalSearch() {
  * 팀 검색 전용 훅
  * 팀 워크스페이스 내 검색에 최적화된 설정
  */
-export function useTeamSearch() {
+export function useProjectSearch() {
   return useSearch({
     scope: 'current-workspace',
     types: ['messages', 'files', 'users', 'channels'],
@@ -234,11 +234,11 @@ export function useDirectChatSearch(chatId) {
  * 팀 채팅 검색 전용 훅
  * 팀 채팅방 내 검색에 최적화된 설정
  */
-export function useTeamChatSearch(teamChatId) {
+export function useProjectChatSearch(projectChatId) {
   return useSearch({
     scope: 'current-channel',
     types: ['messages', 'files'],
     placeholder: '팀 채팅 검색...',
-    channelId: teamChatId
+    channelId: projectChatId
   })
 }

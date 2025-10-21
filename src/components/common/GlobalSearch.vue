@@ -54,7 +54,7 @@ import { useWorkspaceStore } from '@/store/workspaceStore'
  * 협업 프로젝트에서 사용하는 공통 검색 컴포넌트
  * 
  * @param {String} placeholder - 검색 입력창 placeholder
- * @param {String} searchScope - 검색 범위 ('all', 'current-workspace', 'current-channel', 'personal', 'team')
+ * @param {String} searchScope - 검색 범위 ('all', 'current-workspace', 'current-channel', 'personal', 'project')
  * @param {Array} searchTypes - 검색할 타입들 (['messages', 'files', 'users', 'channels'])
  * @param {Boolean} autoNavigate - 검색 결과 선택 시 자동 네비게이션 여부
  * @param {Number} debounceMs - 검색 디바운스 시간 (ms)
@@ -67,7 +67,7 @@ const props = defineProps({
   searchScope: {
     type: String,
     default: 'current-workspace',
-    validator: (value) => ['all', 'current-workspace', 'current-channel', 'personal', 'team'].includes(value)
+    validator: (value) => ['all', 'current-workspace', 'current-channel', 'personal', 'project'].includes(value)
   },
   searchTypes: {
     type: Array,
@@ -141,8 +141,8 @@ const performSearch = async (query) => {
     channelId = props.channelId || workspaceStore.currentChannel
   } else if (props.searchScope === 'personal') {
     searchIndex = 'personal'
-  } else if (props.searchScope === 'team') {
-    searchIndex = 'team'
+  } else if (props.searchScope === 'project') {
+    searchIndex = 'project'
   }
   
   // 실제 API 호출 (현재는 목업 데이터)

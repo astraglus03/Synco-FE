@@ -28,6 +28,12 @@ const routes = [
     meta: { requiresAuth: true }, // 인증 필요
   },
   {
+    path: '/drive/:driveChannelSeq/documents/:documentSeq',
+    name: 'DocumentEditor',
+    component: () => import('@/components/workspace/SharedDocEditor.vue'),
+    props: true,
+  },
+  {
     path: "/oauth/google/redirect",
     name: "GoogleOAuthRedirect",
     component: GoogleRedirect,
@@ -51,7 +57,6 @@ const routes = [
     component: SocialMemberId,
     meta: { requiresAuth: false },
   },
-  
 
 ]
 

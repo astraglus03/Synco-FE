@@ -11,7 +11,7 @@ export const useSearchStore = defineStore('search', () => {
 
   // 검색 설정
   const searchSettings = ref({
-    scope: 'all', // 'all', 'current-workspace', 'current-channel', 'personal', 'team'
+    scope: 'all', // 'all', 'current-workspace', 'current-channel', 'personal', 'project'
     types: ['messages', 'files', 'users', 'channels'],
     includeSubChannels: true,
     dateRange: null,

@@ -3,9 +3,9 @@ import { ref, computed } from 'vue'
 
 const props = defineProps({
   collapsed: Boolean,
-  workspaceType: String, // 'personal' 또는 'team'
+  workspaceType: String, // 'personal' 또는 'project'
   currentChannel: String,
-  currentWorkspaceData: Object, // 팀 워크스페이스 정보
+  currentWorkspaceData: Object, // 프로젝트 워크스페이스 정보
   selectedSubChannel: String // 선택된 하위 채널 ID
 })
 
@@ -33,12 +33,12 @@ const personalChannels = ref([
   { id: 'profile', name: '마이페이지', icon: 'mdi-account-cog', type: 'main' }
 ])
 
-// 팀 워크스페이스 채널 목록
-const teamChannels = ref([
-  { id: 'dashboard', name: '팀 대시보드', icon: 'mdi-view-dashboard', type: 'main' },
+// 프로젝트 워크스페이스 채널 목록
+const projectChannels = ref([
+  { id: 'dashboard', name: '프로젝트 대시보드', icon: 'mdi-view-dashboard', type: 'main' },
   { 
     id: 'chat', 
-    name: '팀 채팅', 
+    name: '프로젝트 채팅', 
     icon: 'mdi-chat', 
     type: 'main',
     expanded: false,
@@ -50,7 +50,7 @@ const teamChannels = ref([
   },
   { 
     id: 'schedule', 
-    name: '팀 일정관리', 
+    name: '프로젝트 일정관리', 
     icon: 'mdi-calendar-check', 
     type: 'main',
     expanded: false,
@@ -101,7 +101,7 @@ const directMessages = ref([
 
 // 현재 채널 목록
 const currentChannels = computed(() => {
-  return props.workspaceType === 'personal' ? personalChannels.value : teamChannels.value
+  return props.workspaceType === 'personal' ? personalChannels.value : projectChannels.value
 })
 
 // 채널 생성
@@ -115,8 +115,8 @@ const createChannel = () => {
     unread: 0
   }
   
-  // 팀 채팅의 하위 채널에 추가
-  const chatChannel = teamChannels.value.find(ch => ch.id === 'chat')
+  // 프로젝트 채팅의 하위 채널에 추가
+  const chatChannel = projectChannels.value.find(ch => ch.id === 'chat')
   if (chatChannel && chatChannel.subChannels) {
     chatChannel.subChannels.push(newChannel)
   }
@@ -146,8 +146,8 @@ const createMeeting = () => {
     isActive: false
   }
   
-  // 팀 화상회의의 하위 채널에 추가
-  const meetingChannel = teamChannels.value.find(ch => ch.id === 'meeting')
+  // 프로젝트 화상회의의 하위 채널에 추가
+  const meetingChannel = projectChannels.value.find(ch => ch.id === 'meeting')
   if (meetingChannel && meetingChannel.subChannels) {
     meetingChannel.subChannels.push(newMeeting)
   }
@@ -173,8 +173,8 @@ const createSchedule = () => {
     type: 'schedule'
   }
   
-  // 팀 일정관리의 하위 채널에 추가
-  const scheduleChannel = teamChannels.value.find(ch => ch.id === 'schedule')
+  // 프로젝트 일정관리의 하위 채널에 추가
+  const scheduleChannel = projectChannels.value.find(ch => ch.id === 'schedule')
   if (scheduleChannel && scheduleChannel.subChannels) {
     scheduleChannel.subChannels.push(newSchedule)
   }
@@ -194,7 +194,7 @@ const closeCreateScheduleModal = () => {
 
 // 채널 선택 함수
 const selectChannel = (channelId) => {
-  const channel = teamChannels.value.find(c => c.id === channelId)
+  const channel = projectChannels.value.find(c => c.id === channelId)
   if (channel && channel.subChannels) {
     // 하위 채널이 있는 경우 토글
     toggleChannel(channelId)
@@ -206,7 +206,7 @@ const selectChannel = (channelId) => {
 
 // 채널 토글
 const toggleChannel = (channelId) => {
-  const channel = teamChannels.value.find(c => c.id === channelId)
+  const channel = projectChannels.value.find(c => c.id === channelId)
   if (channel && channel.subChannels) {
     channel.expanded = !channel.expanded
   }
@@ -240,16 +240,16 @@ const getStatusColor = (status) => {
   <!-- 워크스페이스 사이드바 -->
   <div 
     class="workspace-sidebar"
-    :class="{ 'collapsed': collapsed && workspaceType === 'team' }"
+    :class="{ 'collapsed': collapsed && workspaceType === 'project' }"
   >
     <!-- 메인 채널들 -->
     <div class="channels-section">
-      <!-- 팀 정보 (팀 워크스페이스일 때만 표시) -->
-      <div v-if="workspaceType === 'team' && currentWorkspaceData" class="team-info">
+      <!-- 프로젝트 정보 (프로젝트 워크스페이스일 때만 표시) -->
+      <div v-if="workspaceType === 'project' && currentWorkspaceData" class="project-info">
         <div class="toggle-button" @click="emit('toggle')">
           <v-icon>{{ collapsed ? 'mdi-chevron-right' : 'mdi-chevron-left' }}</v-icon>
         </div>
-        <span v-if="!collapsed" class="team-name">{{ currentWorkspaceData.name }}</span>
+        <span v-if="!collapsed" class="project-name">{{ currentWorkspaceData.name }}</span>
       </div>
       
       <div class="section-title">
@@ -267,7 +267,7 @@ const getStatusColor = (status) => {
             class="channel-item"
             :class="{ 
               'active': currentChannel === channel.id, 
-              'collapsed': collapsed && workspaceType === 'team',
+              'collapsed': collapsed && workspaceType === 'project',
               'has-subchannels': channel.subChannels
             }"
             @click="selectChannel(channel.id)"
@@ -275,27 +275,27 @@ const getStatusColor = (status) => {
             <v-icon class="channel-icon">{{ channel.icon }}</v-icon>
             <span v-if="!collapsed || workspaceType === 'personal'" class="channel-name">{{ channel.name }}</span>
             
-            <!-- 채널 생성 버튼 (팀 채팅일 때만) -->
+            <!-- 채널 생성 버튼 (프로젝트 채팅일 때만) -->
             <v-icon 
-              v-if="channel.id === 'chat' && workspaceType === 'team' && (!collapsed || workspaceType === 'personal')"
+              v-if="channel.id === 'chat' && workspaceType === 'project' && (!collapsed || workspaceType === 'personal')"
               class="create-channel-btn"
               @click.stop="showCreateChannelModal = true"
             >
               mdi-plus
             </v-icon>
             
-            <!-- 화상회의 생성 버튼 (팀 화상회의일 때만) -->
+            <!-- 화상회의 생성 버튼 (프로젝트 화상회의일 때만) -->
             <v-icon 
-              v-if="channel.id === 'meeting' && workspaceType === 'team' && (!collapsed || workspaceType === 'personal')"
+              v-if="channel.id === 'meeting' && workspaceType === 'project' && (!collapsed || workspaceType === 'personal')"
               class="create-channel-btn"
               @click.stop="showCreateMeetingModal = true"
             >
               mdi-plus
             </v-icon>
             
-            <!-- 팀 일정 생성 버튼 (팀 일정관리일 때만) -->
+            <!-- 프로젝트 일정 생성 버튼 (프로젝트 일정관리일 때만) -->
             <v-icon 
-              v-if="channel.id === 'schedule' && workspaceType === 'team' && (!collapsed || workspaceType === 'personal')"
+              v-if="channel.id === 'schedule' && workspaceType === 'project' && (!collapsed || workspaceType === 'personal')"
               class="create-channel-btn"
               @click.stop="showCreateScheduleModal = true"
             >
@@ -357,7 +357,7 @@ const getStatusColor = (status) => {
           v-for="dm in directMessages"
           :key="dm.id"
           class="dm-item"
-          :class="{ 'active': currentChannel === dm.id, 'collapsed': collapsed && workspaceType === 'team' }"
+          :class="{ 'active': currentChannel === dm.id, 'collapsed': collapsed && workspaceType === 'project' }"
           @click="selectDirectMessage(dm.id)"
         >
           <div class="dm-avatar">
@@ -558,8 +558,8 @@ const getStatusColor = (status) => {
   margin-bottom: 16px;
 }
 
-/* 팀 정보 */
-.team-info {
+/* 프로젝트 정보 */
+.project-info {
   display: flex;
   align-items: center;
   gap: 12px;
@@ -569,7 +569,7 @@ const getStatusColor = (status) => {
   border-bottom: 1px solid rgba(var(--v-theme-primary), 0.1);
 }
 
-.workspace-sidebar.collapsed .team-info {
+.workspace-sidebar.collapsed .project-info {
   justify-content: center;
   padding: 8px 12px;
 }
@@ -597,7 +597,7 @@ const getStatusColor = (status) => {
   color: white;
 }
 
-.team-name {
+.project-name {
   font-size: 14px;
   font-weight: 600;
   color: rgb(var(--v-theme-primary));

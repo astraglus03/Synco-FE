@@ -63,12 +63,12 @@ export const useNotificationStore = defineStore('notification', () => {
     }
   ])
 
-  // 팀 스페이스용 알림 데이터
-  const teamNotifications = ref([
+  // 프로젝트 스페이스용 알림 데이터
+  const projectNotifications = ref([
     { 
       id: 7, 
-      type: 'team_task_assigned', 
-      message: '팀 업무가 할당되었습니다', 
+      type: 'project_task_assigned', 
+      message: '프로젝트 업무가 할당되었습니다', 
       time: '3분 전', 
       read: false,
       priority: 'high',
@@ -76,26 +76,26 @@ export const useNotificationStore = defineStore('notification', () => {
         title: '팀 프로젝트 기획서 작성', 
         priority: 'high', 
         dueDate: '2024-01-20',
-        team: '개발팀'
+        project: '개발 프로젝트'
       }
     },
     { 
       id: 8, 
-      type: 'team_meeting_reminder', 
-      message: '팀 회의가 30분 후에 시작됩니다', 
+      type: 'project_meeting_reminder', 
+      message: '프로젝트 회의가 30분 후에 시작됩니다', 
       time: '5분 전', 
       read: false,
       priority: 'high',
       meeting: { 
         title: '주간 스프린트 리뷰', 
         time: '14:00',
-        team: '개발팀'
+        project: '개발 프로젝트'
       }
     },
     { 
       id: 9, 
-      type: 'team_message', 
-      message: '팀 채널에 새로운 메시지가 있습니다', 
+      type: 'project_message', 
+      message: '프로젝트 채널에 새로운 메시지가 있습니다', 
       time: '15분 전', 
       read: false,
       priority: 'normal',
@@ -109,8 +109,8 @@ export const useNotificationStore = defineStore('notification', () => {
 
   // 현재 워크스페이스에 따른 알림 데이터
   const notifications = computed(() => {
-    if (currentWorkspaceType.value === 'team') {
-      return teamNotifications.value
+    if (currentWorkspaceType.value === 'project') {
+      return projectNotifications.value
     } else {
       return personalNotifications.value
     }
@@ -134,16 +134,16 @@ export const useNotificationStore = defineStore('notification', () => {
       filtered = filtered.filter(n => !n.read)
     } else if (activeFilter.value === 'personal_task') {
       filtered = filtered.filter(n => n.type.includes('personal_task'))
-    } else if (activeFilter.value === 'team_task') {
-      filtered = filtered.filter(n => n.type.includes('team_task'))
-    } else if (activeFilter.value === 'team_meeting') {
-      filtered = filtered.filter(n => n.type.includes('team_meeting'))
-    } else if (activeFilter.value === 'team_file') {
-      filtered = filtered.filter(n => n.type.includes('team_file'))
-    } else if (activeFilter.value === 'team_member') {
-      filtered = filtered.filter(n => n.type.includes('team_member'))
-    } else if (activeFilter.value === 'team_project') {
-      filtered = filtered.filter(n => n.type.includes('team_project'))
+    } else if (activeFilter.value === 'project_task') {
+      filtered = filtered.filter(n => n.type.includes('project_task'))
+    } else if (activeFilter.value === 'project_meeting') {
+      filtered = filtered.filter(n => n.type.includes('project_meeting'))
+    } else if (activeFilter.value === 'project_file') {
+      filtered = filtered.filter(n => n.type.includes('project_file'))
+    } else if (activeFilter.value === 'project_member') {
+      filtered = filtered.filter(n => n.type.includes('project_member'))
+    } else if (activeFilter.value === 'project_project') {
+      filtered = filtered.filter(n => n.type.includes('project_project'))
     } else if (activeFilter.value !== 'all') {
       filtered = filtered.filter(n => n.type === activeFilter.value)
     }
@@ -182,7 +182,7 @@ export const useNotificationStore = defineStore('notification', () => {
     notificationSidebarVisible,
     activeFilter,
     personalNotifications,
-    teamNotifications,
+    projectNotifications,
     currentWorkspaceType,
     
     // Getters

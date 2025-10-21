@@ -1,7 +1,8 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { usePermissions, PERMISSIONS } from '@/composables/usePermissions'
-import { usePersonalDriveStore } from '@/store/drive/personalDriveStore'
+import { useProjectDriveStore } from '@/store/drive/projectDriveStore'
 import { useDraggable, useDropZone } from '@vueuse/core'
 import SharedDocEditor from './SharedDocEditor.vue'
 
@@ -10,7 +11,8 @@ const props = defineProps({
 })
 
 const { hasPermission, isManager, isSuper } = usePermissions()
-const driveStore = usePersonalDriveStore()
+const driveStore = useProjectDriveStore()
+const router = useRouter()
 
 // 뷰 모드 (list, grid)
 const viewMode = ref('grid')
@@ -139,12 +141,14 @@ const parseSize = (sizeStr) => {
 // 공유문서 더블클릭으로 문서 편집기 진입
 const openSharedDoc = async (doc) => {
   if (doc.type === 'shared-doc') {
-    const result = await driveStore.loadDocumentContent(doc.id)
-    if (result.success) {
-      showDocEditor.value = true
-    } else {
-      console.error('문서 내용 로드 실패:', result.error)
-    }
+    // 라우트로 문서 편집기 페이지 이동
+    await router.push({
+      name: 'DocumentEditor',
+      params: {
+        driveChannelSeq: 2, // 하드코딩
+        documentSeq: doc.id
+      }
+    })
   }
 }
 
@@ -179,7 +183,7 @@ const saveDocument = async (docData) => {
 // 공유문서 편집기 닫기
 const closeDocEditor = () => {
   showDocEditor.value = false
-  driveStore.currentDocument = null
+  currentDocument.value = null
 }
 
 // 공유문서 잠금 해제/잠금
@@ -340,7 +344,7 @@ const handleDragEnd = () => {
   resetDragState()
 }
 
-// 폴더 이름 변경 시작
+// 이름 변경 시작
 const startRename = (item) => {
   if (item.type !== 'folder' && item.type !== 'shared-doc' && item.type !== 'file') return
   
@@ -363,6 +367,7 @@ const finishRename = async () => {
   }
   
   try {
+    const item = driveStore.items.find(item => item.id === editingItem.value)
     let result
     
     if (editingItemType.value === 'folder') {
@@ -394,7 +399,7 @@ const finishRename = async () => {
   }
 }
 
-// 폴더 이름 변경 취소
+// 이름 변경 취소
 const cancelRename = () => {
   editingItem.value = null
   editingItemType.value = null
@@ -871,7 +876,7 @@ const loadDriveItems = async () => {
   if (!props.currentChannel) return
   
   try {
-    const driveChannelSeq = parseInt(props.currentChannel.replace('personal', ''))
+    const driveChannelSeq = parseInt(props.currentChannel.replace('project', ''))
     await driveStore.loadItems(driveChannelSeq, null)
   } catch (error) {
     showError('목록 조회 실패', '드라이브 목록을 불러오는 중 오류가 발생했습니다.')
@@ -886,7 +891,7 @@ const loadDriveItems = async () => {
       <div class="header-left">
         <h2 class="page-title">
           <v-icon class="title-icon">mdi-folder-multiple</v-icon>
-          개인 드라이브
+          프로젝트 드라이브
         </h2>
         <div class="breadcrumb">
           <template v-for="(item, index) in breadcrumbPath" :key="item.id || 'home'">
@@ -1070,7 +1075,7 @@ const loadDriveItems = async () => {
               <v-icon :color="item.color" size="48">{{ item.icon }}</v-icon>
             </div>
             <div class="item-name" :title="item.name">
-              <!-- 폴더 이름 편집 모드 -->
+              <!-- 이름 편집 모드 -->
               <input
                 v-if="editingItem === item.id && editingItemType === item.type"
                 v-model="editingName"
@@ -1117,7 +1122,6 @@ const loadDriveItems = async () => {
                 <v-icon size="16">mdi-download</v-icon>
               </v-btn>
               
-              <!-- 폴더 이름 변경 버튼 -->
               <!-- 일반 파일 이름 변경 버튼 -->
               <v-btn
                 v-if="item.type === 'file'"
@@ -1228,7 +1232,17 @@ const loadDriveItems = async () => {
           >
             <div class="list-cell name-cell">
               <v-icon :color="item.color" size="20" class="item-icon">{{ item.icon }}</v-icon>
-              <span class="item-name">{{ item.name }}</span>
+              <!-- 이름 편집 모드 -->
+              <input
+                v-if="editingItem === item.id && editingItemType === item.type"
+                v-model="editingName"
+                class="rename-input"
+                @keyup.enter="finishRename"
+                @keyup.escape="cancelRename"
+                ref="renameInput"
+              />
+              <!-- 일반 표시 모드 -->
+              <span v-else class="item-name">{{ item.name }}</span>
               <div v-if="item.type === 'shared-doc'" class="shared-doc-icons">
                 <v-icon 
                   v-if="item.isLocked"
@@ -1257,7 +1271,6 @@ const loadDriveItems = async () => {
                 <v-icon size="16">mdi-download</v-icon>
               </v-btn>
               
-              <!-- 폴더 이름 변경 버튼 -->
               <!-- 일반 파일 이름 변경 버튼 -->
               <v-btn
                 v-if="item.type === 'file'"
@@ -1647,6 +1660,28 @@ const loadDriveItems = async () => {
       </v-card>
     </v-dialog>
 
+    <!-- 공유문서 편집기 -->
+    <v-dialog v-model="showDocEditor" max-width="100%" max-height="100%" persistent>
+      <v-card class="doc-editor-modal">
+        <v-card-title class="modal-header">
+          <div class="header-content">
+            <v-icon class="header-icon" color="primary">mdi-file-document-edit</v-icon>
+            <h3 class="modal-title">{{ currentDocument?.name || '문서 편집' }}</h3>
+          </div>
+          <v-btn icon="mdi-close" variant="text" @click="closeDocEditor"></v-btn>
+        </v-card-title>
+        
+        <v-card-text class="modal-body" style="padding: 0; height: calc(100vh - 120px);">
+          <SharedDocEditor 
+            v-if="currentDocument"
+            :document-seq="currentDocument.id"
+            :drive-channel-seq="2"
+            :current-user="{ id: 1, name: '홍길동' }"
+          />
+        </v-card-text>
+      </v-card>
+    </v-dialog>
+
     <!-- 폴더 생성 모달 -->
     <v-dialog v-model="showNewFolderModal" max-width="600px" max-height="90vh" @click:outside="closeModals">
       <v-card class="new-folder-modal">
@@ -1670,7 +1705,7 @@ const loadDriveItems = async () => {
           />
           
           <!-- 부모 폴더 선택 -->
-          <div class="folder-selection mb-4">
+          <div class="folder-selection">
             <label class="input-label">생성 위치</label>
             <div class="folder-selector" @click="showNewFolderParentSelector = !showNewFolderParentSelector">
               <div class="selected-folder">
@@ -1801,7 +1836,7 @@ const loadDriveItems = async () => {
 }
 
 .title-icon {
-  color: #4caf50;
+  color: rgb(var(--v-theme-primary));
 }
 
 .breadcrumb {
@@ -1864,9 +1899,9 @@ const loadDriveItems = async () => {
 }
 
 .search-input:focus {
-  border-color: #4caf50;
+  border-color: rgb(var(--v-theme-primary));
   background: rgba(var(--v-theme-surface), 1);
-  box-shadow: 0 0 0 2px rgba(76, 175, 80, 0.1);
+  box-shadow: 0 0 0 2px rgba(var(--v-theme-primary), 0.1);
 }
 
 .search-input::placeholder {
@@ -1910,8 +1945,8 @@ const loadDriveItems = async () => {
 .upload-btn:hover,
 .new-folder-btn:hover,
 .new-shared-doc-btn:hover {
-  color: #4caf50;
-  background: rgba(76, 175, 80, 0.1);
+  color: rgb(var(--v-theme-primary));
+  background: rgba(var(--v-theme-primary), 0.1);
 }
 
 .toolbar-right {
@@ -1940,8 +1975,8 @@ const loadDriveItems = async () => {
 }
 
 .sort-controls .v-btn.active {
-  color: #4caf50;
-  background: rgba(76, 175, 80, 0.1);
+  color: rgb(var(--v-theme-primary));
+  background: rgba(var(--v-theme-primary), 0.1);
 }
 
 /* 콘텐츠 */
@@ -1986,17 +2021,17 @@ const loadDriveItems = async () => {
 .grid-item:hover {
   transform: translateY(-2px);
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
-  border-color: rgba(76, 175, 80, 0.3);
+  border-color: rgba(var(--v-theme-primary), 0.3);
 }
 
 .grid-item.selected {
-  border-color: #4caf50;
-  background: rgba(76, 175, 80, 0.05);
+  border-color: rgb(var(--v-theme-primary));
+  background: rgba(var(--v-theme-primary), 0.05);
 }
 
 .grid-item.drag-over {
-  border-color: #4caf50;
-  background: rgba(76, 175, 80, 0.1);
+  border-color: rgb(var(--v-theme-primary));
+  background: rgba(var(--v-theme-primary), 0.1);
   transform: scale(1.02);
 }
 
@@ -2072,13 +2107,13 @@ const loadDriveItems = async () => {
 }
 
 .list-item.selected {
-  background: rgba(76, 175, 80, 0.05);
-  border-left: 3px solid #4caf50;
+  background: rgba(var(--v-theme-primary), 0.05);
+  border-left: 3px solid rgb(var(--v-theme-primary));
 }
 
 .list-item.drag-over {
-  background: rgba(76, 175, 80, 0.1);
-  border-left: 3px solid #4caf50;
+  background: rgba(var(--v-theme-primary), 0.1);
+  border-left: 3px solid rgb(var(--v-theme-primary));
 }
 
 .list-cell {
@@ -2124,7 +2159,7 @@ const loadDriveItems = async () => {
   align-items: center;
   justify-content: space-between;
   padding: 20px 24px;
-  background: linear-gradient(135deg, rgba(76, 175, 80, 0.1), rgba(76, 175, 80, 0.05));
+  background: linear-gradient(135deg, rgba(var(--v-theme-primary), 0.1), rgba(var(--v-theme-primary), 0.05));
   border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.1);
 }
 
@@ -2169,7 +2204,7 @@ const loadDriveItems = async () => {
 .files-count {
   font-size: 14px;
   font-weight: 500;
-  color: #4caf50;
+  color: rgb(var(--v-theme-primary));
 }
 
 .files-list {
@@ -2189,7 +2224,7 @@ const loadDriveItems = async () => {
 }
 
 .file-icon {
-  color: #4caf50;
+  color: rgb(var(--v-theme-primary));
   flex-shrink: 0;
 }
 
@@ -2247,7 +2282,7 @@ const loadDriveItems = async () => {
 }
 
 .folder-selector:hover {
-  border-color: #4caf50;
+  border-color: rgb(var(--v-theme-primary));
   background: rgba(var(--v-theme-surface), 1);
 }
 
@@ -2258,7 +2293,7 @@ const loadDriveItems = async () => {
 }
 
 .folder-icon {
-  color: #4caf50;
+  color: rgb(var(--v-theme-primary));
 }
 
 .folder-name {
@@ -2306,12 +2341,12 @@ const loadDriveItems = async () => {
 }
 
 .folder-item:hover {
-  background: rgba(76, 175, 80, 0.1);
+  background: rgba(var(--v-theme-primary), 0.1);
 }
 
 .folder-item.selected {
-  background: rgba(76, 175, 80, 0.15);
-  border-left: 3px solid #4caf50;
+  background: rgba(var(--v-theme-primary), 0.15);
+  border-left: 3px solid rgb(var(--v-theme-primary));
 }
 
 .expand-icon {
@@ -2333,7 +2368,7 @@ const loadDriveItems = async () => {
 }
 
 .folder-item .folder-icon {
-  color: #4caf50;
+  color: rgb(var(--v-theme-primary));
   width: 20px;
   height: 20px;
 }
@@ -2358,7 +2393,7 @@ const loadDriveItems = async () => {
 }
 
 .shared-icon {
-  color: #4caf50;
+  color: rgb(var(--v-theme-primary));
   opacity: 0.8;
   transition: all 0.2s ease;
 }
@@ -2398,8 +2433,8 @@ const loadDriveItems = async () => {
 }
 
 .action-btn:hover {
-  color: #4caf50;
-  background: rgba(76, 175, 80, 0.1);
+  color: rgb(var(--v-theme-primary));
+  background: rgba(var(--v-theme-primary), 0.1);
 }
 
 .lock-setting {
@@ -2557,6 +2592,16 @@ const loadDriveItems = async () => {
   box-shadow: 0 0 0 2px rgba(var(--v-theme-primary), 0.2);
 }
 
+/* 로딩 상태 스타일 */
+.loading-state {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  color: rgba(var(--v-theme-on-surface), 0.6);
+  font-size: 14px;
+}
+
 /* 공유문서 생성 모달 스타일 */
 .shared-doc-modal {
   max-height: 90vh;
@@ -2614,14 +2659,21 @@ const loadDriveItems = async () => {
   border-top: 1px solid rgba(var(--v-theme-on-surface), 0.1);
 }
 
-/* 로딩 상태 스타일 */
-.loading-state {
+/* 공유문서 편집기 모달 스타일 */
+.doc-editor-modal {
+  height: 100vh;
+  max-height: 100vh;
+}
+
+.doc-editor-modal .v-card {
+  height: 100%;
   display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 12px 16px;
-  color: rgba(var(--v-theme-on-surface), 0.6);
-  font-size: 14px;
+  flex-direction: column;
+}
+
+.doc-editor-modal .modal-body {
+  flex: 1;
+  overflow: hidden;
 }
 
 /* 삭제 버튼 스타일 */
@@ -2634,8 +2686,17 @@ const loadDriveItems = async () => {
 }
 
 /* 에러 모달 스타일 */
+.error-dialog {
+  z-index: 9999 !important;
+}
+
+.error-dialog .v-overlay__content {
+  background: rgba(0, 0, 0, 0.7) !important;
+}
+
 .error-modal {
   border-radius: 12px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
 }
 
 .error-header {
