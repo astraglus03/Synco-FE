@@ -122,6 +122,8 @@
             variant="plain"
             hide-details="auto"
             class="custom-input"
+            @input="formatPhoneNumber"
+            maxlength="13"
           />
         </div>
       </div>
@@ -225,39 +227,6 @@
         </v-btn>
       </div>
 
-      <!-- 소셜 회원가입 시 추가 ID 입력 -->
-      <v-dialog v-model="showSocialIdDialog" max-width="400" persistent>
-        <v-card class="social-id-dialog">
-          <v-card-title class="dialog-title">
-            <v-icon left color="primary">mdi-account-plus</v-icon>
-            추가 정보 입력
-          </v-card-title>
-          <v-card-text>
-            <div class="form-group">
-              <label class="form-label">친구 검색용 ID</label>
-              <div class="input-wrapper">
-                <v-icon class="input-icon">mdi-account</v-icon>
-                <v-text-field
-                  v-model="socialUserId"
-                  placeholder="친구들이 찾을 수 있는 ID를 입력하세요"
-                  :rules="[v => !!v || 'ID를 입력해주세요']"
-                  variant="plain"
-                  hide-details="auto"
-                  class="custom-input"
-                />
-              </div>
-            </div>
-          </v-card-text>
-          <v-card-actions class="dialog-actions">
-            <v-btn @click="showSocialIdDialog = false" variant="outlined">
-              취소
-            </v-btn>
-            <v-btn color="primary" @click="completeSocialSignUp" :disabled="!socialUserId">
-              완료
-            </v-btn>
-          </v-card-actions>
-        </v-card>
-      </v-dialog>
     </div>
 
     <!-- 로그인 링크 -->
@@ -294,8 +263,6 @@ const isLoading = ref(false)
 const socialLoading = ref(null)
 const showPassword = ref(false)
 const showConfirmPassword = ref(false)
-const showSocialIdDialog = ref(false)
-const socialUserId = ref('')
 const currentSocialProvider = ref('')
 
 const formData = ref({
@@ -340,6 +307,19 @@ const nameRules = [
 const phoneRules = [
   v => !v || /^010-\d{4}-\d{4}$/.test(v) || '전화번호는 010-0000-0000 형식으로 입력해야 합니다'
 ]
+
+// 전화번호 포맷팅 함수
+const formatPhoneNumber = (event) => {
+  let value = event.target.value.replace(/[^\d]/g, '') // 숫자만 추출
+  
+  if (value.length >= 7) {
+    value = value.slice(0, 3) + '-' + value.slice(3, 7) + '-' + value.slice(7, 11)
+  } else if (value.length >= 3) {
+    value = value.slice(0, 3) + '-' + value.slice(3)
+  }
+  
+  formData.value.phone = value
+}
 
 // Methods
 const triggerFileInput = () => {
@@ -414,7 +394,6 @@ const handleSignUp = async () => {
       errorMessage = error.message
     }
     
-    // TODO: 사용자에게 에러 메시지 표시 (토스트, 알림 등)
     alert(errorMessage)
   } finally {
     isLoading.value = false
@@ -448,18 +427,6 @@ const handleSocialSignUp = async (provider) => {
   }
 }
 
-const completeSocialSignUp = async () => {
-  if (!socialUserId.value) return
-  
-  try {
-    // TODO: 실제 소셜 회원가입 완료 API 호출 구현
-    // 임시로 에러 발생시킴 (실제 API 연동 전까지)
-    throw new Error('소셜 회원가입 완료 API가 구현되지 않았습니다')
-  } catch (error) {
-    console.error('소셜 회원가입 실패:', error)
-    alert(error.message)
-  }
-}
 </script>
 
 <style scoped>
@@ -677,26 +644,6 @@ const completeSocialSignUp = async () => {
   white-space: nowrap;
 }
 
-/* 약관 동의 */
-.terms-section {
-  margin-bottom: 1.5rem;
-}
-
-.terms-checkbox :deep(.v-label) {
-  color: #6b7280;
-  font-size: 0.875rem;
-  line-height: 1.5;
-}
-
-.terms-link {
-  color: #3b82f6;
-  text-decoration: none;
-  font-weight: 600;
-}
-
-.terms-link:hover {
-  text-decoration: underline;
-}
 
 /* 회원가입 버튼 */
 .signup-button {
@@ -791,22 +738,6 @@ const completeSocialSignUp = async () => {
   background: #fefce8;
 }
 
-/* 소셜 ID 다이얼로그 */
-.social-id-dialog {
-  border-radius: 16px;
-}
-
-.dialog-title {
-  display: flex;
-  align-items: center;
-  font-weight: 600;
-  color: #374151;
-}
-
-.dialog-actions {
-  justify-content: flex-end;
-  gap: 0.5rem;
-}
 
 /* 로그인 링크 */
 .login-link {

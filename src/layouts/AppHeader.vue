@@ -1,11 +1,17 @@
 <script setup>
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
+import { useAuthStore } from '@/store/authStore'
+import * as authApi from '@/api/member/auth'
 
 const props = defineProps({
   isDark: Boolean,
   currentWorkspace: Object,
   memberSidebarVisible: Boolean
 })
+
+const authStore = useAuthStore()
+const router = useRouter()
 
 const emit = defineEmits(['toggle-theme', 'toggle-member-sidebar', 'toggle-notification-sidebar'])
 
@@ -15,6 +21,10 @@ const activeFilter = ref('all')
 
 // 프로필 메뉴 상태
 const profileMenuOpen = ref(false)
+
+// 사용자 프로필 정보 (authStore에서 가져옴)
+const profileImageUrl = ref('')
+const userName = ref('')
 
 // 개인 스페이스용 알림 데이터
 const personalNotifications = ref([
@@ -714,6 +724,63 @@ const resetFiltersOnWorkspaceChange = () => {
 watch(() => props.currentWorkspace, () => {
   resetFiltersOnWorkspaceChange()
 }, { deep: true })
+
+// 사용자 프로필 정보 조회
+const fetchUserInfo = async () => {
+  try {
+    const data = await authApi.getMyPage()
+    profileImageUrl.value = data.profileImageUrl || ''
+    userName.value = data.name || ''
+  } catch (error) {
+    console.error('사용자 정보 조회 실패:', error)
+  }
+}
+
+// 프로필 이미지 표시 (authStore 우선, 없으면 API 데이터)
+const displayProfileImage = computed(() => {
+  // authStore에 user가 있고 profileImageUrl이 명시적으로 설정된 경우 (null 포함)
+  if (authStore.user && 'profileImageUrl' in authStore.user) {
+    return authStore.user.profileImageUrl
+  }
+  // 그렇지 않으면 API 데이터 사용
+  return profileImageUrl.value
+})
+
+// 사용자 이름 첫 글자 (authStore 우선, 없으면 API 데이터)
+const userInitial = computed(() => {
+  const name = authStore.user?.name || userName.value
+  return name ? name.charAt(0) : 'U'
+})
+
+// 마이페이지로 이동 (SPA 라우팅)
+const goToMyPage = () => {
+  profileMenuOpen.value = false
+  router.push('/workspace/personal/profile')
+}
+
+// 로그아웃
+const logout = async () => {
+  profileMenuOpen.value = false
+  try {
+    await authApi.logout()
+    
+    // authStore 초기화
+    authStore.logout()
+    
+    // 랜딩 페이지로 이동
+    window.location.href = '/'
+  } catch (error) {
+    console.error('로그아웃 실패:', error)
+    // 실패해도 로컬 로그아웃 처리
+    authStore.logout()
+    window.location.href = '/'
+  }
+}
+
+// 컴포넌트 마운트 시 사용자 정보 로드
+onMounted(() => {
+  fetchUserInfo()
+})
 </script>
 
 <template>
@@ -818,21 +885,29 @@ watch(() => props.currentWorkspace, () => {
             class="profile-btn"
           >
             <v-avatar size="32" color="primary">
-              <span class="text-white font-weight-bold">U</span>
+              <v-img 
+                v-if="displayProfileImage"
+                :src="displayProfileImage"
+                alt="프로필"
+                cover
+              />
+              <span v-else class="text-white font-weight-bold" style="text-transform: none !important;">{{ userInitial }}</span>
             </v-avatar>
           </v-btn>
         </template>
 
         <v-card class="profile-menu" min-width="200">
           <v-list>
-            <v-list-item>
-              <v-list-item-title>프로필</v-list-item-title>
-              </v-list-item>
-            <v-list-item>
-              <v-list-item-title>설정</v-list-item-title>
+            <v-list-item @click="goToMyPage">
+              <template v-slot:prepend>
+                <v-icon>mdi-account</v-icon>
+              </template>
+              <v-list-item-title>마이페이지</v-list-item-title>
             </v-list-item>
-            <v-divider />
-            <v-list-item>
+            <v-list-item @click="logout">
+              <template v-slot:prepend>
+                <v-icon>mdi-logout</v-icon>
+              </template>
               <v-list-item-title>로그아웃</v-list-item-title>
             </v-list-item>
           </v-list>
