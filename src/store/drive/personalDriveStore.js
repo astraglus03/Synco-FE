@@ -279,6 +279,35 @@ export const usePersonalDriveStore = defineStore('personalDrive', () => {
     }
   }
 
+  const downloadSharedDocument = async (documentId) => {
+    try {
+      const result = await personalDriveApi.downloadDocument(documentId, currentDriveChannelSeq.value, true)
+      
+      if (result.success) {
+        // 문서 이름을 가져오기 위해 아이템에서 찾기
+        const documentItem = items.value.find(item => item.id === documentId)
+        const fileName = documentItem ? `${documentItem.name}.txt` : `${documentId}.txt`
+        
+        const url = window.URL.createObjectURL(new Blob([result.data]))
+        const link = document.createElement('a')
+        link.href = url
+        link.setAttribute('download', fileName)
+        document.body.appendChild(link)
+        link.click()
+        link.remove()
+        window.URL.revokeObjectURL(url)
+        return { success: true }
+      } else {
+        error.value = result.error
+        return { success: false, error: result.error }
+      }
+    } catch (err) {
+      error.value = '공유문서 다운로드에 실패했습니다.'
+      console.error('개인 드라이브 공유문서 다운로드 실패:', err)
+      return { success: false, error: error.value }
+    }
+  }
+
   const loadDocumentContent = async (documentId) => {
     try {
       const result = await personalDriveApi.getDocumentContent(documentId, currentDriveChannelSeq.value, true)
@@ -522,6 +551,7 @@ export const usePersonalDriveStore = defineStore('personalDrive', () => {
     renameDocument,
     downloadFile,
     downloadDocument,
+    downloadSharedDocument,
     loadDocumentContent,
     saveDocumentContent,
     toggleDocumentLock,

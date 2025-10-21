@@ -162,6 +162,16 @@ const downloadFile = async (file) => {
   }
 }
 
+// 공유문서 다운로드
+const downloadSharedDoc = async (doc) => {
+  if (doc.type === 'shared-doc') {
+    const result = await driveStore.downloadSharedDocument(doc.id)
+    if (!result.success) {
+      console.error('공유문서 다운로드 실패:', result.error)
+    }
+  }
+}
+
 // 공유문서 저장
 const saveDocument = async (docData) => {
   const result = await driveStore.saveDocumentContent(docData.id, docData.content)
@@ -1138,6 +1148,19 @@ const loadDriveItems = async () => {
                 <v-icon size="16">mdi-pencil</v-icon>
               </v-btn>
               
+              <!-- 공유문서 다운로드 버튼 -->
+              <v-btn
+                v-if="item.type === 'shared-doc'"
+                icon="mdi-download"
+                size="small"
+                variant="text"
+                class="action-btn"
+                @click.stop="downloadSharedDoc(item)"
+                title="다운로드"
+              >
+                <v-icon size="16">mdi-download</v-icon>
+              </v-btn>
+              
               <!-- 공유문서 이름 변경 버튼 -->
               <v-btn
                 v-if="item.type === 'shared-doc'"
@@ -1272,6 +1295,19 @@ const loadDriveItems = async () => {
                 title="이름 변경"
               >
                 <v-icon size="16">mdi-pencil</v-icon>
+              </v-btn>
+              
+              <!-- 공유문서 다운로드 버튼 -->
+              <v-btn
+                v-if="item.type === 'shared-doc'"
+                icon="mdi-download"
+                size="small"
+                variant="text"
+                class="action-btn"
+                @click.stop="downloadSharedDoc(item)"
+                title="다운로드"
+              >
+                <v-icon size="16">mdi-download</v-icon>
               </v-btn>
               
               <!-- 공유문서 이름 변경 버튼 -->

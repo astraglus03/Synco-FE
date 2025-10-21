@@ -937,49 +937,7 @@ const showLockError = (message) => {
   // this.$toast.error(message);
 };
 
-// 락 라벨 생성 함수
-const createLockLabel = (lineElement, userName) => {
-  const lineId = lineElement.getAttribute('data-id');
-  
-  // 기존 라벨 제거 (에디터 컨테이너에서)
-  const existingLabel = document.querySelector(`.lock-label[data-line-id="${lineId}"]`);
-  if (existingLabel) {
-    existingLabel.remove();
-  }
-  
-  // 새 라벨 생성
-  const label = document.createElement('div');
-  label.className = 'lock-label';
-  label.setAttribute('data-line-id', lineId);
-  label.textContent = `${userName}가 편집 중`;
-  
-  // 라인 요소의 위치 계산
-  const rect = lineElement.getBoundingClientRect();
-  const editorContainer = document.querySelector('.editor-container');
-  const containerRect = editorContainer.getBoundingClientRect();
-  
-  // 라벨 스타일 적용
-  label.style.cssText = `
-    position: fixed;
-    top: ${rect.top - 20}px;
-    left: ${rect.left}px;
-    background-color: #ff9800;
-    color: white;
-    padding: 2px 8px;
-    border-radius: 4px;
-    font-size: 12px;
-    font-weight: bold;
-    z-index: 1000;
-    pointer-events: none;
-    white-space: nowrap;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
-  `;
-  
-  // 에디터 컨테이너에 라벨 추가
-  editorContainer.appendChild(label);
-  
-  console.log('🏷️ 락 라벨 생성:', userName, '위치:', rect.top, rect.left);
-};
+// 기존 플로팅 라벨 로직은 제거됨. CSS ::after로 표시.
 
 // 라인 락 상태 업데이트 함수
 const updateLineLockStatus = () => {
@@ -1002,11 +960,8 @@ const updateLineLockStatus = () => {
           }
         });
         
-        // 기존 락 라벨 제거 (에디터 컨테이너에서)
-        const existingLabel = document.querySelector(`.lock-label[data-line-id="${lineId}"]`);
-        if (existingLabel) {
-          existingLabel.remove();
-        }
+        // 이전에 설정한 락 라벨 속성 제거
+        lineElement.removeAttribute('data-locked-by');
         
         if (isLineLocked(lineId)) {
           const lockInfo = getLineLockUser(lineId);
@@ -1015,9 +970,7 @@ const updateLineLockStatus = () => {
             lineElement.classList.add(`line-locked-by-${lockInfo.userId}`);
             lineElement.setAttribute('data-locked-by', `${lockInfo.userName}가 편집 중`);
             console.log('🔒 라인 락 적용:', lineId, lockInfo.userName, `line-locked-by-${lockInfo.userId}`);
-            
-            // ::before 대신 실제 DOM 요소로 라벨 생성
-            createLockLabel(lineElement, lockInfo.userName);
+            // 라벨은 CSS ::after로 표시됨
           }
         }
       });
@@ -1952,6 +1905,20 @@ const handleIncomingMessage = (message) => {
   border-left: 4px solid #ff9800 !important;
   opacity: 0.7 !important;
   pointer-events: none !important;
+}
+
+/* 락된 라인의 끝부분에 "{이름}가 편집 중" 라벨 표시 */
+::deep([data-locked-by])::after {
+  content: attr(data-locked-by);
+  display: inline-block;
+  margin-left: 8px;
+  padding: 2px 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #ffffff;
+  background-color: #ff9800;
+  border-radius: 4px;
+  vertical-align: middle;
 }
 
 </style>

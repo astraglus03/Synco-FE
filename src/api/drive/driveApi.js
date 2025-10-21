@@ -302,6 +302,19 @@ class DriveApiBase {
     }
   }
 
+  // 공유 문서 다운로드
+  async downloadDocument(documentSeq, driveChannelSeq) {
+    try {
+      const response = await axios.get(this.endpoints.documentDownload(driveChannelSeq, documentSeq), { 
+        responseType: 'blob' 
+      })
+      
+      return createApiResponse(true, response.data)
+    } catch (error) {
+      return handleApiError(error, '문서 다운로드에 실패했습니다.')
+    }
+  }
+
   // 공유 문서 내용 조회
   async getDocumentContent(documentSeq, driveChannelSeq) {
     try {
@@ -418,6 +431,31 @@ export const projectDriveApi = new DriveApiBase(false)
 
 // 개인 드라이브 API 인스턴스
 export const personalDriveApi = new DriveApiBase(true)
+
+// 인스턴스에 downloadDocument 함수 추가 (기존 인스턴스에 함수 추가)
+projectDriveApi.downloadDocument = async function(documentSeq, driveChannelSeq) {
+  try {
+    const response = await axios.get(this.endpoints.documentDownload(driveChannelSeq, documentSeq), { 
+      responseType: 'blob' 
+    })
+    
+    return createApiResponse(true, response.data)
+  } catch (error) {
+    return handleApiError(error, '문서 다운로드에 실패했습니다.')
+  }
+}
+
+personalDriveApi.downloadDocument = async function(documentSeq, driveChannelSeq) {
+  try {
+    const response = await axios.get(this.endpoints.documentDownload(driveChannelSeq, documentSeq), { 
+      responseType: 'blob' 
+    })
+    
+    return createApiResponse(true, response.data)
+  } catch (error) {
+    return handleApiError(error, '문서 다운로드에 실패했습니다.')
+  }
+}
 
 // 통합 드라이브 API (하위 호환성을 위해 유지)
 export const driveApi = {
