@@ -60,7 +60,7 @@ const sendCodeToServer = async (code) => {
     const body = data?.data ?? data
     // 토큰 저장 (AT만, RT는 HttpOnly Cookie로 자동 관리)
     if (body.accessToken) authStore.setAccessToken(body.accessToken)
-    if (body.user) authStore.setUser(body.user)
+    // if (body.user) authStore.setUser(body.user) // 소셜 로그인 user 정보 저장 주석처리
     if (body.needMemberId) {
         window.location.href = '/oauth/member-id'
         return

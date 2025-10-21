@@ -1,5 +1,15 @@
 <script setup>
-// App.vue는 이제 라우터 뷰만 렌더링
+import { onMounted } from 'vue'
+import { useAuthStore } from '@/store/authStore'
+
+// 스토어 인스턴스 생성
+const authStore = useAuthStore()
+
+// 앱 초기화
+onMounted(async () => {
+  // authStore 초기화
+  authStore.initializeAuth()
+})
 </script>
 
 <template>

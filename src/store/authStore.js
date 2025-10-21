@@ -2,7 +2,7 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 
 export const useAuthStore = defineStore('auth', () => {
-  // 토큰 (AT만 localStorage, RT는 HttpOnly Cookie)
+  // 토큰 (AT만 localStorage)
   const accessToken = ref(localStorage.getItem('accessToken') || null)
   
   // 사용자 정보
@@ -31,12 +31,16 @@ export const useAuthStore = defineStore('auth', () => {
 
   // 사용자 정보 설정
   const setUser = (userData) => {
+    // 강제로 반응성 트리거
+    user.value = null
     user.value = userData
+    
     if (userData) {
       localStorage.setItem('user', JSON.stringify(userData))
     } else {
       localStorage.removeItem('user')
     }
+    
   }
 
   // 로그인 (RT는 Cookie로 관리되므로 제외)
@@ -49,6 +53,11 @@ export const useAuthStore = defineStore('auth', () => {
   const logout = () => {
     setAccessToken(null)
     setUser(null)
+    
+    // localStorage의 모든 인증 관련 데이터 삭제
+    localStorage.removeItem('accessToken')
+    localStorage.removeItem('user')
+    
     // RT는 서버에서 Cookie 삭제 처리
   }
 
@@ -57,10 +66,6 @@ export const useAuthStore = defineStore('auth', () => {
     const storedAccessToken = localStorage.getItem('accessToken')
     const storedUser = localStorage.getItem('user')
 
-    // 기존 RT 삭제 (HttpOnly Cookie로 전환되었으므로)
-    if (localStorage.getItem('refreshToken')) {
-      localStorage.removeItem('refreshToken')
-    }
 
     if (storedAccessToken) {
       accessToken.value = storedAccessToken

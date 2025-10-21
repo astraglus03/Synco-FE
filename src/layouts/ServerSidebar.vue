@@ -126,9 +126,9 @@ const isInvited = (userId) => {
 const createWorkspace = () => {
   if (newWorkspaceName.value.trim()) {
     const newWorkspace = {
-      id: `team_${Date.now()}`,
+      id: `project_${Date.now()}`,
       name: newWorkspaceName.value,
-      type: 'team',
+      type: 'project',
       profile: newWorkspaceProfile.value,
       icon: newWorkspaceName.value.charAt(0).toUpperCase(),
       members: 1 + invitedMembers.value.length,
@@ -176,11 +176,11 @@ const getWorkspaceIconColor = (workspace) => {
     <!-- 구분선 -->
     <v-divider class="server-divider" />
 
-    <!-- 팀 워크스페이스들 -->
+    <!-- 프로젝트 워크스페이스들 -->
     <div 
-      v-for="workspace in workspaces.filter(w => w.type === 'team')"
+      v-for="workspace in workspaces.filter(w => w.type === 'project')"
       :key="workspace.id"
-      class="server-icon team"
+      class="server-icon project"
       :class="{ 'active': currentWorkspace === workspace.id }"
       @click="emit('select-workspace', workspace.id)"
     >

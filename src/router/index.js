@@ -35,6 +35,12 @@ const routes = [
     component: Chat
   },
   {
+    path: '/drive/:driveChannelSeq/documents/:documentSeq',
+    name: 'DocumentEditor',
+    component: () => import('@/components/workspace/SharedDocEditor.vue'),
+    props: true,
+  },
+  {
     path: "/oauth/google/redirect",
     name: "GoogleOAuthRedirect",
     component: GoogleRedirect,

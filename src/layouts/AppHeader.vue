@@ -1,11 +1,17 @@
 <script setup>
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
+import { useAuthStore } from '@/store/authStore'
+import * as authApi from '@/api/member/auth'
 
 const props = defineProps({
   isDark: Boolean,
   currentWorkspace: Object,
   memberSidebarVisible: Boolean
 })
+
+const authStore = useAuthStore()
+const router = useRouter()
 
 const emit = defineEmits(['toggle-theme', 'toggle-member-sidebar', 'toggle-notification-sidebar'])
 
@@ -15,6 +21,10 @@ const activeFilter = ref('all')
 
 // 프로필 메뉴 상태
 const profileMenuOpen = ref(false)
+
+// 사용자 프로필 정보 (authStore에서 가져옴)
+const profileImageUrl = ref('')
+const userName = ref('')
 
 // 개인 스페이스용 알림 데이터
 const personalNotifications = ref([
@@ -188,7 +198,7 @@ const personalNotifications = ref([
 const projectNotifications = ref([
   { 
     id: 7, 
-    type: 'team_task_assigned', 
+    type: 'project_task_assigned', 
     message: '팀 업무가 할당되었습니다', 
     time: '3분 전', 
     read: false,
@@ -197,12 +207,12 @@ const projectNotifications = ref([
       title: '팀 프로젝트 기획서 작성', 
       priority: 'high', 
       dueDate: '2024-01-20',
-      team: '개발팀'
+      project: '개발팀'
     }
   },
   { 
     id: 8, 
-    type: 'team_meeting_reminder', 
+    type: 'project_meeting_reminder', 
     message: '팀 회의가 30분 후에 시작됩니다', 
     time: '5분 전', 
     read: false,
@@ -210,12 +220,12 @@ const projectNotifications = ref([
     meeting: { 
       title: '주간 스프린트 리뷰', 
       time: '14:00',
-      team: '개발팀'
+      project: '개발팀'
     }
   },
   { 
     id: 9, 
-    type: 'team_message', 
+    type: 'project_message', 
     message: '팀 채널에 새로운 메시지가 있습니다', 
     time: '15분 전', 
     read: false,
@@ -225,7 +235,7 @@ const projectNotifications = ref([
   },
   { 
     id: 10, 
-    type: 'team_file_shared', 
+    type: 'project_file_shared', 
     message: '팀 파일이 공유되었습니다', 
     time: '1시간 전', 
     read: false,
@@ -233,18 +243,18 @@ const projectNotifications = ref([
     file: { 
       name: '프로젝트_요구사항.pdf', 
       size: '2.3MB',
-      team: '개발팀'
+      project: '개발팀'
     }
   },
   { 
     id: 11, 
-    type: 'team_member_joined', 
+    type: 'project_member_joined', 
     message: '새로운 팀원이 합류했습니다', 
     time: '2시간 전', 
     read: true,
     priority: 'normal',
     user: { name: '이신입', avatar: '이', status: 'online' },
-    team: '디자인팀'
+    project: '디자인팀'
   },
   { 
     id: 12, 
@@ -256,12 +266,12 @@ const projectNotifications = ref([
     project: { 
       name: 'Synco 플랫폼 개발', 
       progress: 75,
-      team: '개발팀'
+      project: '개발팀'
     }
   },
   { 
     id: 13, 
-    type: 'team_task_assigned', 
+    type: 'project_task_assigned', 
     message: '새로운 팀 업무가 할당되었습니다', 
     time: '4시간 전', 
     read: false,
@@ -270,12 +280,12 @@ const projectNotifications = ref([
       title: 'API 문서 작성', 
       priority: 'medium', 
       dueDate: '2024-01-22',
-      team: '개발팀'
+      project: '개발팀'
     }
   },
   { 
     id: 14, 
-    type: 'team_meeting_reminder', 
+    type: 'project_meeting_reminder', 
     message: '팀 회의가 1시간 후에 시작됩니다', 
     time: '5시간 전', 
     read: false,
@@ -283,7 +293,7 @@ const projectNotifications = ref([
     meeting: { 
       title: '디자인 리뷰', 
       time: '15:00',
-      team: '디자인팀'
+      project: '디자인팀'
     }
   },
   { 
@@ -306,7 +316,7 @@ const projectNotifications = ref([
     file: { 
       name: '디자인_가이드라인.pdf', 
       size: '5.2MB',
-      team: '디자인팀'
+      project: '디자인팀'
     }
   },
   { 
@@ -317,7 +327,7 @@ const projectNotifications = ref([
     read: true,
     priority: 'normal',
     user: { name: '김신입', avatar: '김', status: 'online' },
-    team: '개발팀'
+    project: '개발팀'
   },
   { 
     id: 18, 
@@ -330,7 +340,7 @@ const projectNotifications = ref([
       title: '데이터베이스 설계', 
       priority: 'high', 
       dueDate: '2024-01-17',
-      team: '개발팀'
+      project: '개발팀'
     }
   },
   { 
@@ -343,7 +353,7 @@ const projectNotifications = ref([
     project: { 
       name: '모바일 앱 개발', 
       progress: 45,
-      team: '개발팀'
+      project: '개발팀'
     }
   },
   { 
@@ -356,7 +366,7 @@ const projectNotifications = ref([
     meeting: { 
       title: '주간 스프린트 계획', 
       time: '09:00',
-      team: '개발팀'
+      project: '개발팀'
     }
   },
   { 
@@ -369,7 +379,7 @@ const projectNotifications = ref([
     file: { 
       name: '사용자_피드백_정리.xlsx', 
       size: '1.8MB',
-      team: '마케팅팀'
+      project: '마케팅팀'
     }
   },
   { 
@@ -437,16 +447,16 @@ const filteredNotifications = computed(() => {
     filtered = filtered.filter(n => !n.read)
   } else if (activeFilter.value === 'personal_task') {
     filtered = filtered.filter(n => n.type.includes('personal_task'))
-  } else if (activeFilter.value === 'team_task') {
-    filtered = filtered.filter(n => n.type.includes('team_task'))
-  } else if (activeFilter.value === 'team_meeting') {
-    filtered = filtered.filter(n => n.type.includes('team_meeting'))
-  } else if (activeFilter.value === 'team_file') {
-    filtered = filtered.filter(n => n.type.includes('team_file'))
-  } else if (activeFilter.value === 'team_member') {
-    filtered = filtered.filter(n => n.type.includes('team_member'))
-  } else if (activeFilter.value === 'team_project') {
-    filtered = filtered.filter(n => n.type.includes('team_project'))
+  } else if (activeFilter.value === 'project_task') {
+    filtered = filtered.filter(n => n.type.includes('project_task'))
+  } else if (activeFilter.value === 'project_meeting') {
+    filtered = filtered.filter(n => n.type.includes('project_meeting'))
+  } else if (activeFilter.value === 'project_file') {
+    filtered = filtered.filter(n => n.type.includes('project_file'))
+  } else if (activeFilter.value === 'project_member') {
+    filtered = filtered.filter(n => n.type.includes('project_member'))
+  } else if (activeFilter.value === 'project_project') {
+    filtered = filtered.filter(n => n.type.includes('project_project'))
   } else if (activeFilter.value !== 'all') {
     filtered = filtered.filter(n => n.type === activeFilter.value)
   }
@@ -466,16 +476,16 @@ const updateFilterCounts = () => {
       filter.count = currentNotifications.length
     } else if (filter.key === 'personal_task') {
       filter.count = currentNotifications.filter(n => n.type.includes('personal_task')).length
-    } else if (filter.key === 'team_task') {
-      filter.count = currentNotifications.filter(n => n.type.includes('team_task')).length
-    } else if (filter.key === 'team_meeting') {
-      filter.count = currentNotifications.filter(n => n.type.includes('team_meeting')).length
-    } else if (filter.key === 'team_file') {
-      filter.count = currentNotifications.filter(n => n.type.includes('team_file')).length
-    } else if (filter.key === 'team_member') {
-      filter.count = currentNotifications.filter(n => n.type.includes('team_member')).length
-    } else if (filter.key === 'team_project') {
-      filter.count = currentNotifications.filter(n => n.type.includes('team_project')).length
+    } else if (filter.key === 'project_task') {
+      filter.count = currentNotifications.filter(n => n.type.includes('project_task')).length
+    } else if (filter.key === 'project_meeting') {
+      filter.count = currentNotifications.filter(n => n.type.includes('project_meeting')).length
+    } else if (filter.key === 'project_file') {
+      filter.count = currentNotifications.filter(n => n.type.includes('project_file')).length
+    } else if (filter.key === 'project_member') {
+      filter.count = currentNotifications.filter(n => n.type.includes('project_member')).length
+    } else if (filter.key === 'project_project') {
+      filter.count = currentNotifications.filter(n => n.type.includes('project_project')).length
     } else {
       filter.count = currentNotifications.filter(n => n.type === filter.key).length
     }
@@ -714,6 +724,63 @@ const resetFiltersOnWorkspaceChange = () => {
 watch(() => props.currentWorkspace, () => {
   resetFiltersOnWorkspaceChange()
 }, { deep: true })
+
+// 사용자 프로필 정보 조회
+const fetchUserInfo = async () => {
+  try {
+    const data = await authApi.getMyPage()
+    profileImageUrl.value = data.profileImageUrl || ''
+    userName.value = data.name || ''
+  } catch (error) {
+    console.error('사용자 정보 조회 실패:', error)
+  }
+}
+
+// 프로필 이미지 표시 (authStore 우선, 없으면 API 데이터)
+const displayProfileImage = computed(() => {
+  // authStore에 user가 있고 profileImageUrl이 명시적으로 설정된 경우 (null 포함)
+  if (authStore.user && 'profileImageUrl' in authStore.user) {
+    return authStore.user.profileImageUrl
+  }
+  // 그렇지 않으면 API 데이터 사용
+  return profileImageUrl.value
+})
+
+// 사용자 이름 첫 글자 (authStore 우선, 없으면 API 데이터)
+const userInitial = computed(() => {
+  const name = authStore.user?.name || userName.value
+  return name ? name.charAt(0) : 'U'
+})
+
+// 마이페이지로 이동 (SPA 라우팅)
+const goToMyPage = () => {
+  profileMenuOpen.value = false
+  router.push('/workspace/personal/profile')
+}
+
+// 로그아웃
+const logout = async () => {
+  profileMenuOpen.value = false
+  try {
+    await authApi.logout()
+    
+    // authStore 초기화
+    authStore.logout()
+    
+    // 랜딩 페이지로 이동
+    window.location.href = '/'
+  } catch (error) {
+    console.error('로그아웃 실패:', error)
+    // 실패해도 로컬 로그아웃 처리
+    authStore.logout()
+    window.location.href = '/'
+  }
+}
+
+// 컴포넌트 마운트 시 사용자 정보 로드
+onMounted(() => {
+  fetchUserInfo()
+})
 </script>
 
 <template>
@@ -818,21 +885,29 @@ watch(() => props.currentWorkspace, () => {
             class="profile-btn"
           >
             <v-avatar size="32" color="primary">
-              <span class="text-white font-weight-bold">U</span>
+              <v-img 
+                v-if="displayProfileImage"
+                :src="displayProfileImage"
+                alt="프로필"
+                cover
+              />
+              <span v-else class="text-white font-weight-bold" style="text-transform: none !important;">{{ userInitial }}</span>
             </v-avatar>
           </v-btn>
         </template>
 
         <v-card class="profile-menu" min-width="200">
           <v-list>
-            <v-list-item>
-              <v-list-item-title>프로필</v-list-item-title>
-              </v-list-item>
-            <v-list-item>
-              <v-list-item-title>설정</v-list-item-title>
+            <v-list-item @click="goToMyPage">
+              <template v-slot:prepend>
+                <v-icon>mdi-account</v-icon>
+              </template>
+              <v-list-item-title>마이페이지</v-list-item-title>
             </v-list-item>
-            <v-divider />
-            <v-list-item>
+            <v-list-item @click="logout">
+              <template v-slot:prepend>
+                <v-icon>mdi-logout</v-icon>
+              </template>
               <v-list-item-title>로그아웃</v-list-item-title>
             </v-list-item>
           </v-list>
