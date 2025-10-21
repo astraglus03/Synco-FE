@@ -7,6 +7,23 @@ import SockJS from "sockjs-client";
 import Stomp from "webstomp-client";
 import axios from "axios";
 
+// JWT에서 payload 추출
+const parseJwt = (token) => {
+  try {
+    const base64Payload = token.split(".")[1];
+    const jsonPayload = decodeURIComponent(
+      atob(base64Payload)
+        .split("")
+        .map((c) => "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2))
+        .join("")
+    );
+    return JSON.parse(jsonPayload);
+  } catch (e) {
+    console.error("❌ JWT 파싱 실패:", e);
+    return null;
+  }
+};
+
 const props = defineProps({
   currentChannel: String,
 });
@@ -51,6 +68,7 @@ const attachedFiles = ref([]);
 
 // ✅ WebSocket 연결
 const connectWebsocket = () => {
+  console.log("!!!!!!!!!!!!!!!!!!!!!!!!토큰 확인:", token.value);
   if (stompClient.value && stompClient.value.connected) return;
 
   const sockJs = new SockJS(
@@ -70,6 +88,9 @@ const connectWebsocket = () => {
             const parsed = JSON.parse(message.body);
             console.log("📩 메시지 수신:", parsed);
 
+            // ✅ 내가 보낸 메시지는 무시 (서버 broadcast에 포함되므로)
+            if (Number(parsed.senderSeq) === Number(memberSeq.value)) return;
+
             // ✅ 파일 URL 파싱 (BE에서 chatMessageFileUrls 문자열로 전송됨)
             const urls = (parsed.chatMessageFileUrls || "")
               .split(",")
@@ -82,7 +103,7 @@ const connectWebsocket = () => {
               type: "file",
             }));
 
-            // 💬 메시지 구조 변환
+            // 💬 메시지 구조 변환 (사용자 정보 포함)
             const formattedMessage = {
               id: parsed.chatMessageSeq || Date.now(),
               user: parsed.senderName || parsed.senderSeq,
@@ -94,13 +115,26 @@ const connectWebsocket = () => {
               avatar: (parsed.senderName || parsed.senderSeq)
                 .toString()
                 .charAt(0),
+              profileImageUrl: parsed.senderProfileImageUrl || null,
+              senderSeq: parsed.senderSeq,
               isOwn: parsed.senderSeq === memberSeq.value,
               unread: parsed.senderSeq !== memberSeq.value ? 1 : 0,
               files: fileList, // ✅ 추가
             };
 
-            messages.value.push(formattedMessage);
-            scrollToBottom();
+            // 중복 메시지 방지 (자신이 보낸 메시지는 제외)
+            const existingMessage = messages.value.find(
+              (msg) =>
+                msg.id === formattedMessage.id ||
+                (msg.content === formattedMessage.content &&
+                  msg.user === formattedMessage.user &&
+                  msg.time === formattedMessage.time)
+            );
+
+            if (!existingMessage && parsed.senderSeq !== memberSeq.value) {
+              messages.value.push(formattedMessage);
+              scrollToBottom();
+            }
           } catch (e) {
             console.error("메시지 파싱 실패:", e, message.body);
           }
@@ -214,6 +248,7 @@ const uploadFilesToS3 = async () => {
 
 // ✅ 메시지 전송
 const sendMessage = async () => {
+  console.log("===============sendMessage===============", memberSeq.value);
   if (!stompClient.value || !stompClient.value.connected) {
     console.error("WebSocket 연결이 없습니다!");
     return;
@@ -227,21 +262,52 @@ const sendMessage = async () => {
     uploadedUrls = await uploadFilesToS3(); // 🔹 S3 업로드 먼저 실행
   }
 
-  // 1️⃣ 전송할 메시지 데이터 생성
+  // 1️⃣ 전송할 메시지 데이터 생성 (사용자 정보 포함)
+  const currentUserName = localStorage.getItem("memberName") || "사용자";
+  const currentUserProfileImage =
+    localStorage.getItem("profileImageUrl") || null;
+
   const message = {
     senderSeq: memberSeq.value,
+    senderName: currentUserName,
+    senderProfileImageUrl: currentUserProfileImage,
     chatMessageText: newMessage.value,
     chatMessageFileUrls: uploadedUrls.join(","), // 🔹 S3 URL 문자열로 전달
   };
 
-  // 2️⃣ WebSocket 전송
+  // 2️⃣ 즉시 화면에 표시 (로컬 메시지)
+  const localMessage = {
+    id: Date.now(),
+    user: currentUserName,
+    content: newMessage.value,
+    time: new Date().toLocaleTimeString("ko-KR", {
+      hour: "2-digit",
+      minute: "2-digit",
+    }),
+    avatar: currentUserName.charAt(0),
+    profileImageUrl: currentUserProfileImage,
+    senderSeq: memberSeq.value,
+    isOwn: true,
+    unread: 0,
+    files: uploadedUrls.map((url) => ({
+      name: url.split("/").pop(),
+      url,
+      type: "file",
+    })),
+  };
+  messages.value.push(localMessage);
+  scrollToBottom();
+
+  console.log("📤 보내는 메시지:", message);
+
+  // 3️⃣ WebSocket 전송
   stompClient.value.send(
     `/publish/${channelSeq.value}`,
     JSON.stringify(message),
     { Authorization: `Bearer ${token.value}` }
   );
 
-  // 3️⃣ 입력창 초기화
+  // 4️⃣ 입력창 초기화
   newMessage.value = "";
   attachedFiles.value = [];
   showAttachmentMenu.value = false;
@@ -315,15 +381,21 @@ const openFileModal = () => {
 
 const handleCreatePoll = (pollData) => {
   // 투표 메시지 생성
+  const currentUserName = localStorage.getItem("memberName") || "나";
+  const currentUserProfileImage =
+    localStorage.getItem("profileImageUrl") || null;
+
   const pollMessage = {
     id: Date.now(),
-    user: "나",
+    user: currentUserName,
     content: `📊 **${pollData.title}**`,
     time: new Date().toLocaleTimeString("ko-KR", {
       hour: "2-digit",
       minute: "2-digit",
     }),
-    avatar: "나",
+    avatar: currentUserName.charAt(0),
+    profileImageUrl: currentUserProfileImage,
+    senderSeq: memberSeq.value,
     isOwn: true,
     type: "poll",
     pollData: pollData,
@@ -385,43 +457,38 @@ const handleInputChange = () => {
 onMounted(() => {
   window.addEventListener("select-chat-channel", handleSubChannelSelect);
 
-  // ✅ 워크스페이스 & 채널 고정
   const workspaceSeq = 4;
   channelSeq.value = 1;
 
-  // ✅ localStorage에서 로그인된 사용자 정보 가져오기
   const accessToken = localStorage.getItem("accessToken");
-  const memberInfo = localStorage.getItem("memberInfo");
-
   if (!accessToken) {
     console.error("❌ 로그인이 필요합니다. accessToken이 없습니다.");
     return;
   }
 
-  // ✅ 사용자 정보 설정
   token.value = accessToken;
 
-  if (memberInfo) {
-    try {
-      const member = JSON.parse(memberInfo);
-      memberSeq.value = member.memberSeq || member.seq;
-    } catch (e) {
-      console.error("❌ memberInfo 파싱 실패:", e);
-    }
+  // ✅ accessToken에서 memberSeq 추출
+  const payload = parseJwt(accessToken.replace("Bearer ", ""));
+  if (payload && payload.memberSeq) {
+    memberSeq.value = payload.memberSeq;
+  } else if (payload && payload.sub) {
+    memberSeq.value = payload.sub; // 일부 시스템은 sub를 member ID로 씀
   }
 
   console.log("🟢 Chat 시작");
-  console.log("- workspaceSeq:", workspaceSeq);
   console.log("- channelSeq:", channelSeq.value);
   console.log("- memberSeq:", memberSeq.value);
-  console.log("- memberName:", localStorage.getItem("memberName") || "사용자");
-  console.log(
-    "- memberEmail:",
-    localStorage.getItem("memberEmail") || "user@example.com"
-  );
+  console.log("- JWT payload:", payload);
 
-  // ✅ WebSocket 연결
-  connectWebsocket();
+  // ✅ memberSeq 값이 유효할 때만 연결
+  if (memberSeq.value > 0) {
+    connectWebsocket();
+  } else {
+    console.error(
+      "❌ memberSeq가 유효하지 않습니다. JWT payload를 확인하세요."
+    );
+  }
 });
 
 onUnmounted(() => {
