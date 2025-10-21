@@ -38,7 +38,8 @@ const fetchUserInfo = async () => {
       ...authStore.user,
       name: data.name,
       profileImageUrl: data.profileImageUrl,
-      activeStatus: data.activeStatus
+      activeStatus: data.activeStatus,
+      socialType: data.socialType
     })
   } catch (error) {
     console.error('사용자 정보 조회 실패:', error)

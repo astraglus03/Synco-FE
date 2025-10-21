@@ -115,6 +115,9 @@
                   type="email"
                   variant="outlined"
                   class="mb-3"
+                  :readonly="isSocialAccount"
+                  :hint="isSocialAccount ? '소셜 로그인 계정은 이메일을 수정할 수 없습니다' : ''"
+                  persistent-hint
                 />
                 <v-text-field
                   v-model="editForm.phone"
@@ -204,8 +207,8 @@
           </div>
         </v-card>
 
-        <!-- 보안 설정 -->
-        <v-card class="setting-card" elevation="0">
+        <!-- 보안 설정 (소셜 계정은 숨김) -->
+        <v-card v-if="!isSocialAccount" class="setting-card" elevation="0">
           <div class="setting-header">
             <div class="setting-icon">
               <v-icon size="24" color="warning">mdi-shield</v-icon>
@@ -379,7 +382,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, nextTick } from 'vue'
+import { ref, onMounted, nextTick, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/store/authStore'
 import * as authApi from '@/api/member/auth'
@@ -436,6 +439,11 @@ const deleteAccountDialog = ref(false)
 const snackbar = ref(false)
 const snackbarMessage = ref('')
 const snackbarColor = ref('success')
+
+// 소셜 계정 여부 (NORMAL 이외는 소셜)
+const isSocialAccount = computed(() => {
+  return authStore.user?.socialType && authStore.user.socialType !== 'NORMAL'
+})
 
 const showSnackbar = (message, color = 'success') => {
   snackbarMessage.value = message

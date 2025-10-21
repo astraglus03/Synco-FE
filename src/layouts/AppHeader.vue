@@ -1,5 +1,6 @@
 <script setup>
 import { ref, computed, watch, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/store/authStore'
 import * as authApi from '@/api/member/auth'
 
@@ -10,6 +11,7 @@ const props = defineProps({
 })
 
 const authStore = useAuthStore()
+const router = useRouter()
 
 const emit = defineEmits(['toggle-theme', 'toggle-member-sidebar', 'toggle-notification-sidebar'])
 
@@ -750,11 +752,10 @@ const userInitial = computed(() => {
   return name ? name.charAt(0) : 'U'
 })
 
-// 마이페이지로 이동
+// 마이페이지로 이동 (SPA 라우팅)
 const goToMyPage = () => {
   profileMenuOpen.value = false
-  // 개인 워크스페이스의 마이페이지로 이동
-  window.location.href = '/workspace/personal/profile'
+  router.push('/workspace/personal/profile')
 }
 
 // 로그아웃
