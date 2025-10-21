@@ -2,6 +2,24 @@ import axios from 'axios'
 import { useAuthStore } from '@/store/authStore'
 import { handleApiResponse } from '@/models/common/ApiResponse'
 
+// JWT 토큰에서 payload 추출 (디코딩)
+const decodeJWT = (token) => {
+  try {
+    const base64Url = token.split('.')[1]
+    const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/')
+    const jsonPayload = decodeURIComponent(
+      atob(base64)
+        .split('')
+        .map((c) => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
+        .join('')
+    )
+    return JSON.parse(jsonPayload)
+  } catch (error) {
+    console.error('JWT 디코딩 실패:', error)
+    return null
+  }
+}
+
 // ----------------------
 // Axios 인스턴스
 // ----------------------
@@ -20,11 +38,20 @@ apiClient.interceptors.request.use((config) => {
   // 액세스 토큰이 있으면 Authorization 헤더에 추가
   if (authStore.accessToken) {
     config.headers.Authorization = `Bearer ${authStore.accessToken}`
-  }
-  
-  // 사용자 정보가 있으면 X-Member-Seq 헤더 추가
-  if (authStore.memberSeq) {
-    config.headers['X-Member-Seq'] = authStore.memberSeq
+    
+    // JWT에서 memberSeq 추출 (JWT 표준에서는 sub에 사용자 식별자 저장)
+    const payload = decodeJWT(authStore.accessToken)
+    
+    // payload의 sub(subject)를 memberSeq로 사용
+    if (payload && payload.sub) {
+      const memberSeq = parseInt(payload.sub, 10) // 문자열을 숫자로 변환
+      config.headers['X-Member-Seq'] = memberSeq
+      
+      // authStore에 memberSeq가 없으면 저장
+      if (!authStore.memberSeq) {
+        authStore.setMemberSeq(memberSeq)
+      }
+    }
   }
   
   return config

@@ -1,4 +1,4 @@
-import { apiGet, apiPost, apiPostFormData, apiPatchFormData } from '@/utils/api'
+import { apiGet, apiPost, apiPatch, apiPostFormData, apiPatchFormData } from '@/utils/api'
 import { 
   TeamWorkSpaceCreateReqDto,
   TeamWorkSpaceEditReqDto,
@@ -6,6 +6,10 @@ import {
   WorkSpaceInfoResDto,
   WorkSpaceMemberInfoResDto,
   DelegateSuperAuthorityReqDto,
+  GrantAuthorityReqDto,
+  ChannelEditReqDto,
+  ChannelInfoResDto,
+  ChannelMemberResDto,
   Authority
 } from '@/models/workspace/WorkspaceModels'
 
@@ -72,6 +76,58 @@ export const delegateSuperAuthority = async (delegateMemberSeq, workSpaceSeq) =>
   const res = await apiPost('/workspace-service/workspace/delegateSuperAuthority', reqDto)
   console.log('API 응답:', res)
   return res
+}
+
+// ----------------------
+// 채널 목록 조회 API
+// ----------------------
+export const getChatChannels = async (workSpaceSeq) => {
+  const res = await apiGet(`/chat-service/chat/channels/${workSpaceSeq}`)
+  return res.map(channel => ChannelInfoResDto.fromJson(channel))
+}
+
+export const getMeetingChannels = async (workSpaceSeq) => {
+  const res = await apiGet(`/task-service/virtual-meeting/channels/${workSpaceSeq}`)
+  return res.map(channel => ChannelInfoResDto.fromJson(channel))
+}
+
+export const getScheduleChannels = async (workSpaceSeq) => {
+  const res = await apiGet(`/task-service/task/channels/${workSpaceSeq}`)
+  // 일정관리는 List<ChannelMemberResDto>만 반환하므로 바로 반환
+  return res.map(member => ChannelMemberResDto.fromJson(member))
+}
+
+// ----------------------
+// 채널 권한 변경 API
+// ----------------------
+export const changeChatChannelAuthority = async (workSpaceSeq, grantMemberSeq, channelSeq, authority) => {
+  const reqDto = new GrantAuthorityReqDto(workSpaceSeq, grantMemberSeq, channelSeq, authority)
+  return await apiPatch('/chat-service/chat/changeChannelAuthority', reqDto)
+}
+
+export const changeScheduleChannelAuthority = async (workSpaceSeq, grantMemberSeq, authority) => {
+  // 일정관리는 channelSeq가 필요없지만 DTO 형식에 맞춰 null 전달
+  const reqDto = new GrantAuthorityReqDto(workSpaceSeq, grantMemberSeq, null, authority)
+  return await apiPatch('/task-service/task/changeChannelAuthority', reqDto)
+}
+
+export const changeMeetingChannelAuthority = async (workSpaceSeq, grantMemberSeq, authority) => {
+  // 화상회의는 channelSeq가 필요없지만 DTO 형식에 맞춰 null 전달
+  const reqDto = new GrantAuthorityReqDto(workSpaceSeq, grantMemberSeq, null, authority)
+  return await apiPatch('/task-service/virtual-meeting/changeChannelAuthority', reqDto)
+}
+
+// ----------------------
+// 채널 이름 변경 API
+// ----------------------
+export const renameChatChannel = async (channelSeq, channelName) => {
+  const reqDto = new ChannelEditReqDto(channelSeq, channelName)
+  return await apiPatch('/chat-service/chat/rename', reqDto)
+}
+
+export const renameMeetingChannel = async (channelSeq, channelName) => {
+  const reqDto = new ChannelEditReqDto(channelSeq, channelName)
+  return await apiPatch('/task-service/virtual-meeting/rename', reqDto)
 }
 
 // ----------------------

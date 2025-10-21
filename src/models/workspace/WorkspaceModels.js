@@ -212,3 +212,67 @@ export class DelegateSuperAuthorityReqDto {
   }
 }
 
+// ----------------------
+// 채널 권한 부여 요청 DTO
+// ----------------------
+export class GrantAuthorityReqDto {
+  constructor(workSpaceSeq, grantMemberSeq, channelSeq, authority) {
+    this.workSpaceSeq = workSpaceSeq
+    this.grantMemberSeq = grantMemberSeq
+    this.channelSeq = channelSeq
+    this.authority = authority
+  }
+}
+
+// ----------------------
+// 채널 이름 수정 요청 DTO
+// ----------------------
+export class ChannelEditReqDto {
+  constructor(channelSeq, channelName) {
+    this.channelSeq = channelSeq
+    this.channelName = channelName
+  }
+}
+
+// ----------------------
+// 채널 멤버 응답 DTO
+// ----------------------
+export class ChannelMemberResDto {
+  constructor(memberSeq, authority, memberName, memberProfileUrl) {
+    this.memberSeq = memberSeq
+    this.authority = authority
+    this.memberName = memberName
+    this.memberProfileUrl = memberProfileUrl
+  }
+
+  static fromJson(json) {
+    return new ChannelMemberResDto(
+      json.memberSeq,
+      json.authority,
+      json.memberName,
+      json.memberProfileUrl
+    )
+  }
+}
+
+// ----------------------
+// 채널 정보 응답 DTO
+// ----------------------
+export class ChannelInfoResDto {
+  constructor(channelSeq, workSpaceSeq, channelName, channelMemberList) {
+    this.channelSeq = channelSeq
+    this.workSpaceSeq = workSpaceSeq
+    this.channelName = channelName
+    this.channelMemberList = channelMemberList || []
+  }
+
+  static fromJson(json) {
+    return new ChannelInfoResDto(
+      json.channelSeq,
+      json.workSpaceSeq,
+      json.channelName,
+      json.channelMemberList?.map(member => ChannelMemberResDto.fromJson(member)) || []
+    )
+  }
+}
+
