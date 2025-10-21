@@ -1,5 +1,5 @@
 <script setup>
-import { computed, watch } from 'vue'
+import { computed, watch, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useTheme } from 'vuetify'
 import AppHeader from './AppHeader.vue'
@@ -35,7 +35,7 @@ const isDark = computed(() => theme.global.current.value.dark)
 const { setUserRole } = usePermissions()
 
 // URL 파라미터 기반 초기화
-const initializeFromRoute = () => {
+const initializeFromRoute = async () => {
   const workspaceId = route.params.workspaceId || 'personal'
   const channel = route.params.channel || 'dashboard'
   const subChannel = route.params.subChannel || ''
@@ -43,7 +43,7 @@ const initializeFromRoute = () => {
   // 워크스페이스 ID로 직접 찾기
   const workspace = workspaceStore.workspaces.find(w => w.id === workspaceId)
   if (workspace) {
-    workspaceStore.selectWorkspace(workspace.id)
+    await workspaceStore.selectWorkspace(workspace.id)
     workspaceStore.selectChannel(channel)
     workspaceStore.selectedSubChannel = subChannel
     
@@ -62,12 +62,18 @@ const initializeFromRoute = () => {
   }
 }
 
-// 초기화 실행
-initializeFromRoute()
+// 앱 초기화
+onMounted(async () => {
+  // 워크스페이스 목록 로드
+  await workspaceStore.loadMyWorkspaces()
+  
+  // 라우트 초기화
+  await initializeFromRoute()
+})
 
 // URL 변경 감지
-watch(() => route.params, () => {
-  initializeFromRoute()
+watch(() => route.params, async () => {
+  await initializeFromRoute()
 }, { deep: true })
 
 // 워크스페이스 선택 (URL 업데이트 포함)

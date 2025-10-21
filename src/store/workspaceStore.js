@@ -1,5 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
+import { getMyWorkspaces, checkWorkspaceAuthority } from '@/services/WorkspaceService'
+import { Authority } from '@/models/workspace/WorkspaceModels'
 
 export const useWorkspaceStore = defineStore('workspace', () => {
   // 현재 선택된 워크스페이스
@@ -7,12 +9,12 @@ export const useWorkspaceStore = defineStore('workspace', () => {
   const currentChannel = ref('dashboard')
   const selectedSubChannel = ref('')
 
+  // 현재 워크스페이스의 권한 (SUPER or PARTICIPANT)
+  const currentAuthority = ref(null)
+
   // 워크스페이스 목록
   const workspaces = ref([
-    { id: 'personal', name: '내 워크스페이스', type: 'personal', icon: 'mdi-home' },
-    { id: 'project1', name: '스타트업 프로젝트', type: 'project', icon: 'S', members: 6 },
-    { id: 'project2', name: '개발 프로젝트', type: 'project', icon: 'D', members: 8 },
-    { id: 'project3', name: '디자인 프로젝트', type: 'project', icon: 'G', members: 4 }
+    { id: 'personal', name: '내 워크스페이스', type: 'personal', icon: 'mdi-home' }
   ])
 
   // 현재 워크스페이스 정보
@@ -21,10 +23,19 @@ export const useWorkspaceStore = defineStore('workspace', () => {
   })
 
   // 워크스페이스 선택
-  const selectWorkspace = (workspaceId) => {
+  const selectWorkspace = async (workspaceId) => {
     currentWorkspace.value = workspaceId
     currentChannel.value = 'dashboard'
     selectedSubChannel.value = ''
+    
+    // 프로젝트 워크스페이스인 경우 권한 체크
+    const workspace = workspaces.value.find(w => w.id === workspaceId)
+    if (workspace && workspace.type === 'project' && workspace.workSpaceSeq) {
+      await checkAuthority(workspace.workSpaceSeq)
+    } else {
+      // 개인 워크스페이스인 경우 권한 초기화
+      currentAuthority.value = null
+    }
   }
 
   // 채널 선택
@@ -65,11 +76,52 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     workspaces.value.push(workspace)
   }
 
+  // 내 워크스페이스 목록 로드
+  const loadMyWorkspaces = async () => {
+    try {
+      const workspaceList = await getMyWorkspaces()
+      
+      // 기존 personal 워크스페이스 유지하고, API에서 가져온 워크스페이스 추가
+      const personalWorkspace = workspaces.value.find(w => w.type === 'personal')
+      const apiWorkspaces = workspaceList.map(ws => ({
+        id: `workspace_${ws.workSpaceSeq}`,
+        workSpaceSeq: ws.workSpaceSeq,
+        name: ws.workSpaceName,
+        type: 'project',
+        profile: ws.thumbnailImageUrl,
+        icon: ws.iconText
+      }))
+      
+      workspaces.value = personalWorkspace 
+        ? [personalWorkspace, ...apiWorkspaces]
+        : apiWorkspaces
+        
+      return workspaceList
+    } catch (error) {
+      console.error('워크스페이스 목록 로딩 실패:', error)
+      return []
+    }
+  }
+
+  // 워크스페이스 권한 체크
+  const checkAuthority = async (workSpaceSeq) => {
+    try {
+      const authority = await checkWorkspaceAuthority(workSpaceSeq)
+      currentAuthority.value = authority
+      return authority
+    } catch (error) {
+      console.error('워크스페이스 권한 체크 실패:', error)
+      currentAuthority.value = Authority.PARTICIPANT
+      return Authority.PARTICIPANT
+    }
+  }
+
   return {
     // State
     currentWorkspace,
     currentChannel,
     selectedSubChannel,
+    currentAuthority,
     workspaces,
     
     // Getters
@@ -79,6 +131,8 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     selectWorkspace,
     selectChannel,
     selectSubChannel,
-    addWorkspace
+    addWorkspace,
+    loadMyWorkspaces,
+    checkAuthority
   }
 })

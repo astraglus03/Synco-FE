@@ -1,55 +1,68 @@
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, watch, onMounted } from 'vue'
+import { useWorkspaceStore } from '@/store/workspaceStore'
+import { getWorkspaceMembers } from '@/services/WorkspaceService'
 
 const props = defineProps({
   visible: Boolean
 })
 
-// 프로젝트 멤버 목록 (임시 데이터)
-const projectMembers = ref([
-  { 
-    id: 1, 
-    name: '김민수', 
-    role: '프로젝트 매니저', 
-    status: 'online',
-    avatar: '김'
-  },
-  { 
-    id: 2, 
-    name: '이지현', 
-    role: '마케팅 전문가', 
-    status: 'online',
-    avatar: '이'
-  },
-  { 
-    id: 3, 
-    name: '박준영', 
-    role: '개발자', 
-    status: 'away',
-    avatar: '박'
-  },
-  { 
-    id: 4, 
-    name: '최수진', 
-    role: '디자이너', 
-    status: 'online',
-    avatar: '최'
-  },
-  { 
-    id: 5, 
-    name: '정현우', 
-    role: '데이터 분석가', 
-    status: 'busy',
-    avatar: '정'
-  },
-  { 
-    id: 6, 
-    name: '장서연', 
-    role: '운영 관리자', 
-    status: 'online',
-    avatar: '장'
+// Store
+const workspaceStore = useWorkspaceStore()
+
+// 프로젝트 멤버 목록
+const projectMembers = ref([])
+const isLoading = ref(false)
+
+// 멤버 목록 로드
+const loadMembers = async () => {
+  const currentWorkspace = workspaceStore.currentWorkspaceInfo
+  
+  // personal 워크스페이스는 멤버 목록이 없음
+  if (!currentWorkspace || currentWorkspace.type === 'personal') {
+    projectMembers.value = []
+    return
   }
-])
+
+  try {
+    isLoading.value = true
+    const members = await getWorkspaceMembers(currentWorkspace.workSpaceSeq)
+    
+    // 멤버 데이터 매핑 (API의 activeStatus 사용)
+    projectMembers.value = members.map(member => ({
+      id: member.memberSeq,
+      memberSeq: member.memberSeq,
+      name: member.name,
+      profileImageUrl: member.profileImageUrl,
+      avatar: member.avatarText,
+      status: member.uiStatus // API에서 받은 실제 상태 사용
+    }))
+  } catch (error) {
+    console.error('멤버 목록 로딩 실패:', error)
+    projectMembers.value = []
+  } finally {
+    isLoading.value = false
+  }
+}
+
+// 워크스페이스 변경 감지
+watch(() => workspaceStore.currentWorkspace, () => {
+  loadMembers()
+})
+
+// 사이드바 표시 시 멤버 목록 로드
+watch(() => props.visible, (newVisible) => {
+  if (newVisible) {
+    loadMembers()
+  }
+})
+
+// 초기 로드
+onMounted(() => {
+  if (props.visible) {
+    loadMembers()
+  }
+})
 
 // 상태별 색상
 const getStatusColor = (status) => {
@@ -82,12 +95,8 @@ const awayMembers = computed(() =>
   projectMembers.value.filter(member => member.status === 'away')
 )
 
-const busyMembers = computed(() => 
-  projectMembers.value.filter(member => member.status === 'busy')
-)
-
 const offlineMembers = computed(() => 
-  projectMembers.value.filter(member => member.status === 'offline')
+  projectMembers.value.filter(member => member.status === 'offline' || member.status === 'busy')
 )
 </script>
 
@@ -109,20 +118,29 @@ const offlineMembers = computed(() =>
     </div>
 
     <div class="member-content">
-      <!-- 온라인 멤버 -->
-      <div v-if="onlineMembers.length > 0" class="member-group">
+      <!-- 로딩 중 -->
+      <div v-if="isLoading" class="loading-state">
+        <v-progress-circular indeterminate color="primary" size="32" />
+        <p>멤버 목록 불러오는 중...</p>
+      </div>
+
+      <!-- 멤버 목록 -->
+      <template v-else>
+        <!-- 온라인 멤버 -->
+        <div v-if="onlineMembers.length > 0" class="member-group">
         <div class="group-title">
           온라인 ({{ onlineMembers.length }})
         </div>
         <div class="member-list">
           <div
             v-for="member in onlineMembers"
-            :key="member.id"
+            :key="member.memberSeq"
             class="member-item"
           >
             <div class="member-avatar">
               <v-avatar size="32" color="primary">
-                {{ member.avatar }}
+                <img v-if="member.profileImageUrl" :src="member.profileImageUrl" alt="Profile" />
+                <span v-else>{{ member.avatar }}</span>
               </v-avatar>
               <div 
                 class="status-dot"
@@ -131,7 +149,6 @@ const offlineMembers = computed(() =>
             </div>
             <div class="member-info">
               <div class="member-name">{{ member.name }}</div>
-              <div class="member-role">{{ member.role }}</div>
             </div>
           </div>
         </div>
@@ -145,12 +162,13 @@ const offlineMembers = computed(() =>
         <div class="member-list">
           <div
             v-for="member in awayMembers"
-            :key="member.id"
+            :key="member.memberSeq"
             class="member-item"
           >
             <div class="member-avatar">
               <v-avatar size="32" color="primary">
-                {{ member.avatar }}
+                <img v-if="member.profileImageUrl" :src="member.profileImageUrl" alt="Profile" />
+                <span v-else>{{ member.avatar }}</span>
               </v-avatar>
               <div 
                 class="status-dot"
@@ -159,35 +177,6 @@ const offlineMembers = computed(() =>
             </div>
             <div class="member-info">
               <div class="member-name">{{ member.name }}</div>
-              <div class="member-role">{{ member.role }}</div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- 방해 금지 멤버 -->
-      <div v-if="busyMembers.length > 0" class="member-group">
-        <div class="group-title">
-          방해 금지 ({{ busyMembers.length }})
-        </div>
-        <div class="member-list">
-          <div
-            v-for="member in busyMembers"
-            :key="member.id"
-            class="member-item"
-          >
-            <div class="member-avatar">
-              <v-avatar size="32" color="primary">
-                {{ member.avatar }}
-              </v-avatar>
-              <div 
-                class="status-dot"
-                :class="getStatusColor(member.status)"
-              />
-            </div>
-            <div class="member-info">
-              <div class="member-name">{{ member.name }}</div>
-              <div class="member-role">{{ member.role }}</div>
             </div>
           </div>
         </div>
@@ -201,12 +190,13 @@ const offlineMembers = computed(() =>
         <div class="member-list">
           <div
             v-for="member in offlineMembers"
-            :key="member.id"
+            :key="member.memberSeq"
             class="member-item"
           >
             <div class="member-avatar">
               <v-avatar size="32" color="primary">
-                {{ member.avatar }}
+                <img v-if="member.profileImageUrl" :src="member.profileImageUrl" alt="Profile" />
+                <span v-else>{{ member.avatar }}</span>
               </v-avatar>
               <div 
                 class="status-dot"
@@ -215,11 +205,17 @@ const offlineMembers = computed(() =>
             </div>
             <div class="member-info">
               <div class="member-name">{{ member.name }}</div>
-              <div class="member-role">{{ member.role }}</div>
             </div>
           </div>
         </div>
       </div>
+
+      <!-- 멤버가 없을 때 -->
+      <div v-if="!isLoading && projectMembers.length === 0" class="empty-state">
+        <v-icon size="48" color="grey">mdi-account-group</v-icon>
+        <p>프로젝트 멤버가 없습니다</p>
+      </div>
+      </template>
     </div>
   </div>
 </template>
@@ -348,6 +344,46 @@ const offlineMembers = computed(() =>
   text-overflow: ellipsis;
 }
 
+/* 로딩 상태 */
+.loading-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 20px;
+  color: rgba(var(--v-theme-on-surface), 0.6);
+  text-align: center;
+  gap: 12px;
+}
+
+.loading-state p {
+  margin: 0;
+  font-size: 14px;
+}
+
+/* 빈 상태 */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 20px;
+  color: rgba(var(--v-theme-on-surface), 0.6);
+  text-align: center;
+}
+
+.empty-state p {
+  margin: 12px 0 0 0;
+  font-size: 14px;
+}
+
+/* 프로필 이미지 */
+.v-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
 /* 반응형 디자인 */
 @media (max-width: 768px) {
   .member-sidebar {
@@ -355,3 +391,4 @@ const offlineMembers = computed(() =>
   }
 }
 </style>
+

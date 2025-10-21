@@ -2,6 +2,8 @@
 import { ref, computed, watch, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/store/authStore'
+import { useWorkspaceStore } from '@/store/workspaceStore'
+import { Authority } from '@/models/workspace/WorkspaceModels'
 import * as authApi from '@/api/member/auth'
 
 const props = defineProps({
@@ -11,6 +13,7 @@ const props = defineProps({
 })
 
 const authStore = useAuthStore()
+const workspaceStore = useWorkspaceStore()
 const router = useRouter()
 
 const emit = defineEmits(['toggle-theme', 'toggle-member-sidebar', 'toggle-notification-sidebar'])
@@ -611,6 +614,9 @@ const expandedChannels = ref(new Set())
 // 팀명
 const teamName = ref('Synco 개발팀')
 
+// 현재 로그인한 사용자 ID (실제로는 authStore에서 가져와야 함)
+const currentUserId = ref(1)
+
 // 팀원 데이터
 const teamMembers = ref([
   { id: 1, name: '김팀장', avatar: '김', status: 'online' },
@@ -620,22 +626,22 @@ const teamMembers = ref([
   { id: 5, name: '정신입', avatar: '정', status: 'online' }
 ])
 
-// 사이드바 기능 목록
+// 사이드바 기능 목록 (드라이브는 권한 관리 불필요하여 제외)
 const sidebarFeatures = ref([
-  { key: 'dashboard', name: '대시보드', icon: 'mdi-view-dashboard', expanded: false },
+  { key: 'project', name: '프로젝트', icon: 'mdi-view-dashboard', expanded: false },
   { key: 'chat', name: '채팅', icon: 'mdi-message', expanded: false },
   { key: 'schedule', name: '일정관리', icon: 'mdi-calendar', expanded: false },
-  { key: 'drive', name: '드라이브', icon: 'mdi-folder', expanded: false },
   { key: 'meeting', name: '화상회의', icon: 'mdi-video', expanded: false }
 ])
 
 // 각 기능별 팀원 권한
+// 프로젝트: SUPER / PARTICIPANT (2단계)
+// 채팅, 일정관리, 화상회의: SUPER / MANAGER / PARTICIPANT (3단계)
 const memberPermissions = ref({
-  dashboard: { 1: 'MANAGER', 2: 'PARTICIPANT', 3: 'PARTICIPANT', 4: 'PARTICIPANT', 5: 'PARTICIPANT' },
-  chat: { 1: 'MANAGER', 2: 'MANAGER', 3: 'PARTICIPANT', 4: 'PARTICIPANT', 5: 'PARTICIPANT' },
-  schedule: { 1: 'MANAGER', 2: 'PARTICIPANT', 3: 'MANAGER', 4: 'PARTICIPANT', 5: 'PARTICIPANT' },
-  drive: { 1: 'MANAGER', 2: 'PARTICIPANT', 3: 'MANAGER', 4: 'PARTICIPANT', 5: 'PARTICIPANT' },
-  meeting: { 1: 'MANAGER', 2: 'MANAGER', 3: 'PARTICIPANT', 4: 'PARTICIPANT', 5: 'PARTICIPANT' }
+  project: { 1: 'SUPER', 2: 'PARTICIPANT', 3: 'PARTICIPANT', 4: 'PARTICIPANT', 5: 'PARTICIPANT' },
+  chat: { 1: 'SUPER', 2: 'MANAGER', 3: 'PARTICIPANT', 4: 'PARTICIPANT', 5: 'PARTICIPANT' },
+  schedule: { 1: 'SUPER', 2: 'MANAGER', 3: 'PARTICIPANT', 4: 'PARTICIPANT', 5: 'PARTICIPANT' },
+  meeting: { 1: 'SUPER', 2: 'MANAGER', 3: 'PARTICIPANT', 4: 'PARTICIPANT', 5: 'PARTICIPANT' }
 })
 
 // 팀 채널 목록
@@ -679,9 +685,74 @@ const toggleFeature = (featureKey) => {
   }
 }
 
+// 특정 기능에서 SUPER 권한을 가진 멤버 ID 찾기
+const findSuperMember = (featureKey) => {
+  const permissions = memberPermissions.value[featureKey]
+  for (const memberId in permissions) {
+    if (permissions[memberId] === 'SUPER') {
+      return parseInt(memberId)
+    }
+  }
+  return null
+}
+
 // 권한 업데이트
 const updatePermission = (featureKey, memberId, newPermission) => {
-  memberPermissions.value[featureKey][memberId] = newPermission
+  const currentPermission = memberPermissions.value[featureKey][memberId]
+  const currentSuperMemberId = findSuperMember(featureKey)
+  
+  // 1. SUPER 사용자가 자신의 권한을 변경하려는 경우 막기
+  if (memberId === currentUserId.value && currentPermission === 'SUPER') {
+    alert('SUPER 권한을 가진 사용자는 자신의 권한을 변경할 수 없습니다.')
+    return
+  }
+  
+  // 2. 프로젝트가 아닌 기능에서 SUPER로 변경 시도 시 차단
+  if (newPermission === 'SUPER' && featureKey !== 'project') {
+    alert('SUPER 권한은 프로젝트에서만 위임할 수 있습니다.\n다른 기능의 SUPER 권한은 프로젝트 SUPER 권한과 자동으로 동기화됩니다.')
+    return
+  }
+  
+  // 3. 프로젝트에서 다른 사용자를 SUPER로 변경하려는 경우 (SUPER 권한 위임)
+  if (newPermission === 'SUPER' && currentPermission !== 'SUPER' && featureKey === 'project') {
+    const member = teamMembers.value.find(m => m.id === memberId)
+    const confirmed = confirm(`해당 사용자에게 SUPER 권한을 위임하시겠습니까?\n\n${member.name}님에게 SUPER 권한을 위임하면 귀하의 권한은 참여자로 변경됩니다.`)
+    
+    if (!confirmed) {
+      return
+    }
+    
+    // 기존 SUPER 권한자를 PARTICIPANT로 변경
+    if (currentSuperMemberId !== null) {
+      memberPermissions.value[featureKey][currentSuperMemberId] = 'PARTICIPANT'
+    }
+    
+    // 새 사용자를 SUPER로 변경
+    memberPermissions.value[featureKey][memberId] = 'SUPER'
+    
+    // 프로젝트 권한이 변경된 경우 다른 기능의 권한도 동기화
+    syncPermissionsFromProject(memberId, currentSuperMemberId)
+    alert('프로젝트 SUPER 권한이 위임되었습니다.\n모든 기능의 SUPER 권한이 함께 변경되었습니다.')
+  } else {
+    // 일반 권한 변경 (PARTICIPANT ↔ MANAGER)
+    memberPermissions.value[featureKey][memberId] = newPermission
+  }
+}
+
+// 프로젝트 권한 변경 시 다른 모든 기능의 권한 동기화
+const syncPermissionsFromProject = (newSuperMemberId, oldSuperMemberId) => {
+  // 채팅, 일정관리, 화상회의의 권한도 업데이트
+  const features = ['chat', 'schedule', 'meeting']
+  
+  features.forEach(featureKey => {
+    // 기존 SUPER를 PARTICIPANT로 변경
+    if (oldSuperMemberId !== null) {
+      memberPermissions.value[featureKey][oldSuperMemberId] = 'PARTICIPANT'
+    }
+    
+    // 새 SUPER 설정
+    memberPermissions.value[featureKey][newSuperMemberId] = 'SUPER'
+  })
 }
 
 // 팀명 업데이트
@@ -838,9 +909,9 @@ onMounted(() => {
         <v-tooltip activator="parent" location="bottom">알림</v-tooltip>
       </v-btn>
 
-      <!-- 프로젝트 설정 버튼 (프로젝트 워크스페이스일 때만 표시) -->
+      <!-- 프로젝트 설정 버튼 (프로젝트 워크스페이스이고 SUPER 권한일 때만 표시) -->
       <v-btn 
-        v-if="currentWorkspace?.type === 'project'"
+        v-if="currentWorkspace?.type === 'project' && workspaceStore.currentAuthority === 'SUPER'"
         icon 
         variant="text"
         @click="workspaceSettingsOpen = true"
@@ -994,7 +1065,11 @@ onMounted(() => {
                 <div class="members-header">
                   <span class="members-title">팀원 권한</span>
                   <div class="permission-legend">
-                    <div class="legend-item manager">
+                    <div class="legend-item super">
+                      <v-icon size="14">mdi-shield-crown</v-icon>
+                      <span>SUPER</span>
+                    </div>
+                    <div v-if="['chat', 'schedule', 'meeting'].includes(feature.key)" class="legend-item manager">
                       <v-icon size="14">mdi-shield</v-icon>
                       <span>MANAGER</span>
                     </div>
@@ -1016,7 +1091,10 @@ onMounted(() => {
                         <span class="text-white font-weight-bold">{{ member.avatar }}</span>
                       </v-avatar>
                       <div class="member-details">
-                        <div class="member-name">{{ member.name }}</div>
+                        <div class="member-name">
+                          {{ member.name }}
+                          <span v-if="member.id === currentUserId" class="current-user-badge">(본인)</span>
+                        </div>
                         <div 
                           class="status-dot"
                           :class="getStatusColor(member.status)"
@@ -1025,9 +1103,12 @@ onMounted(() => {
                     </div>
                     
                     <div class="permission-toggle">
+                      <!-- 프로젝트: SUPER, PARTICIPANT만 -->
                       <v-btn-toggle
+                        v-if="feature.key === 'project'"
                         :model-value="memberPermissions[feature.key][member.id]"
                         @update:model-value="updatePermission(feature.key, member.id, $event)"
+                        :disabled="member.id === currentUserId && memberPermissions[feature.key][member.id] === 'SUPER'"
                         mandatory
                         density="compact"
                         class="permission-buttons"
@@ -1036,9 +1117,48 @@ onMounted(() => {
                           <v-icon size="14">mdi-account</v-icon>
                           <span>참여</span>
                         </v-btn>
-                        <v-btn value="MANAGER" size="small" class="manager-btn">
+                        <v-btn value="SUPER" size="small" class="super-btn">
+                          <v-icon size="14">mdi-shield-crown</v-icon>
+                          <span>소유자</span>
+                        </v-btn>
+                      </v-btn-toggle>
+                      
+                      <!-- 채팅/일정관리/화상회의: SUPER는 읽기 전용, MANAGER/PARTICIPANT만 변경 가능 -->
+                      <v-btn-toggle
+                        v-else
+                        :model-value="memberPermissions[feature.key][member.id]"
+                        @update:model-value="updatePermission(feature.key, member.id, $event)"
+                        :disabled="member.id === currentUserId && memberPermissions[feature.key][member.id] === 'SUPER'"
+                        mandatory
+                        density="compact"
+                        class="permission-buttons"
+                      >
+                        <v-btn 
+                          value="PARTICIPANT" 
+                          size="small" 
+                          class="participant-btn"
+                          :disabled="memberPermissions[feature.key][member.id] === 'SUPER'"
+                        >
+                          <v-icon size="14">mdi-account</v-icon>
+                          <span>참여</span>
+                        </v-btn>
+                        <v-btn 
+                          value="MANAGER" 
+                          size="small" 
+                          class="manager-btn"
+                          :disabled="memberPermissions[feature.key][member.id] === 'SUPER'"
+                        >
                           <v-icon size="14">mdi-shield</v-icon>
                           <span>관리</span>
+                        </v-btn>
+                        <v-btn 
+                          value="SUPER" 
+                          size="small" 
+                          class="super-btn"
+                          disabled
+                        >
+                          <v-icon size="14">mdi-shield-crown</v-icon>
+                          <span>소유자</span>
                         </v-btn>
                       </v-btn-toggle>
                     </div>
@@ -1418,6 +1538,10 @@ onMounted(() => {
   font-weight: 500;
 }
 
+.legend-item.super {
+  color: #dc2626;
+}
+
 .legend-item.manager {
   color: #f59e0b;
 }
@@ -1465,6 +1589,18 @@ onMounted(() => {
   font-size: 14px;
   font-weight: 500;
   color: rgb(var(--v-theme-on-surface));
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.current-user-badge {
+  font-size: 11px;
+  font-weight: 600;
+  color: rgb(var(--v-theme-primary));
+  background: rgba(var(--v-theme-primary), 0.1);
+  padding: 2px 6px;
+  border-radius: 4px;
 }
 
 .status-dot {
@@ -1493,6 +1629,11 @@ onMounted(() => {
 .permission-buttons {
   border-radius: 8px !important;
   overflow: hidden;
+}
+
+.permission-buttons.v-btn-toggle--disabled {
+  opacity: 0.6;
+  pointer-events: none;
 }
 
 .participant-btn {
@@ -1525,6 +1666,33 @@ onMounted(() => {
   background: #f59e0b !important;
   color: white !important;
   border-color: #f59e0b !important;
+}
+
+.super-btn {
+  color: #dc2626 !important;
+  background: #fef2f2 !important;
+  border: 1px solid #fecaca !important;
+  font-size: 12px !important;
+  font-weight: 500 !important;
+  text-transform: none !important;
+  min-width: 60px !important;
+}
+
+.super-btn.v-btn--active {
+  background: #dc2626 !important;
+  color: white !important;
+  border-color: #dc2626 !important;
+}
+
+.super-btn:disabled,
+.participant-btn:disabled,
+.manager-btn:disabled {
+  opacity: 0.4 !important;
+  cursor: not-allowed !important;
+}
+
+.super-btn:disabled.v-btn--active {
+  opacity: 0.7 !important;
 }
 
 /* 다이얼로그 액션 */

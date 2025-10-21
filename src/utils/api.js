@@ -13,13 +13,18 @@ const apiClient = axios.create({
 })
 
 // 요청 인터셉터 (토큰 자동 주입)
-// 모든 API 요청에 자동으로 Authorization 헤더 추가
+// 모든 API 요청에 자동으로 Authorization 헤더 및 X-Member-Seq 헤더 추가
 apiClient.interceptors.request.use((config) => {
   const authStore = useAuthStore()
   
   // 액세스 토큰이 있으면 Authorization 헤더에 추가
   if (authStore.accessToken) {
     config.headers.Authorization = `Bearer ${authStore.accessToken}`
+  }
+  
+  // 사용자 정보가 있으면 X-Member-Seq 헤더 추가
+  if (authStore.user?.memberSeq) {
+    config.headers['X-Member-Seq'] = authStore.user.memberSeq
   }
   
   return config

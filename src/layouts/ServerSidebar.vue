@@ -1,5 +1,7 @@
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
+import { useWorkspaceStore } from '@/store/workspaceStore'
+import { createWorkspace, getFriendList, searchMembers } from '@/services/WorkspaceService'
 
 const props = defineProps({
   workspaces: Array,
@@ -8,66 +10,32 @@ const props = defineProps({
 
 const emit = defineEmits(['select-workspace'])
 
+// Store
+const workspaceStore = useWorkspaceStore()
+
 // 워크스페이스 생성 다이얼로그 상태
 const createWorkspaceDialog = ref(false)
 const newWorkspaceName = ref('')
 const newWorkspaceProfile = ref('')
+const newWorkspaceProfileFile = ref(null)
 const profileInput = ref(null)
 
 // 친구 관련 상태
 const friendSearchQuery = ref('')
 const selectedFriends = ref([])
 const invitedMembers = ref([])
+const isLoadingFriends = ref(false)
+const isLoadingSearch = ref(false)
 
-// 친구 목록 (임시 데이터)
-const friends = ref([
-  { id: 'kim_minsu', name: '김민수', avatarColor: 'primary' },
-  { id: 'lee_jihyun', name: '이지현', avatarColor: 'success' },
-  { id: 'park_junyoung', name: '박준영', avatarColor: 'warning' },
-  { id: 'choi_sujin', name: '최수진', avatarColor: 'error' },
-  { id: 'jung_hyunwoo', name: '정현우', avatarColor: 'info' },
-  { id: 'han_jisoo', name: '한지수', avatarColor: 'purple' },
-  { id: 'yoon_jiho', name: '윤지호', avatarColor: 'teal' }
-])
+// 친구 목록 (API에서 가져옴)
+const friends = ref([])
 
-// 전체 사용자 목록 (친구 + 일반 사용자)
-const allUsers = ref([
-  // 친구들
-  { id: 'kim_minsu', name: '김민수', avatarColor: 'primary', isFriend: true },
-  { id: 'lee_jihyun', name: '이지현', avatarColor: 'success', isFriend: true },
-  { id: 'park_junyoung', name: '박준영', avatarColor: 'warning', isFriend: true },
-  { id: 'choi_sujin', name: '최수진', avatarColor: 'error', isFriend: true },
-  { id: 'jung_hyunwoo', name: '정현우', avatarColor: 'info', isFriend: true },
-  { id: 'han_jisoo', name: '한지수', avatarColor: 'purple', isFriend: true },
-  { id: 'yoon_jiho', name: '윤지호', avatarColor: 'teal', isFriend: true },
-  
-  // 일반 사용자들
-  { id: 'kim_sohee', name: '김소희', avatarColor: 'pink', isFriend: false },
-  { id: 'lee_donghyun', name: '이동현', avatarColor: 'indigo', isFriend: false },
-  { id: 'park_jiwon', name: '박지원', avatarColor: 'orange', isFriend: false },
-  { id: 'choi_hyunwoo', name: '최현우', avatarColor: 'cyan', isFriend: false },
-  { id: 'jung_soyoung', name: '정소영', avatarColor: 'deep-purple', isFriend: false },
-  { id: 'han_minjae', name: '한민재', avatarColor: 'light-green', isFriend: false },
-  { id: 'yoon_jiyeon', name: '윤지연', avatarColor: 'amber', isFriend: false },
-  { id: 'kang_taewon', name: '강태원', avatarColor: 'red', isFriend: false },
-  { id: 'oh_seunghyun', name: '오승현', avatarColor: 'blue-grey', isFriend: false },
-  { id: 'lim_jihoon', name: '임지훈', avatarColor: 'lime', isFriend: false },
-  { id: 'shin_yeji', name: '신예지', avatarColor: 'deep-orange', isFriend: false },
-  { id: 'kwon_hyunseok', name: '권현석', avatarColor: 'brown', isFriend: false },
-  { id: 'ryu_jihye', name: '류지혜', avatarColor: 'green', isFriend: false },
-  { id: 'song_mingyu', name: '송민규', avatarColor: 'light-blue', isFriend: false },
-  { id: 'jang_hyunwoo', name: '장현우', avatarColor: 'purple', isFriend: false }
-])
+// 검색 결과 목록
+const searchResults = ref([])
 
-// 필터링된 사용자 목록 (친구 + 일반 사용자)
+// 필터링된 사용자 목록 (검색 결과)
 const filteredUsers = computed(() => {
-  if (!friendSearchQuery.value.trim()) {
-    return allUsers.value
-  }
-  return allUsers.value.filter(user => 
-    user.name.toLowerCase().includes(friendSearchQuery.value.toLowerCase()) ||
-    user.id.toLowerCase().includes(friendSearchQuery.value.toLowerCase())
-  )
+  return searchResults.value
 })
 
 // 프로필 이미지 선택
@@ -79,6 +47,7 @@ const selectProfileImage = () => {
 const handleProfileImageChange = (event) => {
   const file = event.target.files[0]
   if (file) {
+    newWorkspaceProfileFile.value = file
     const reader = new FileReader()
     reader.onload = (e) => {
       newWorkspaceProfile.value = e.target.result
@@ -87,9 +56,76 @@ const handleProfileImageChange = (event) => {
   }
 }
 
-// 친구 검색
-const searchFriends = () => {
-  // 검색 로직은 computed에서 처리됨
+// 친구 목록 가져오기
+const loadFriendList = async () => {
+  try {
+    isLoadingFriends.value = true
+    const response = await getFriendList('', 0, 50)
+    
+    // API 응답이 배열인지, 페이징 객체인지 확인
+    const friendList = Array.isArray(response) ? response : (response.content || [])
+    
+    friends.value = friendList.map(friend => ({
+      id: friend.memberId || friend.id,
+      memberSeq: friend.memberSeq || friend.friendSeq,
+      name: friend.name,
+      email: friend.email,
+      profileImage: friend.profileImage,
+      avatarText: friend.name ? friend.name.charAt(0) : '?',
+      avatarColor: getRandomColor(),
+      isFriend: true
+    }))
+  } catch (error) {
+    console.error('친구 목록 로딩 실패:', error)
+    // alert('친구 목록을 불러오는데 실패했습니다.')
+  } finally {
+    isLoadingFriends.value = false
+  }
+}
+
+// 회원 검색
+const searchMembersDebounced = ref(null)
+watch(friendSearchQuery, (newValue) => {
+  if (searchMembersDebounced.value) {
+    clearTimeout(searchMembersDebounced.value)
+  }
+  
+  if (!newValue.trim()) {
+    searchResults.value = []
+    return
+  }
+  
+  searchMembersDebounced.value = setTimeout(async () => {
+    try {
+      isLoadingSearch.value = true
+      const response = await searchMembers(newValue, 0, 20)
+      
+      // API 응답이 배열인지, 페이징 객체인지 확인
+      const memberList = Array.isArray(response) ? response : (response.content || [])
+      
+      searchResults.value = memberList.map(member => ({
+        id: member.memberId || member.id,
+        memberSeq: member.memberSeq,
+        name: member.name,
+        email: member.email,
+        profileImage: member.profileImage,
+        avatarText: member.name ? member.name.charAt(0) : '?',
+        avatarColor: getRandomColor(),
+        isFriend: member.isFriend || false
+      }))
+    } catch (error) {
+      console.error('회원 검색 실패:', error)
+      searchResults.value = []
+    } finally {
+      isLoadingSearch.value = false
+    }
+  }, 300)
+})
+
+// 랜덤 아바타 색상 생성
+const getRandomColor = () => {
+  const colors = ['primary', 'success', 'warning', 'error', 'info', 'purple', 'teal', 'pink', 'indigo', 'orange']
+  return colors[Math.floor(Math.random() * colors.length)]
 }
 
 // 친구 선택 토글 (기존 함수 유지)
@@ -104,40 +140,57 @@ const toggleFriendSelection = (friendId) => {
 
 // 초대 목록에 추가
 const addToInviteList = (user) => {
-  if (!isInvited(user.id)) {
+  if (!isInvited(user.memberSeq || user.id)) {
     invitedMembers.value.push(user)
   }
 }
 
 // 초대 목록에서 제거
-const removeFromInviteList = (userId) => {
-  const index = invitedMembers.value.findIndex(member => member.id === userId)
+const removeFromInviteList = (userSeq) => {
+  const index = invitedMembers.value.findIndex(member => (member.memberSeq || member.id) === userSeq)
   if (index > -1) {
     invitedMembers.value.splice(index, 1)
   }
 }
 
 // 초대되었는지 확인
-const isInvited = (userId) => {
-  return invitedMembers.value.some(member => member.id === userId)
+const isInvited = (userSeq) => {
+  return invitedMembers.value.some(member => (member.memberSeq || member.id) === userSeq)
 }
 
-// 워크스페이스 생성 함수
-const createWorkspace = () => {
-  if (newWorkspaceName.value.trim()) {
-    const newWorkspace = {
-      id: `project_${Date.now()}`,
-      name: newWorkspaceName.value,
-      type: 'project',
-      profile: newWorkspaceProfile.value,
-      icon: newWorkspaceName.value.charAt(0).toUpperCase(),
-      members: 1 + invitedMembers.value.length,
-      invitedMembers: invitedMembers.value
-    }
+// 프로젝트 생성 함수
+const handleCreateWorkspace = async () => {
+  if (!newWorkspaceName.value.trim()) {
+    alert('프로젝트 이름을 입력해주세요.')
+    return
+  }
+
+  try {
+    // memberList 생성 (memberSeq 배열)
+    const memberList = invitedMembers.value.map(member => member.memberSeq)
     
-    // 워크스페이스 목록에 추가 (실제로는 API 호출)
-    emit('select-workspace', newWorkspace.id)
+    // API 호출
+    const createdWorkspace = await createWorkspace(
+      newWorkspaceName.value,
+      newWorkspaceProfileFile.value,
+      memberList
+    )
+    
+    // 성공 메시지
+    alert(`프로젝트 "${createdWorkspace.workSpaceName}"가 성공적으로 생성되었습니다!`)
+    
+    // 워크스페이스 목록 새로고침 (API에서 최신 목록 가져오기)
+    await workspaceStore.loadMyWorkspaces()
+    
+    // 생성된 워크스페이스로 이동
+    const newWorkspaceId = `workspace_${createdWorkspace.workSpaceSeq}`
+    emit('select-workspace', newWorkspaceId)
+    
+    // 모달 닫기
     closeCreateWorkspaceDialog()
+  } catch (error) {
+    console.error('프로젝트 생성 실패:', error)
+    alert('프로젝트 생성에 실패했습니다. 다시 시도해주세요.')
   }
 }
 
@@ -146,9 +199,17 @@ const closeCreateWorkspaceDialog = () => {
   createWorkspaceDialog.value = false
   newWorkspaceName.value = ''
   newWorkspaceProfile.value = ''
+  newWorkspaceProfileFile.value = null
   selectedFriends.value = []
   invitedMembers.value = []
   friendSearchQuery.value = ''
+  searchResults.value = []
+}
+
+// 프로젝트 생성 모달 열기
+const openCreateWorkspaceDialog = () => {
+  createWorkspaceDialog.value = true
+  loadFriendList()
 }
 
 // 워크스페이스 아이콘 색상 생성
@@ -159,12 +220,17 @@ const getWorkspaceIconColor = (workspace) => {
   const index = workspace.id.charCodeAt(0) % colors.length
   return colors[index]
 }
+
+// Lifecycle
+onMounted(() => {
+  // MainLayout에서 워크스페이스 목록을 로드하므로 여기서는 불필요
+})
 </script>
 
 <template>
   <!-- 서버 사이드바 -->
   <div class="server-sidebar">
-    <!-- 개인 워크스페이스 (홈) -->
+    <!-- 홈 버튼 (개인 워크스페이스 접근용) -->
     <div 
       class="server-icon home"
       :class="{ 'active': currentWorkspace === 'personal' }"
@@ -176,7 +242,7 @@ const getWorkspaceIconColor = (workspace) => {
     <!-- 구분선 -->
     <v-divider class="server-divider" />
 
-    <!-- 프로젝트 워크스페이스들 -->
+    <!-- 프로젝트 워크스페이스 목록 (개인 워크스페이스는 제외) -->
     <div 
       v-for="workspace in workspaces.filter(w => w.type === 'project')"
       :key="workspace.id"
@@ -184,18 +250,24 @@ const getWorkspaceIconColor = (workspace) => {
       :class="{ 'active': currentWorkspace === workspace.id }"
       @click="emit('select-workspace', workspace.id)"
     >
-      <span>{{ workspace.icon }}</span>
+      <img 
+        v-if="workspace.profile" 
+        :src="workspace.profile" 
+        :alt="workspace.name"
+        class="workspace-thumbnail"
+      />
+      <span v-else>{{ workspace.icon }}</span>
     </div>
 
-    <!-- 워크스페이스 추가 버튼 -->
+    <!-- 프로젝트 추가 버튼 -->
     <div 
       class="server-icon add-server"
-      @click="createWorkspaceDialog = true"
+      @click="openCreateWorkspaceDialog"
     >
       <v-icon>mdi-plus</v-icon>
     </div>
 
-    <!-- 워크스페이스 생성 다이얼로그 -->
+    <!-- 프로젝트 생성 다이얼로그 -->
     <v-dialog 
       v-model="createWorkspaceDialog" 
       max-width="800"
@@ -204,7 +276,7 @@ const getWorkspaceIconColor = (workspace) => {
         <div class="modal-header">
           <div class="header-content">
             <v-icon class="header-icon">mdi-plus-circle</v-icon>
-            <h3 class="modal-title">새 워크스페이스 만들기</h3>
+            <h3 class="modal-title">새 프로젝트 만들기</h3>
           </div>
           <v-btn
             icon="mdi-close"
@@ -215,7 +287,7 @@ const getWorkspaceIconColor = (workspace) => {
         </div>
         
         <div class="modal-body">
-          <!-- 워크스페이스 기본 정보 -->
+          <!-- 프로젝트 기본 정보 -->
           <div class="workspace-info-section">
             <div class="workspace-basic-row">
               <!-- 프로필 이미지 -->
@@ -240,16 +312,16 @@ const getWorkspaceIconColor = (workspace) => {
                 </div>
               </div>
               
-              <!-- 워크스페이스 이름 -->
+              <!-- 프로젝트 이름 -->
               <div class="workspace-name-group">
-                <label class="input-label">워크스페이스 이름</label>
+                <label class="input-label">프로젝트 이름</label>
                 <v-text-field
                   v-model="newWorkspaceName"
-                  placeholder="예: 마케팅팀"
+                  placeholder="예: 마케팅 프로젝트"
                   variant="outlined"
                   density="compact"
                   hide-details
-                  @keyup.enter="createWorkspace"
+                  @keyup.enter="handleCreateWorkspace"
                 />
               </div>
             </div>
@@ -259,15 +331,17 @@ const getWorkspaceIconColor = (workspace) => {
           <div class="member-invite-section">
             <div class="section-title">멤버 초대</div>
             
-            <!-- 공용 검색바 -->
-            <div class="global-search-container">
-              <GlobalSearch 
-                placeholder="사용자 검색..."
-                search-scope="all"
-                :search-types="['users']"
-                :auto-navigate="false"
-                :debounce-ms="200"
-              />
+            <!-- 검색바 -->
+            <div class="search-container">
+              <div class="search-input-wrapper">
+                <v-icon class="search-icon">mdi-magnify</v-icon>
+                <input
+                  v-model="friendSearchQuery"
+                  type="text"
+                  class="search-input"
+                  placeholder="사용자 검색..."
+                />
+              </div>
             </div>
             
             <div class="member-selection-container">
@@ -278,14 +352,22 @@ const getWorkspaceIconColor = (workspace) => {
                 </div>
                 
                 <div class="friends-list">
+                  <!-- 로딩 중 -->
+                  <div v-if="isLoadingFriends" class="loading-state">
+                    <v-progress-circular indeterminate color="primary" size="32" />
+                    <p>친구 목록 불러오는 중...</p>
+                  </div>
+                  
+                  <!-- 친구 목록 -->
                   <div
                     v-for="friend in friends"
-                    :key="friend.id"
+                    :key="friend.memberSeq"
                     class="friend-item"
                     @click="addToInviteList(friend)"
                   >
                     <v-avatar size="32" :color="friend.avatarColor">
-                      {{ friend.name.charAt(0) }}
+                      <img v-if="friend.profileImage" :src="friend.profileImage" alt="Profile" />
+                      <span v-else>{{ friend.avatarText }}</span>
                     </v-avatar>
                     <div class="friend-info">
                       <div class="friend-name">
@@ -304,12 +386,18 @@ const getWorkspaceIconColor = (workspace) => {
                       </div>
                     </div>
                     <v-icon 
-                      v-if="isInvited(friend.id)"
+                      v-if="isInvited(friend.memberSeq)"
                       class="check-icon"
                       color="primary"
                     >
                       mdi-check-circle
                     </v-icon>
+                  </div>
+                  
+                  <!-- 친구가 없을 때 -->
+                  <div v-if="!isLoadingFriends && friends.length === 0" class="no-results">
+                    <v-icon size="48" color="grey">mdi-account-search</v-icon>
+                    <p>친구가 없습니다</p>
                   </div>
                 </div>
               </div>
@@ -321,14 +409,22 @@ const getWorkspaceIconColor = (workspace) => {
                 </div>
                 
                 <div class="search-results-list">
+                  <!-- 로딩 중 -->
+                  <div v-if="isLoadingSearch" class="loading-state">
+                    <v-progress-circular indeterminate color="primary" size="32" />
+                    <p>검색 중...</p>
+                  </div>
+                  
+                  <!-- 검색 결과 -->
                   <div
                     v-for="user in filteredUsers"
-                    :key="user.id"
+                    :key="user.memberSeq"
                     class="friend-item"
                     @click="addToInviteList(user)"
                   >
                     <v-avatar size="32" :color="user.avatarColor">
-                      {{ user.name.charAt(0) }}
+                      <img v-if="user.profileImage" :src="user.profileImage" alt="Profile" />
+                      <span v-else>{{ user.avatarText }}</span>
                     </v-avatar>
                     <div class="friend-info">
                       <div class="friend-name">
@@ -348,7 +444,7 @@ const getWorkspaceIconColor = (workspace) => {
                       </div>
                     </div>
                     <v-icon 
-                      v-if="isInvited(user.id)"
+                      v-if="isInvited(user.memberSeq)"
                       class="check-icon"
                       color="primary"
                     >
@@ -357,7 +453,7 @@ const getWorkspaceIconColor = (workspace) => {
                   </div>
                   
                   <!-- 검색 결과가 없을 때 -->
-                  <div v-if="filteredUsers.length === 0" class="no-results">
+                  <div v-if="!isLoadingSearch && filteredUsers.length === 0" class="no-results">
                     <v-icon size="48" color="grey">mdi-account-search</v-icon>
                     <p>검색 결과가 없습니다</p>
                   </div>
@@ -373,11 +469,12 @@ const getWorkspaceIconColor = (workspace) => {
                 <div class="invite-list">
                   <div
                     v-for="member in invitedMembers"
-                    :key="member.id"
+                    :key="member.memberSeq || member.id"
                     class="invite-item"
                   >
                     <v-avatar size="32" :color="member.avatarColor">
-                      {{ member.name.charAt(0) }}
+                      <img v-if="member.profileImage" :src="member.profileImage" alt="Profile" />
+                      <span v-else>{{ member.avatarText }}</span>
                     </v-avatar>
                     <div class="member-info">
                       <div class="member-name">
@@ -401,7 +498,7 @@ const getWorkspaceIconColor = (workspace) => {
                       variant="text"
                       size="small"
                       class="remove-btn"
-                      @click="removeFromInviteList(member.id)"
+                      @click="removeFromInviteList(member.memberSeq || member.id)"
                     />
                   </div>
                   
@@ -426,10 +523,10 @@ const getWorkspaceIconColor = (workspace) => {
           <v-btn
             color="primary"
             :disabled="!newWorkspaceName.trim()"
-            @click="createWorkspace"
+            @click="handleCreateWorkspace"
             class="create-workspace-btn"
           >
-            워크스페이스 만들기
+            프로젝트 만들기
           </v-btn>
         </div>
       </v-card>
@@ -513,6 +610,13 @@ const getWorkspaceIconColor = (workspace) => {
   height: 20px;
   background: white;
   border-radius: 0 4px 4px 0;
+}
+
+.workspace-thumbnail {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: inherit;
 }
 
 
@@ -975,6 +1079,23 @@ const getWorkspaceIconColor = (workspace) => {
 
 .empty-invite p {
   margin: 12px 0 0 0;
+  font-size: 14px;
+}
+
+.loading-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 20px;
+  color: rgba(var(--v-theme-on-surface), 0.6);
+  text-align: center;
+  height: 100%;
+  gap: 12px;
+}
+
+.loading-state p {
+  margin: 0;
   font-size: 14px;
 }
 
