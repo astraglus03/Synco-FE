@@ -267,12 +267,21 @@ const sendMessage = async () => {
   const currentUserProfileImage =
     localStorage.getItem("profileImageUrl") || null;
 
+  // ✅ MessageType enum 기반 메시지 타입 동적 결정
+  // TEXT, FILE, REPLY, VOTE
+  let messageType = "TEXT";
+  if (attachedFiles.value.length > 0) {
+    messageType = "FILE";
+  }
+
   const message = {
     senderSeq: memberSeq.value,
     senderName: currentUserName,
     senderProfileImageUrl: currentUserProfileImage,
+    messageType: messageType, // ✅ MessageType enum 값
     chatMessageText: newMessage.value,
     chatMessageFileUrls: uploadedUrls.join(","), // 🔹 S3 URL 문자열로 전달
+    replyToSeq: null, // ✅ 답장 기능용 (현재는 null)
   };
 
   // 2️⃣ 즉시 화면에 표시 (로컬 메시지)
@@ -385,6 +394,18 @@ const handleCreatePoll = (pollData) => {
   const currentUserProfileImage =
     localStorage.getItem("profileImageUrl") || null;
 
+  // ✅ WebSocket으로 투표 메시지 전송 (VOTE 타입)
+  const message = {
+    senderSeq: memberSeq.value,
+    senderName: currentUserName,
+    senderProfileImageUrl: currentUserProfileImage,
+    messageType: "VOTE", // ✅ 투표 메시지는 VOTE 타입
+    chatMessageText: `📊 **${pollData.title}**`,
+    chatMessageFileUrls: "",
+    replyToSeq: null,
+  };
+
+  // 즉시 화면에 표시
   const pollMessage = {
     id: Date.now(),
     user: currentUserName,
@@ -402,9 +423,20 @@ const handleCreatePoll = (pollData) => {
   };
 
   messages.value.push(pollMessage);
+
+  // WebSocket으로 전송
+  if (stompClient.value && stompClient.value.connected) {
+    stompClient.value.send(
+      `/publish/${channelSeq.value}`,
+      JSON.stringify(message),
+      { Authorization: `Bearer ${token.value}` }
+    );
+  }
+
   newMessage.value = "";
   isTyping.value = false;
   showAttachmentMenu.value = false;
+  scrollToBottom();
 };
 
 const handleAttachFiles = (files) => {
