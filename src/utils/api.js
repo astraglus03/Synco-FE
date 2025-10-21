@@ -12,18 +12,15 @@ const apiClient = axios.create({
   withCredentials: true, // ✅ 쿠키 전송 활성화
 })
 
-// 요청 인터셉터 (토큰 자동 주입) - 테스트용으로 주석처리
+// 요청 인터셉터 (토큰 자동 주입)
 // 모든 API 요청에 자동으로 Authorization 헤더 추가
 apiClient.interceptors.request.use((config) => {
-  // 테스트용으로 토큰 비활성화
-  // const mockToken = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c'
+  const authStore = useAuthStore()
   
-  // if (mockToken) {
-  //   config.headers.Authorization = `Bearer ${mockToken}`
-  // }
-  
-  // X-Member-Seq 헤더 추가 (백엔드에서 사용자 식별용)
-  config.headers['X-Member-Seq'] = '1'
+  // 액세스 토큰이 있으면 Authorization 헤더에 추가
+  if (authStore.accessToken) {
+    config.headers.Authorization = `Bearer ${authStore.accessToken}`
+  }
   
   return config
 })
