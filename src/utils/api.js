@@ -108,6 +108,14 @@ export const apiPutFormData = async (endpoint, formData) => {
   return handleApiResponse(res).getData()
 }
 
+export const apiPatchModelAttr = async (endpoint, dataObj) => {
+  const res = await apiClient.patch(endpoint, toFormData(dataObj), {
+    headers: { 'Content-Type': 'multipart/form-data' },
+    timeout: 60000,
+  })
+  return handleApiResponse(res).getData()
+}
+
 // ----------------------
 // ModelAttribute 변환 (자동 FormData 변환)
 // ----------------------
