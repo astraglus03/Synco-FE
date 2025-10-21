@@ -41,8 +41,6 @@ export const useAuthStore = defineStore('auth', () => {
       localStorage.removeItem('user')
     }
     
-    // 디버깅용 로그
-    console.log('authStore setUser:', userData)
   }
 
   // 로그인 (RT는 Cookie로 관리되므로 제외)
