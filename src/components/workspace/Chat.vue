@@ -157,7 +157,9 @@ const uploadFilesToS3 = async () => {
   const formData = new FormData();
   attachedFiles.value.forEach((file) => formData.append("files", file));
 
-  const url = `${import.meta.env.VITE_API_URL}/chat-service/chat/files/upload/${channelSeq.value}`;
+  const url = `${import.meta.env.VITE_API_URL}/chat-service/chat/files/upload/${
+    channelSeq.value
+  }`;
 
   try {
     const res = await axios.post(url, formData, {
@@ -170,12 +172,11 @@ const uploadFilesToS3 = async () => {
     console.log("✅ 파일 업로드 성공:", res.data);
 
     // ✅ 배열만 추출하도록 보정
-    const urls =
-      Array.isArray(res.data)
-        ? res.data
-        : Array.isArray(res.data?.uploadedUrls)
-        ? res.data.uploadedUrls
-        : [];
+    const urls = Array.isArray(res.data)
+      ? res.data
+      : Array.isArray(res.data?.uploadedUrls)
+      ? res.data.uploadedUrls
+      : [];
 
     return urls;
   } catch (err) {
@@ -388,42 +389,36 @@ onMounted(() => {
   const workspaceSeq = 4;
   channelSeq.value = 1;
 
-  // ✅ 테스트용 멤버 3명 하드코딩
-  const TEST_USERS = [
-    {
-      memberSeq: 1,
-      token:
-        "eyJhbGciOiJIUzUxMiJ9.eyJzdWIiOiIxIiwiaWF0IjoxNzYxMDExMzM3LCJleHAiOjE3NjEzMTEzMzd9.jH1667PvDUQoX3Tp54_eP0n9M8pnqUggV_cMdjADEVYbwq3Fem6OO1HkJfWSsYdJAw6yyRIc5F__zkpCoKe9tg",
-    },
-    {
-      memberSeq: 2,
-      token:
-        "eyJhbGciOiJIUzUxMiJ9.eyJzdWIiOiIyIiwiaWF0IjoxNzYxMDExMzI2LCJleHAiOjE3NjEzMTEzMjZ9.bqP2ys6suu5bKZpLFZRud9JRcL1Q5jFzfUsgUHiACs62wF3qih3NAwJmSZkkwiayddYgjduFs1Six-86glaE-A",
-    },
-    {
-      memberSeq: 3,
-      token:
-        "eyJhbGciOiJIUzUxMiJ9.eyJzdWIiOiIzIiwiaWF0IjoxNzYxMDEwOTc2LCJleHAiOjE3NjEzMTA5NzZ9.B_SfowQpSD099v2wS1SCty6UdNil0UZjReyhbalhZXQVNAX66LXhvb1w5FZoMkyfiSaGGPl3Klzo5CIV6GP_DA",
-    },
-  ];
+  // ✅ localStorage에서 로그인된 사용자 정보 가져오기
+  const accessToken = localStorage.getItem("accessToken");
+  const memberInfo = localStorage.getItem("memberInfo");
 
-  // ✅ 브라우저별 index (없으면 랜덤 생성)
-  let index = localStorage.getItem("chatTesterIndex");
-  if (!index) {
-    index = Math.floor(Math.random() * 3); // 0~2 중 랜덤
-    localStorage.setItem("chatTesterIndex", index);
+  if (!accessToken) {
+    console.error("❌ 로그인이 필요합니다. accessToken이 없습니다.");
+    return;
   }
 
-  // ✅ 선택된 유저로 설정
-  const selectedUser = TEST_USERS[index];
-  memberSeq.value = selectedUser.memberSeq;
-  token.value = selectedUser.token;
+  // ✅ 사용자 정보 설정
+  token.value = accessToken;
 
-  console.log("🟢 Chat 테스트 시작");
+  if (memberInfo) {
+    try {
+      const member = JSON.parse(memberInfo);
+      memberSeq.value = member.memberSeq || member.seq;
+    } catch (e) {
+      console.error("❌ memberInfo 파싱 실패:", e);
+    }
+  }
+
+  console.log("🟢 Chat 시작");
   console.log("- workspaceSeq:", workspaceSeq);
   console.log("- channelSeq:", channelSeq.value);
   console.log("- memberSeq:", memberSeq.value);
-  console.log("- token.sub:", JSON.parse(atob(token.value.split(".")[1])).sub);
+  console.log("- memberName:", localStorage.getItem("memberName") || "사용자");
+  console.log(
+    "- memberEmail:",
+    localStorage.getItem("memberEmail") || "user@example.com"
+  );
 
   // ✅ WebSocket 연결
   connectWebsocket();
