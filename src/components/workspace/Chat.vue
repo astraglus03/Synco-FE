@@ -53,7 +53,9 @@ const attachedFiles = ref([]);
 const connectWebsocket = () => {
   if (stompClient.value && stompClient.value.connected) return;
 
-  const sockJs = new SockJS(`${import.meta.env.VITE_API_URL}/chat-service/connect`);
+  const sockJs = new SockJS(
+    `${import.meta.env.VITE_API_URL}/chat-service/connect`
+  );
   stompClient.value = Stomp.over(sockJs);
 
   stompClient.value.connect(
@@ -68,15 +70,17 @@ const connectWebsocket = () => {
             const parsed = JSON.parse(message.body);
             console.log("📩 메시지 수신:", parsed);
 
-            // ✅ 파일 URL 파싱 추가
-            const fileList =
-              parsed.chatMessageFileUrls && parsed.chatMessageFileUrls.length > 0
-                ? parsed.chatMessageFileUrls.split(",").map((url) => ({
-                    name: url.split("/").pop(),
-                    url,
-                    type: "file",
-                  }))
-                : [];
+            // ✅ 파일 URL 파싱 (BE에서 chatMessageFileUrls 문자열로 전송됨)
+            const urls = (parsed.chatMessageFileUrls || "")
+              .split(",")
+              .map((s) => s.trim())
+              .filter(Boolean);
+
+            const fileList = urls.map((url) => ({
+              name: url.split("/").pop(),
+              url,
+              type: "file",
+            }));
 
             // 💬 메시지 구조 변환
             const formattedMessage = {
@@ -87,7 +91,9 @@ const connectWebsocket = () => {
                 hour: "2-digit",
                 minute: "2-digit",
               }),
-              avatar: (parsed.senderName || parsed.senderSeq).toString().charAt(0),
+              avatar: (parsed.senderName || parsed.senderSeq)
+                .toString()
+                .charAt(0),
               isOwn: parsed.senderSeq === memberSeq.value,
               unread: parsed.senderSeq !== memberSeq.value ? 1 : 0,
               files: fileList, // ✅ 추가
@@ -101,14 +107,12 @@ const connectWebsocket = () => {
         },
         { Authorization: `Bearer ${token.value}` }
       );
-
     },
     (error) => {
       console.error("❌ WebSocket 연결 실패:", error);
     }
   );
 };
-
 
 // ✅ WebSocket 연결 해제
 const disconnectWebsocket = async () => {
@@ -153,7 +157,7 @@ const uploadFilesToS3 = async () => {
   const formData = new FormData();
   attachedFiles.value.forEach((file) => formData.append("files", file));
 
-  const url = `${import.meta.env.VITE_API_URL}/chat/files/upload/${channelSeq.value}`;
+  const url = `${import.meta.env.VITE_API_URL}/chat-service/chat/files/upload/${channelSeq.value}`;
 
   try {
     const res = await axios.post(url, formData, {
@@ -162,13 +166,50 @@ const uploadFilesToS3 = async () => {
         Authorization: `Bearer ${token.value}`,
       },
     });
-    console.log("✅ 파일 업로드 성공:", res.data.uploadedUrls);
-    return res.data.uploadedUrls; // [S3 URL 리스트]
+
+    console.log("✅ 파일 업로드 성공:", res.data);
+
+    // ✅ 배열만 추출하도록 보정
+    const urls =
+      Array.isArray(res.data)
+        ? res.data
+        : Array.isArray(res.data?.uploadedUrls)
+        ? res.data.uploadedUrls
+        : [];
+
+    return urls;
   } catch (err) {
-    console.error("❌ 파일 업로드 실패:", err);
+    console.error("❌ 파일 업로드 실패:", err.response?.data || err);
     return [];
   }
 };
+
+// // ✅ 파일 업로드 (S3 REST API 호출)
+// const uploadFilesToS3 = async () => {
+//   if (attachedFiles.value.length === 0) return [];
+
+//   const formData = new FormData();
+//   attachedFiles.value.forEach((file) => {
+//     formData.append("files", file);
+//   });
+
+//   const url = `${import.meta.env.VITE_API_URL}/chat-service/chat/files/upload/${channelSeq.value}`;
+
+//   try {
+//     const res = await axios.post(url, formData, {
+//       headers: {
+//         "Content-Type": "multipart/form-data",
+//         Authorization: `Bearer ${token.value}`,
+//       },
+//     });
+//     console.log("✅ 파일 업로드 성공:", res.data);
+//     // 서버가 ["https://s3...","https://s3..."] 형태로 반환함
+//     return res.data;
+//   } catch (err) {
+//     console.error("❌ 파일 업로드 실패:", err.response?.data || err);
+//     return [];
+//   }
+// };
 
 // ✅ 메시지 전송
 const sendMessage = async () => {
@@ -176,50 +217,32 @@ const sendMessage = async () => {
     console.error("WebSocket 연결이 없습니다!");
     return;
   }
-  if (newMessage.value.trim() === "" && attachedFiles.value.length === 0) return;
 
-  // 1️⃣ S3 업로드
-  const uploadedUrls = await uploadFilesToS3();
+  if (newMessage.value.trim() === "" && attachedFiles.value.length === 0)
+    return;
 
-  // 2️⃣ 메시지 생성
+  let uploadedUrls = [];
+  if (attachedFiles.value.length > 0) {
+    uploadedUrls = await uploadFilesToS3(); // 🔹 S3 업로드 먼저 실행
+  }
+
+  // 1️⃣ 전송할 메시지 데이터 생성
   const message = {
     senderSeq: memberSeq.value,
-    messageType: attachedFiles.value.length > 0 ? "FILE" : "TEXT",
     chatMessageText: newMessage.value,
-    chatMessageFileUrls: uploadedUrls.join(","),
+    chatMessageFileUrls: uploadedUrls.join(","), // 🔹 S3 URL 문자열로 전달
   };
 
-  // 3️⃣ 전송
+  // 2️⃣ WebSocket 전송
   stompClient.value.send(
     `/publish/${channelSeq.value}`,
     JSON.stringify(message),
     { Authorization: `Bearer ${token.value}` }
   );
 
-  // 4️⃣ 즉시 표시
-  const localMessage = {
-    id: Date.now(),
-    user: "나",
-    content: newMessage.value,
-    time: new Date().toLocaleTimeString("ko-KR", {
-      hour: "2-digit",
-      minute: "2-digit",
-    }),
-    avatar: "나",
-    isOwn: true,
-    unread: 0,
-    files: uploadedUrls.map((url) => ({
-      name: url.split("/").pop(),
-      url,
-      type: "file",
-    })),
-  };
-  // messages.value.push(localMessage);
-
-  // 5️⃣ 초기화
+  // 3️⃣ 입력창 초기화
   newMessage.value = "";
   attachedFiles.value = [];
-  isTyping.value = false;
   showAttachmentMenu.value = false;
   scrollToBottom();
 };
@@ -367,9 +390,21 @@ onMounted(() => {
 
   // ✅ 테스트용 멤버 3명 하드코딩
   const TEST_USERS = [
-    { memberSeq: 1, token: "eyJhbGciOiJIUzUxMiJ9.eyJzdWIiOiIxIiwiaWF0IjoxNzYxMDExMzM3LCJleHAiOjE3NjEzMTEzMzd9.jH1667PvDUQoX3Tp54_eP0n9M8pnqUggV_cMdjADEVYbwq3Fem6OO1HkJfWSsYdJAw6yyRIc5F__zkpCoKe9tg" },
-    { memberSeq: 2, token: "eyJhbGciOiJIUzUxMiJ9.eyJzdWIiOiIyIiwiaWF0IjoxNzYxMDExMzI2LCJleHAiOjE3NjEzMTEzMjZ9.bqP2ys6suu5bKZpLFZRud9JRcL1Q5jFzfUsgUHiACs62wF3qih3NAwJmSZkkwiayddYgjduFs1Six-86glaE-A" },
-    { memberSeq: 3, token: "eyJhbGciOiJIUzUxMiJ9.eyJzdWIiOiIzIiwiaWF0IjoxNzYxMDEwOTc2LCJleHAiOjE3NjEzMTA5NzZ9.B_SfowQpSD099v2wS1SCty6UdNil0UZjReyhbalhZXQVNAX66LXhvb1w5FZoMkyfiSaGGPl3Klzo5CIV6GP_DA" },
+    {
+      memberSeq: 1,
+      token:
+        "eyJhbGciOiJIUzUxMiJ9.eyJzdWIiOiIxIiwiaWF0IjoxNzYxMDExMzM3LCJleHAiOjE3NjEzMTEzMzd9.jH1667PvDUQoX3Tp54_eP0n9M8pnqUggV_cMdjADEVYbwq3Fem6OO1HkJfWSsYdJAw6yyRIc5F__zkpCoKe9tg",
+    },
+    {
+      memberSeq: 2,
+      token:
+        "eyJhbGciOiJIUzUxMiJ9.eyJzdWIiOiIyIiwiaWF0IjoxNzYxMDExMzI2LCJleHAiOjE3NjEzMTEzMjZ9.bqP2ys6suu5bKZpLFZRud9JRcL1Q5jFzfUsgUHiACs62wF3qih3NAwJmSZkkwiayddYgjduFs1Six-86glaE-A",
+    },
+    {
+      memberSeq: 3,
+      token:
+        "eyJhbGciOiJIUzUxMiJ9.eyJzdWIiOiIzIiwiaWF0IjoxNzYxMDEwOTc2LCJleHAiOjE3NjEzMTA5NzZ9.B_SfowQpSD099v2wS1SCty6UdNil0UZjReyhbalhZXQVNAX66LXhvb1w5FZoMkyfiSaGGPl3Klzo5CIV6GP_DA",
+    },
   ];
 
   // ✅ 브라우저별 index (없으면 랜덤 생성)
@@ -388,12 +423,11 @@ onMounted(() => {
   console.log("- workspaceSeq:", workspaceSeq);
   console.log("- channelSeq:", channelSeq.value);
   console.log("- memberSeq:", memberSeq.value);
-  console.log("- token.sub:", JSON.parse(atob(token.value.split('.')[1])).sub);
+  console.log("- token.sub:", JSON.parse(atob(token.value.split(".")[1])).sub);
 
   // ✅ WebSocket 연결
   connectWebsocket();
 });
-
 
 onUnmounted(() => {
   window.removeEventListener("select-chat-channel", handleSubChannelSelect);
@@ -458,7 +492,7 @@ onUnmounted(() => {
               <div v-if="!message.isOwn" class="message-avatar">
                 {{ message.avatar }}
               </div>
-              
+
               <div class="message-group">
                 <!-- 발신자 이름 (상대방 메시지의 첫 번째만) -->
                 <div
@@ -479,19 +513,26 @@ onUnmounted(() => {
                   </div>
 
                   <!-- 첨부된 파일들 표시 -->
-                  <div v-if="Array.isArray(message.files) && message.files.length" class="message-files">
-                      <div v-for="(file, i) in message.files" :key="i" class="message-file-item">
-                        <v-icon class="mr-2">mdi-file</v-icon>
-                        <a
-                          :href="file.url"
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          class="file-name"
-                        >
-                          {{ file.name }}
-                        </a>
-                      </div>
+                  <div
+                    v-if="Array.isArray(message.files) && message.files.length"
+                    class="message-files"
+                  >
+                    <div
+                      v-for="(file, i) in message.files"
+                      :key="i"
+                      class="message-file-item"
+                    >
+                      <v-icon class="mr-2">mdi-file</v-icon>
+                      <a
+                        :href="file.url"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        class="file-name"
+                      >
+                        {{ file.name }}
+                      </a>
                     </div>
+                  </div>
                 </div>
 
                 <!-- 메시지 메타 정보 (시간, 안읽음수) -->
@@ -603,12 +644,12 @@ onUnmounted(() => {
           <!-- 전송 버튼 -->
           <div class="send-actions">
             <v-btn
-              v-if="isTyping"
+              v-if="isTyping || attachedFiles.length > 0"
               color="primary"
               icon
               class="send-btn"
               @click="sendMessage"
-              :disabled="!newMessage.trim()"
+              :disabled="!newMessage.trim() && attachedFiles.length === 0"
             >
               <v-icon>mdi-send</v-icon>
             </v-btn>
