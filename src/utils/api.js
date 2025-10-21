@@ -23,8 +23,8 @@ apiClient.interceptors.request.use((config) => {
   }
   
   // 사용자 정보가 있으면 X-Member-Seq 헤더 추가
-  if (authStore.user?.memberSeq) {
-    config.headers['X-Member-Seq'] = authStore.user.memberSeq
+  if (authStore.memberSeq) {
+    config.headers['X-Member-Seq'] = authStore.memberSeq
   }
   
   return config
@@ -104,6 +104,14 @@ export const apiPostFormData = async (endpoint, formData) => {
 
 export const apiPutFormData = async (endpoint, formData) => {
   const res = await apiClient.put(endpoint, formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+    timeout: 60000,
+  })
+  return handleApiResponse(res).getData()
+}
+
+export const apiPatchFormData = async (endpoint, formData) => {
+  const res = await apiClient.patch(endpoint, formData, {
     headers: { 'Content-Type': 'multipart/form-data' },
     timeout: 60000,
   })

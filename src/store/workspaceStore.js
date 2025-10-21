@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import { getMyWorkspaces, checkWorkspaceAuthority } from '@/services/WorkspaceService'
+import { getMyWorkspaces } from '@/services/WorkspaceService'
 import { Authority } from '@/models/workspace/WorkspaceModels'
 
 export const useWorkspaceStore = defineStore('workspace', () => {
@@ -28,14 +28,12 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     currentChannel.value = 'dashboard'
     selectedSubChannel.value = ''
     
-    // 프로젝트 워크스페이스인 경우 권한 체크
+    // 개인 워크스페이스인 경우 권한 초기화
     const workspace = workspaces.value.find(w => w.id === workspaceId)
-    if (workspace && workspace.type === 'project' && workspace.workSpaceSeq) {
-      await checkAuthority(workspace.workSpaceSeq)
-    } else {
-      // 개인 워크스페이스인 경우 권한 초기화
+    if (!workspace || workspace.type !== 'project') {
       currentAuthority.value = null
     }
+    // 프로젝트 워크스페이스의 경우 권한은 멤버 목록에서 가져옴
   }
 
   // 채널 선택
@@ -103,18 +101,6 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     }
   }
 
-  // 워크스페이스 권한 체크
-  const checkAuthority = async (workSpaceSeq) => {
-    try {
-      const authority = await checkWorkspaceAuthority(workSpaceSeq)
-      currentAuthority.value = authority
-      return authority
-    } catch (error) {
-      console.error('워크스페이스 권한 체크 실패:', error)
-      currentAuthority.value = Authority.PARTICIPANT
-      return Authority.PARTICIPANT
-    }
-  }
 
   return {
     // State
@@ -132,7 +118,6 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     selectChannel,
     selectSubChannel,
     addWorkspace,
-    loadMyWorkspaces,
-    checkAuthority
+    loadMyWorkspaces
   }
 })

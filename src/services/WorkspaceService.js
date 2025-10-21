@@ -1,9 +1,11 @@
-import { apiGet, apiPostFormData } from '@/utils/api'
+import { apiGet, apiPost, apiPostFormData, apiPatchFormData } from '@/utils/api'
 import { 
-  TeamWorkSpaceCreateReqDto, 
+  TeamWorkSpaceCreateReqDto,
+  TeamWorkSpaceEditReqDto,
   WorkSpaceResDto,
   WorkSpaceInfoResDto,
   WorkSpaceMemberInfoResDto,
+  DelegateSuperAuthorityReqDto,
   Authority
 } from '@/models/workspace/WorkspaceModels'
 
@@ -46,13 +48,29 @@ export const getWorkspaceMembers = async (workSpaceSeq) => {
   return []
 }
 
+
 // ----------------------
-// 워크스페이스 권한 체크 API
+// 워크스페이스 수정 API
 // ----------------------
-export const checkWorkspaceAuthority = async (workSpaceSeq) => {
-  const res = await apiGet(`/workspace-service/workspace/checkAuthority/${workSpaceSeq}`)
+export const updateWorkspace = async (workSpaceSeq, workSpaceName, workSpaceThumbnailImage) => {
+  const reqDto = new TeamWorkSpaceEditReqDto(workSpaceSeq, workSpaceName, workSpaceThumbnailImage)
+  const formData = reqDto.toFormData()
   
-  // 백엔드에서 Authority enum을 string으로 반환 (SUPER 또는 PARTICIPANT)
+  const res = await apiPatchFormData('/workspace-service/workspace/edit', formData)
+  return WorkSpaceResDto.fromJson(res)
+}
+
+// ----------------------
+// Super 권한 위임 API
+// ----------------------
+export const delegateSuperAuthority = async (delegateMemberSeq, workSpaceSeq) => {
+  console.log('delegateSuperAuthority API 호출:', { delegateMemberSeq, workSpaceSeq })
+  
+  const reqDto = new DelegateSuperAuthorityReqDto(delegateMemberSeq, workSpaceSeq)
+  console.log('요청 DTO:', reqDto)
+  
+  const res = await apiPost('/workspace-service/workspace/delegateSuperAuthority', reqDto)
+  console.log('API 응답:', res)
   return res
 }
 

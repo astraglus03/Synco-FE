@@ -26,6 +26,29 @@ export class TeamWorkSpaceCreateReqDto {
 }
 
 // ----------------------
+// 워크스페이스 수정 요청 DTO
+// ----------------------
+export class TeamWorkSpaceEditReqDto {
+  constructor(workSpaceSeq, workSpaceName, workSpaceThumbnailImage) {
+    this.workSpaceSeq = workSpaceSeq
+    this.workSpaceName = workSpaceName
+    this.workSpaceThumbnailImage = workSpaceThumbnailImage
+  }
+
+  toFormData() {
+    const formData = new FormData()
+    formData.append('workSpaceSeq', this.workSpaceSeq)
+    formData.append('workSpaceName', this.workSpaceName)
+    
+    if (this.workSpaceThumbnailImage instanceof File) {
+      formData.append('workSpaceThumbnailImage', this.workSpaceThumbnailImage)
+    }
+    
+    return formData
+  }
+}
+
+// ----------------------
 // 워크스페이스 응답 DTO
 // ----------------------
 export class WorkSpaceResDto {
@@ -146,6 +169,7 @@ export class WorkSpaceMemberInfoResDto {
     this.name = data.name
     this.profileImageUrl = data.profileImageUrl
     this.activeStatus = data.activeStatus
+    this.authority = data.authority
   }
 
   static fromJson(json) {
@@ -153,7 +177,8 @@ export class WorkSpaceMemberInfoResDto {
       memberSeq: json.memberSeq,
       name: json.name,
       profileImageUrl: json.profileImageUrl,
-      activeStatus: json.activeStatus
+      activeStatus: json.activeStatus,
+      authority: json.authority
     })
   }
 
@@ -175,5 +200,15 @@ export class WorkSpaceMemberInfoResDto {
 export const Authority = {
   SUPER: 'SUPER',
   PARTICIPANT: 'PARTICIPANT'
+}
+
+// ----------------------
+// Super 권한 위임 요청 DTO
+// ----------------------
+export class DelegateSuperAuthorityReqDto {
+  constructor(delegateMemberSeq, workSpaceSeq) {
+    this.delegateMemberSeq = delegateMemberSeq
+    this.workSpaceSeq = workSpaceSeq
+  }
 }
 
