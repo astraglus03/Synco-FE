@@ -66,6 +66,22 @@ const showFileModal = ref(false);
 // 첨부된 파일들
 const attachedFiles = ref([]);
 
+// 답장 관련 상태
+const replyToMessage = ref(null);
+const showReplyInput = ref(false);
+
+// 컨텍스트 메뉴 관련 상태
+const showContextMenu = ref(false);
+const contextMenuPosition = ref({ x: 0, y: 0 });
+const selectedMessage = ref(null);
+
+// @ 언급 관련 상태
+const mentionList = ref([]);
+const showMentionDropdown = ref(false);
+const mentionStartIndex = ref(-1);
+const mentionEndIndex = ref(-1);
+const filteredMentions = ref([]);
+
 // ✅ WebSocket 연결
 const connectWebsocket = () => {
   console.log("!!!!!!!!!!!!!!!!!!!!!!!!토큰 확인:", token.value);
@@ -105,8 +121,8 @@ const connectWebsocket = () => {
 
             // 💬 메시지 구조 변환 (사용자 정보 포함)
             const formattedMessage = {
-              id: parsed.chatMessageSeq || Date.now(),
-              user: parsed.senderName || parsed.senderSeq,
+              id: parsed.chatMessageSeq || Date.now(), // ✅ 백엔드에서 받은 실제 chatMessageSeq 사용
+              user: parsed.senderName || parsed.senderSeq, // ✅ 백엔드에서 받은 실제 senderName 사용
               content: parsed.chatMessageText,
               time: new Date().toLocaleTimeString("ko-KR", {
                 hour: "2-digit",
@@ -115,11 +131,13 @@ const connectWebsocket = () => {
               avatar: (parsed.senderName || parsed.senderSeq)
                 .toString()
                 .charAt(0),
-              profileImageUrl: parsed.senderProfileImageUrl || null,
+              profileImageUrl: parsed.senderProfileImageUrl || null, // ✅ 백엔드에서 받은 실제 프로필 이미지 사용
               senderSeq: parsed.senderSeq,
               isOwn: parsed.senderSeq === memberSeq.value,
               unread: parsed.senderSeq !== memberSeq.value ? 1 : 0,
               files: fileList, // ✅ 추가
+              messageType: parsed.messageType || "TEXT", // ✅ 메시지 타입 추가
+              replyToSeq: parsed.replyToSeq || null, // ✅ 답장 대상 메시지 ID 추가
             };
 
             // 중복 메시지 방지 (자신이 보낸 메시지는 제외)
@@ -248,7 +266,10 @@ const uploadFilesToS3 = async () => {
 
 // ✅ 메시지 전송
 const sendMessage = async () => {
-  console.log("===============sendMessage===============", memberSeq.value);
+  console.log(
+    "=============>>>>>모야모야모야 replySeq===============",
+    memberSeq.value
+  );
   if (!stompClient.value || !stompClient.value.connected) {
     console.error("WebSocket 연결이 없습니다!");
     return;
@@ -270,7 +291,9 @@ const sendMessage = async () => {
   // ✅ MessageType enum 기반 메시지 타입 동적 결정
   // TEXT, FILE, REPLY, VOTE
   let messageType = "TEXT";
-  if (attachedFiles.value.length > 0) {
+  if (replyToMessage.value) {
+    messageType = "REPLY"; // 답장 메시지
+  } else if (attachedFiles.value.length > 0) {
     messageType = "FILE";
   }
 
@@ -281,12 +304,12 @@ const sendMessage = async () => {
     messageType: messageType, // ✅ MessageType enum 값
     chatMessageText: newMessage.value,
     chatMessageFileUrls: uploadedUrls.join(","), // 🔹 S3 URL 문자열로 전달
-    replyToSeq: null, // ✅ 답장 기능용 (현재는 null)
+    replyToSeq: replyToMessage.value?.id || null, // ✅ 답장 대상 메시지 ID
   };
 
   // 2️⃣ 즉시 화면에 표시 (로컬 메시지)
   const localMessage = {
-    id: Date.now(),
+    id: `temp_${Date.now()}`, // ✅ 임시 ID 사용 (백엔드에서 실제 ID로 업데이트됨)
     user: currentUserName,
     content: newMessage.value,
     time: new Date().toLocaleTimeString("ko-KR", {
@@ -303,6 +326,8 @@ const sendMessage = async () => {
       url,
       type: "file",
     })),
+    messageType: messageType, // ✅ 메시지 타입 추가
+    replyToSeq: replyToMessage.value?.id || null, // ✅ 답장 대상 메시지 ID 추가
   };
   messages.value.push(localMessage);
   scrollToBottom();
@@ -320,6 +345,13 @@ const sendMessage = async () => {
   newMessage.value = "";
   attachedFiles.value = [];
   showAttachmentMenu.value = false;
+
+  // 답장 상태 초기화
+  if (replyToMessage.value) {
+    replyToMessage.value = null;
+    showReplyInput.value = false;
+  }
+
   scrollToBottom();
 };
 
@@ -407,7 +439,7 @@ const handleCreatePoll = (pollData) => {
 
   // 즉시 화면에 표시
   const pollMessage = {
-    id: Date.now(),
+    id: `temp_${Date.now()}`, // ✅ 임시 ID 사용
     user: currentUserName,
     content: `📊 **${pollData.title}**`,
     time: new Date().toLocaleTimeString("ko-KR", {
@@ -420,6 +452,8 @@ const handleCreatePoll = (pollData) => {
     isOwn: true,
     type: "poll",
     pollData: pollData,
+    messageType: "VOTE", // ✅ 투표 메시지 타입
+    replyToSeq: null, // ✅ 투표는 답장이 아님
   };
 
   messages.value.push(pollMessage);
@@ -443,6 +477,149 @@ const handleAttachFiles = (files) => {
   // 첨부된 파일들을 attachedFiles에 추가
   attachedFiles.value.push(...files);
   showAttachmentMenu.value = false;
+};
+
+// 컨텍스트 메뉴 관련 함수들
+const handleMessageRightClick = (message, event) => {
+  event.preventDefault();
+  selectedMessage.value = message;
+  contextMenuPosition.value = { x: event.clientX, y: event.clientY };
+  showContextMenu.value = true;
+};
+
+const closeContextMenu = () => {
+  showContextMenu.value = false;
+  selectedMessage.value = null;
+};
+
+const startReply = (message) => {
+  replyToMessage.value = message;
+  showReplyInput.value = true;
+  newMessage.value = ""; // 답장은 @ 입력 없이 답장 대상만 표시
+  closeContextMenu();
+
+  // 입력창에 포커스
+  setTimeout(() => {
+    const textarea = document.querySelector(".message-input textarea");
+    if (textarea) {
+      textarea.focus();
+    }
+  }, 100);
+};
+
+const copyMessage = (message) => {
+  navigator.clipboard.writeText(message.content);
+  closeContextMenu();
+  // 복사 완료 알림 (선택사항)
+  console.log("메시지가 클립보드에 복사되었습니다.");
+};
+
+// 답장 메시지 표시 관련 함수들
+const getReplyToMessage = (replyToSeq) => {
+  if (!replyToSeq) return null;
+  return messages.value.find((msg) => String(msg.id) === String(replyToSeq));
+};
+
+
+const scrollToOriginalMessage = (messageId) => {
+  const messageElement = document.querySelector(
+    `[data-message-id="${messageId}"]`
+  );
+  if (messageElement) {
+    // 부드러운 스크롤
+    messageElement.scrollIntoView({
+      behavior: "smooth",
+      block: "center",
+      inline: "nearest",
+    });
+
+    // 하이라이트 효과
+    setTimeout(() => {
+      messageElement.classList.add("highlight-message");
+    }, 500);
+
+    setTimeout(() => {
+      messageElement.classList.remove("highlight-message");
+    }, 2500);
+  } else {
+    console.warn(`메시지 ID ${messageId}를 찾을 수 없습니다.`);
+  }
+};
+
+const cancelReply = () => {
+  replyToMessage.value = null;
+  showReplyInput.value = false;
+  newMessage.value = "";
+};
+
+// @ 언급 관련 함수들 - 채널 참여 멤버 정보
+const getChannelMembers = () => {
+  // 채널에 참여하는 멤버 목록 (실제로는 API에서 가져와야 함)
+  // 현재 채널(channelSeq.value)에 참여하는 멤버들만 가져오기
+  mentionList.value = [
+    { id: 1, name: "홍길동", email: "hong@example.com", profileImage: null },
+    { id: 2, name: "김철수", email: "kim@example.com", profileImage: null },
+    { id: 3, name: "이영희", email: "lee@example.com", profileImage: null },
+    { id: 4, name: "박민수", email: "park@example.com", profileImage: null },
+    { id: 5, name: "최영수", email: "choi@example.com", profileImage: null },
+  ];
+
+  // 현재 사용자는 제외
+  const currentUserSeq = memberSeq.value;
+  mentionList.value = mentionList.value.filter(
+    (member) => member.id !== currentUserSeq
+  );
+};
+
+const handleMessageInput = (event) => {
+  const value = event.target.value;
+  const cursorPosition = event.target.selectionStart;
+
+  // @ 입력 감지
+  const lastAtIndex = value.lastIndexOf("@", cursorPosition - 1);
+  if (lastAtIndex !== -1) {
+    const afterAt = value.substring(lastAtIndex + 1, cursorPosition);
+
+    // 공백이나 줄바꿈이 없으면 멘션 드롭다운 표시
+    if (!afterAt.includes(" ") && !afterAt.includes("\n")) {
+      showMentionDropdown.value = true;
+      mentionStartIndex.value = lastAtIndex;
+      mentionEndIndex.value = cursorPosition;
+
+      // 멘션 필터링
+      const searchTerm = afterAt.toLowerCase();
+      filteredMentions.value = mentionList.value.filter((member) =>
+        member.name.toLowerCase().includes(searchTerm)
+      );
+    }
+  } else {
+    showMentionDropdown.value = false;
+  }
+};
+
+const selectMention = (member) => {
+  const beforeMention = newMessage.value.substring(0, mentionStartIndex.value);
+  const afterMention = newMessage.value.substring(mentionEndIndex.value);
+
+  newMessage.value = beforeMention + `@${member.name} ` + afterMention;
+  showMentionDropdown.value = false;
+
+  // 커서 위치 조정
+  setTimeout(() => {
+    const textarea = document.querySelector(".message-input textarea");
+    if (textarea) {
+      const newCursorPos = beforeMention.length + `@${member.name} `.length;
+      textarea.setSelectionRange(newCursorPos, newCursorPos);
+    }
+  }, 0);
+};
+
+const handleMentionKeydown = (event) => {
+  if (showMentionDropdown.value) {
+    if (event.key === "Escape") {
+      showMentionDropdown.value = false;
+    }
+  }
 };
 
 const formatFileSize = (bytes) => {
@@ -485,9 +662,12 @@ const handleInputChange = () => {
   isTyping.value = newMessage.value.length > 0;
 };
 
+
+
 // 이벤트 리스너 등록/해제
 onMounted(() => {
   window.addEventListener("select-chat-channel", handleSubChannelSelect);
+  window.addEventListener("click", closeContextMenu);
 
   const workspaceSeq = 4;
   channelSeq.value = 1;
@@ -513,6 +693,9 @@ onMounted(() => {
   console.log("- memberSeq:", memberSeq.value);
   console.log("- JWT payload:", payload);
 
+  // ✅ 채널 참여 멤버 목록 초기화
+  getChannelMembers();
+
   // ✅ memberSeq 값이 유효할 때만 연결
   if (memberSeq.value > 0) {
     connectWebsocket();
@@ -525,6 +708,7 @@ onMounted(() => {
 
 onUnmounted(() => {
   window.removeEventListener("select-chat-channel", handleSubChannelSelect);
+  window.removeEventListener("click", closeContextMenu);
   disconnectWebsocket();
 });
 </script>
@@ -567,6 +751,7 @@ onUnmounted(() => {
           <div
             v-for="(message, index) in messages"
             :key="message.id"
+            :data-message-id="message.id"
             class="message-item"
             :class="{
               'own-message': message.isOwn,
@@ -581,6 +766,7 @@ onUnmounted(() => {
                   messages[index - 1].user !== message.user ||
                   messages[index - 1].isOwn),
             }"
+            @contextmenu="handleMessageRightClick(message, $event)"
           >
             <div class="message-content">
               <div v-if="!message.isOwn" class="message-avatar">
@@ -599,6 +785,49 @@ onUnmounted(() => {
                   class="message-sender"
                 >
                   {{ message.user }}
+                </div>
+
+                <!-- 답장 메시지 미리보기 (메시지 위쪽에 표시) -->
+                <div
+                  v-if="message.messageType === 'REPLY' && message.replyToSeq"
+                  class="reply-preview-above"
+                  :class="{
+                    'deleted-message': !getReplyToMessage(message.replyToSeq),
+                  }"
+                  @click="
+                    getReplyToMessage(message.replyToSeq)
+                      ? scrollToOriginalMessage(message.replyToSeq)
+                      : null
+                  "
+                >
+                  <div class="reply-preview-header">
+                    <v-icon
+                      size="12"
+                      :color="
+                        getReplyToMessage(message.replyToSeq)
+                          ? 'primary'
+                          : 'error'
+                      "
+                    >
+                      {{
+                        getReplyToMessage(message.replyToSeq)
+                          ? "mdi-reply"
+                          : "mdi-delete"
+                      }}
+                    </v-icon>
+                    <span class="reply-preview-user">
+                      {{
+                        getReplyToMessage(message.replyToSeq)?.user ||
+                        "삭제된 사용자"
+                      }}
+                    </span>
+                  </div>
+                  <div class="reply-preview-text">
+                    {{
+                      getReplyToMessage(message.replyToSeq)?.content ||
+                      "삭제된 메시지입니다."
+                    }}
+                  </div>
                 </div>
 
                 <div class="message-bubble">
@@ -700,6 +929,44 @@ onUnmounted(() => {
           </div>
         </div>
 
+        <!-- 답장 미리보기 -->
+        <div v-if="replyToMessage" class="reply-preview">
+          <div class="reply-header">
+            <v-icon size="16" color="primary">mdi-reply</v-icon>
+            <span class="reply-label">답장</span>
+            <v-btn icon size="16" variant="text" @click="cancelReply">
+              <v-icon size="14">mdi-close</v-icon>
+            </v-btn>
+          </div>
+          <div class="reply-message">
+            <span class="reply-user">{{ replyToMessage.user }}</span>
+            <span class="reply-text">{{ replyToMessage.content }}</span>
+          </div>
+        </div>
+
+        <!-- @ 언급 드롭다운 -->
+        <div v-if="showMentionDropdown" class="mention-dropdown">
+          <div
+            v-for="member in filteredMentions"
+            :key="member.id"
+            @click="selectMention(member)"
+            class="mention-item"
+          >
+            <v-avatar size="24">
+              <v-img
+                v-if="member.profileImage"
+                :src="member.profileImage"
+                :alt="member.name"
+              />
+              <span v-else>{{ member.name.charAt(0) }}</span>
+            </v-avatar>
+            <div class="mention-info">
+              <span class="mention-name">{{ member.name }}</span>
+              <span class="mention-email">{{ member.email }}</span>
+            </div>
+          </div>
+        </div>
+
         <!-- 메시지 입력 영역 -->
         <div
           class="message-input"
@@ -722,6 +989,8 @@ onUnmounted(() => {
           <div class="input-field">
             <v-textarea
               v-model="newMessage"
+              @input="handleMessageInput"
+              @keydown="handleMentionKeydown"
               placeholder="메시지를 입력하세요..."
               variant="plain"
               rows="1"
@@ -731,7 +1000,6 @@ onUnmounted(() => {
               @keypress="handleKeyPress"
               @focus="handleInputFocus"
               @blur="handleInputBlur"
-              @input="handleInputChange"
             />
           </div>
 
@@ -760,6 +1028,26 @@ onUnmounted(() => {
       v-model="showFileModal"
       @attach-files="handleAttachFiles"
     />
+
+    <!-- 컨텍스트 메뉴 -->
+    <div
+      v-if="showContextMenu"
+      class="context-menu"
+      :style="{
+        left: contextMenuPosition.x + 'px',
+        top: contextMenuPosition.y + 'px',
+      }"
+      @click.stop
+    >
+      <div class="context-item" @click="startReply(selectedMessage)">
+        <v-icon size="18">mdi-reply</v-icon>
+        <span>답장</span>
+      </div>
+      <div class="context-item" @click="copyMessage(selectedMessage)">
+        <v-icon size="18">mdi-content-copy</v-icon>
+        <span>복사</span>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -1284,5 +1572,267 @@ onUnmounted(() => {
   .message-textarea {
     font-size: 16px; /* iOS 줌 방지 */
   }
+}
+
+/* 컨텍스트 메뉴 */
+.context-menu {
+  position: fixed;
+  background: rgb(var(--v-theme-surface));
+  border: 1px solid rgba(var(--v-theme-on-surface), 0.12);
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  z-index: 2000;
+  min-width: 120px;
+  overflow: hidden;
+}
+
+.context-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+  font-size: 14px;
+  color: rgb(var(--v-theme-on-surface));
+}
+
+.context-item:hover {
+  background: rgba(var(--v-theme-primary), 0.08);
+}
+
+.context-item:active {
+  background: rgba(var(--v-theme-primary), 0.12);
+}
+
+/* 답장 미리보기 */
+.reply-preview {
+  background: rgba(var(--v-theme-primary), 0.05);
+  border-left: 3px solid rgb(var(--v-theme-primary));
+  padding: 12px 16px;
+  margin: 0 16px 8px 16px;
+  border-radius: 8px;
+  border: 1px solid rgba(var(--v-theme-primary), 0.2);
+}
+
+.reply-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+
+.reply-label {
+  font-size: 12px;
+  color: rgb(var(--v-theme-primary));
+  font-weight: 600;
+}
+
+.reply-message {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.reply-user {
+  font-size: 12px;
+  color: rgb(var(--v-theme-primary));
+  font-weight: 500;
+}
+
+.reply-text {
+  font-size: 11px;
+  color: rgba(var(--v-theme-on-surface), 0.7);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 250px;
+}
+
+/* 답장 메시지 위쪽 미리보기 */
+.reply-preview-above {
+  background: rgba(var(--v-theme-primary), 0.08);
+  border-left: 3px solid rgb(var(--v-theme-primary));
+  padding: 6px 10px;
+  margin-bottom: 6px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  max-width: 300px;
+  font-size: 11px;
+}
+
+.reply-preview-above:hover {
+  background: rgba(var(--v-theme-primary), 0.12);
+  border-left-color: rgb(var(--v-theme-primary));
+  transform: translateX(2px);
+}
+
+.reply-preview-above.deleted-message {
+  background: rgba(var(--v-theme-error), 0.08);
+  border-left-color: rgb(var(--v-theme-error));
+  cursor: not-allowed;
+}
+
+.reply-preview-above.deleted-message:hover {
+  background: rgba(var(--v-theme-error), 0.12);
+  transform: none;
+}
+
+.reply-preview-header {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 2px;
+}
+
+.reply-preview-user {
+  font-size: 11px;
+  color: rgb(var(--v-theme-primary));
+  font-weight: 600;
+}
+
+.reply-preview-text {
+  font-size: 10px;
+  color: rgba(var(--v-theme-on-surface), 0.7);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  line-height: 1.2;
+  max-width: 280px;
+}
+
+/* 답장 메시지 표시 (기존 - 메시지 버블 내부용) */
+.reply-to-message {
+  background: rgba(var(--v-theme-primary), 0.05);
+  border-left: 3px solid rgb(var(--v-theme-primary));
+  padding: 8px 12px;
+  margin-bottom: 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  max-width: 280px;
+}
+
+.reply-to-message:hover {
+  background: rgba(var(--v-theme-primary), 0.1);
+  border-left-color: rgb(var(--v-theme-primary));
+}
+
+.reply-to-message.deleted-message {
+  background: rgba(var(--v-theme-error), 0.05);
+  border-left-color: rgb(var(--v-theme-error));
+  cursor: not-allowed;
+}
+
+.reply-to-message.deleted-message:hover {
+  background: rgba(var(--v-theme-error), 0.08);
+}
+
+.reply-to-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+
+.reply-to-user {
+  font-size: 12px;
+  color: rgb(var(--v-theme-primary));
+  font-weight: 600;
+}
+
+.reply-to-content {
+  font-size: 12px;
+  color: rgba(var(--v-theme-on-surface), 0.8);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  line-height: 1.3;
+}
+
+/* 메시지 하이라이트 효과 */
+.highlight-message {
+  animation: highlightPulse 2s ease-in-out;
+  border-radius: 8px;
+}
+
+@keyframes highlightPulse {
+  0% {
+    background: rgba(var(--v-theme-primary), 0.4);
+    box-shadow: 0 0 0 0 rgba(var(--v-theme-primary), 0.4);
+  }
+  25% {
+    background: rgba(var(--v-theme-primary), 0.2);
+    box-shadow: 0 0 0 4px rgba(var(--v-theme-primary), 0.2);
+  }
+  50% {
+    background: rgba(var(--v-theme-primary), 0.15);
+    box-shadow: 0 0 0 2px rgba(var(--v-theme-primary), 0.15);
+  }
+  75% {
+    background: rgba(var(--v-theme-primary), 0.08);
+    box-shadow: 0 0 0 1px rgba(var(--v-theme-primary), 0.08);
+  }
+  100% {
+    background: transparent;
+    box-shadow: 0 0 0 0 rgba(var(--v-theme-primary), 0);
+  }
+}
+
+/* @ 언급 드롭다운 */
+.mention-dropdown {
+  position: absolute;
+  bottom: 100%;
+  left: 16px;
+  right: 16px;
+  background: rgb(var(--v-theme-surface));
+  border: 1px solid rgba(var(--v-theme-on-surface), 0.1);
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  max-height: 200px;
+  overflow-y: auto;
+  z-index: 1000;
+  margin-bottom: 8px;
+}
+
+.mention-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+
+.mention-item:hover {
+  background: rgba(var(--v-theme-primary), 0.1);
+}
+
+.mention-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+}
+
+.mention-name {
+  font-weight: 500;
+  color: rgb(var(--v-theme-on-surface));
+  font-size: 14px;
+}
+
+.mention-email {
+  font-size: 12px;
+  color: rgba(var(--v-theme-on-surface), 0.6);
+}
+
+/* 메시지 우클릭 호버 효과 */
+.message-item {
+  cursor: context-menu;
+}
+
+.message-item:hover {
+  background: rgba(var(--v-theme-on-surface), 0.02);
 }
 </style>
