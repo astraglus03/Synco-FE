@@ -592,22 +592,37 @@ const cancelReply = () => {
 };
 
 // @ 언급 관련 함수들 - 채널 참여 멤버 정보
-const getChannelMembers = () => {
-  // 채널에 참여하는 멤버 목록 (실제로는 API에서 가져와야 함)
-  // 현재 채널(channelSeq.value)에 참여하는 멤버들만 가져오기
-  mentionList.value = [
-    { id: 1, name: "홍길동", email: "hong@example.com", profileImage: null },
-    { id: 2, name: "김철수", email: "kim@example.com", profileImage: null },
-    { id: 3, name: "이영희", email: "lee@example.com", profileImage: null },
-    { id: 4, name: "박민수", email: "park@example.com", profileImage: null },
-    { id: 5, name: "최영수", email: "choi@example.com", profileImage: null },
-  ];
+const getChannelMembers = async () => {
+  try {
+    const res = await axios.get(
+      `${import.meta.env.VITE_API_URL}/chat-service/chat/channels/${
+        channelSeq.value
+      }/members`,
+      {
+        headers: {
+          Authorization: `Bearer ${token.value}`,
+        },
+      }
+    );
 
-  // 현재 사용자는 제외
-  const currentUserSeq = memberSeq.value;
-  mentionList.value = mentionList.value.filter(
-    (member) => member.id !== currentUserSeq
-  );
+    console.log("📡 서버 응답 원본:", res.data);
+
+    // 백엔드에서 ChannelMemberResDto 리스트 반환됨 [{ memberSeq, memberName, profileImageUrl }]
+    mentionList.value = res.data.data.map((m) => ({
+      id: m.memberSeq,
+      name: m.memberName,
+      profileImage: m.profileImageUrl,
+    }));
+
+    // 현재 로그인 사용자 제외
+    mentionList.value = mentionList.value.filter(
+      (member) => member.id !== memberSeq.value
+    );
+
+    console.log("✅ 채팅 멤버 목록:", mentionList.value);
+  } catch (err) {
+    console.error("❌ 채팅 멤버 목록 조회 실패:", err);
+  }
 };
 
 const handleMessageInput = (event) => {
@@ -731,16 +746,14 @@ onMounted(() => {
   console.log("- JWT payload:", payload);
 
   // ✅ 채널 참여 멤버 목록 초기화
-  getChannelMembers();
-
-  // ✅ memberSeq 값이 유효할 때만 연결
-  if (memberSeq.value > 0) {
-    connectWebsocket();
-  } else {
-    console.error(
-      "❌ memberSeq가 유효하지 않습니다. JWT payload를 확인하세요."
-    );
-  }
+  getChannelMembers().then(() => {
+    // ✅ memberSeq가 유효할 때만 WebSocket 연결
+    if (memberSeq.value > 0) {
+      connectWebsocket();
+    } else {
+      console.error("❌ memberSeq가 유효하지 않습니다.");
+    }
+  });
 });
 
 onUnmounted(() => {
