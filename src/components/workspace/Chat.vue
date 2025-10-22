@@ -104,8 +104,33 @@ const connectWebsocket = () => {
             const parsed = JSON.parse(message.body);
             console.log("📩 메시지 수신:", parsed);
 
-            // ✅ 내가 보낸 메시지는 무시 (서버 broadcast에 포함되므로)
-            if (Number(parsed.senderSeq) === Number(memberSeq.value)) return;
+            // // ✅ 내가 보낸 메시지는 무시 (서버 broadcast에 포함되므로)
+            // if (Number(parsed.senderSeq) === Number(memberSeq.value)) return;
+
+            // 🟩 1️⃣ 서버에서 다시 받은 내 메시지가 temp_로 이미 표시된 경우 → 교체 처리
+if (Number(parsed.senderSeq) === Number(memberSeq.value)) {
+  const tempMsgIndex = messages.value.findIndex(
+    (msg) =>
+      msg.isOwn &&
+      msg.content === parsed.chatMessageText &&
+      msg.messageType === parsed.messageType
+  );
+
+  if (tempMsgIndex !== -1) {
+    // 🟩 temp_ 메시지 → 실제 chatMessageSeq로 교체
+    messages.value[tempMsgIndex].id = parsed.chatMessageSeq;
+    messages.value[tempMsgIndex].replyToSeq = parsed.replyToSeq || null;
+    messages.value[tempMsgIndex].profileImageUrl =
+      parsed.senderProfileImageUrl || null;
+    messages.value[tempMsgIndex].time = new Date().toLocaleTimeString("ko-KR", {
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+
+    // 🟩 교체했으면 새로 push하지 않도록 return
+    return;
+  }
+}
 
             // ✅ 파일 URL 파싱 (BE에서 chatMessageFileUrls 문자열로 전송됨)
             const urls = (parsed.chatMessageFileUrls || "")
@@ -129,14 +154,10 @@ const connectWebsocket = () => {
                 minute: "2-digit",
               }),
               avatar:
-  parsed.senderProfileImageUrl && parsed.senderProfileImageUrl.trim() !== ""
-    ? parsed.senderProfileImageUrl // ✅ 실제 프로필 URL이 있으면 그걸 avatar로 사용
-    : (parsed.senderName || parsed.senderSeq)?.toString().charAt(0),
-profileImageUrl: parsed.senderProfileImageUrl || null,
-              // avatar: (parsed.senderName || parsed.senderSeq)
-              //   .toString()
-              //   .charAt(0),
-              // profileImageUrl: parsed.senderProfileImageUrl || null, // ✅ 백엔드에서 받은 실제 프로필 이미지 사용
+                parsed.senderProfileImageUrl && parsed.senderProfileImageUrl.trim() !== ""
+                  ? parsed.senderProfileImageUrl // ✅ 실제 프로필 URL이 있으면 그걸 avatar로 사용
+                  : (parsed.senderName || parsed.senderSeq)?.toString().charAt(0),
+              profileImageUrl: parsed.senderProfileImageUrl || null,
               senderSeq: parsed.senderSeq,
               isOwn: parsed.senderSeq === memberSeq.value,
               unread: parsed.senderSeq !== memberSeq.value ? 1 : 0,
@@ -272,7 +293,7 @@ const uploadFilesToS3 = async () => {
 // ✅ 메시지 전송
 const sendMessage = async () => {
   console.log(
-    "=============>>>>>모야모야모야 replySeq===============",
+    "============= 메시지 전송 ===============",
     memberSeq.value
   );
   if (!stompClient.value || !stompClient.value.connected) {
@@ -289,7 +310,12 @@ const sendMessage = async () => {
   }
 
   // 1️⃣ 전송할 메시지 데이터 생성 (사용자 정보 포함)
-  const currentUserName = localStorage.getItem("memberName") || "사용자";
+  // const currentUserName = localStorage.getItem("memberName") || "사용자";
+  const currentUserName =
+  localStorage.getItem("memberName") ||
+  JSON.parse(localStorage.getItem("user") || "{}").name ||
+  JSON.parse(localStorage.getItem("user") || "{}").memberName ||
+  "사용자";
   const currentUserProfileImage =
     localStorage.getItem("profileImageUrl") || null;
 
@@ -301,6 +327,8 @@ const sendMessage = async () => {
   } else if (attachedFiles.value.length > 0) {
     messageType = "FILE";
   }
+  // ✅ replyToSeq 먼저 안전하게 복사
+  const replySeq = replyToMessage.value?.id || null;
 
   const message = {
     senderSeq: memberSeq.value,
@@ -309,7 +337,7 @@ const sendMessage = async () => {
     messageType: messageType, // ✅ MessageType enum 값
     chatMessageText: newMessage.value,
     chatMessageFileUrls: uploadedUrls.join(","), // 🔹 S3 URL 문자열로 전달
-    replyToSeq: replyToMessage.value?.id || null, // ✅ 답장 대상 메시지 ID
+    replyToSeq: replySeq, // ✅ 지역 변수 사용
   };
 
   // 2️⃣ 즉시 화면에 표시 (로컬 메시지)
@@ -498,6 +526,7 @@ const closeContextMenu = () => {
 };
 
 const startReply = (message) => {
+  console.log("💬 답장 대상 message:", message);
   replyToMessage.value = message;
   showReplyInput.value = true;
   newMessage.value = ""; // 답장은 @ 입력 없이 답장 대상만 표시
@@ -522,7 +551,11 @@ const copyMessage = (message) => {
 // 답장 메시지 표시 관련 함수들
 const getReplyToMessage = (replyToSeq) => {
   if (!replyToSeq) return null;
-  return messages.value.find((msg) => String(msg.id) === String(replyToSeq));
+  return messages.value.find(
+    (msg) =>
+      String(msg.id) === String(replyToSeq) ||
+      String(msg.id).replace("temp_", "") === String(replyToSeq)
+  );
 };
 
 const scrollToOriginalMessage = (messageId) => {
