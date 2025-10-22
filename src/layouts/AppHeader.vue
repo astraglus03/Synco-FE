@@ -1,7 +1,10 @@
 <script setup>
-import { ref, computed, watch, onMounted } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/store/authStore'
+import { useWorkspaceStore } from '@/store/workspaceStore'
+import { Authority } from '@/models/workspace/WorkspaceModels'
+import { getWorkspaceMembers, updateWorkspace, delegateSuperAuthority } from '@/services/WorkspaceService'
 import * as authApi from '@/api/member/auth'
 
 const props = defineProps({
@@ -11,6 +14,7 @@ const props = defineProps({
 })
 
 const authStore = useAuthStore()
+const workspaceStore = useWorkspaceStore()
 const router = useRouter()
 
 const emit = defineEmits(['toggle-theme', 'toggle-member-sidebar', 'toggle-notification-sidebar'])
@@ -605,37 +609,92 @@ const getPriorityText = (priority) => {
 
 // 워크스페이스 설정 관련
 const workspaceSettingsOpen = ref(false)
+const settingsTab = ref('info') // 'info' 또는 'permissions'
 const isWorkspaceOwner = ref(true)
 const expandedChannels = ref(new Set())
 
-// 팀명
-const teamName = ref('Synco 개발팀')
+// 팀명 (실제 워크스페이스 이름 사용)
+const teamName = ref('')
 
-// 팀원 데이터
-const teamMembers = ref([
-  { id: 1, name: '김팀장', avatar: '김', status: 'online' },
-  { id: 2, name: '이개발', avatar: '이', status: 'online' },
-  { id: 3, name: '박디자인', avatar: '박', status: 'away' },
-  { id: 4, name: '최마케팅', avatar: '최', status: 'offline' },
-  { id: 5, name: '정신입', avatar: '정', status: 'online' }
-])
+// 썸네일 이미지
+const thumbnailImage = ref(null)
+const thumbnailPreview = ref('')
 
-// 사이드바 기능 목록
+// 변경사항 추적
+const hasChanges = computed(() => {
+  const currentWorkspace = workspaceStore.currentWorkspaceInfo
+  if (!currentWorkspace) return false
+  
+  // 팀명 변경 확인
+  const nameChanged = teamName.value !== currentWorkspace.name
+  
+  // 썸네일 변경 확인
+  const thumbnailChanged = thumbnailImage.value !== null
+  
+  return nameChanged || thumbnailChanged
+})
+
+// 워크스페이스 변경 시 팀명 업데이트
+watch(() => workspaceStore.currentWorkspaceInfo, (newWorkspace) => {
+  if (newWorkspace) {
+    teamName.value = newWorkspace.name || '워크스페이스'
+    thumbnailPreview.value = newWorkspace.profile || ''
+  }
+}, { immediate: true })
+
+// 현재 로그인한 사용자 ID (authStore에서 가져옴)
+const currentUserId = computed(() => {
+  // authStore.memberSeq가 없으면 이름으로 매칭해서 찾기
+  if (authStore.memberSeq) {
+    return authStore.memberSeq
+  }
+  
+  // 임시 해결책: 이름으로 매칭
+  const currentUserMember = teamMembers.value.find(member => member.name === authStore.user?.name)
+  return currentUserMember?.memberSeq
+})
+
+// 팀원 데이터 (API에서 로드)
+const teamMembers = ref([])
+const isLoadingMembers = ref(false)
+
+// 정렬된 팀 멤버 목록 (SUPER 최상위, 나머지 알파벳순)
+const sortedTeamMembers = computed(() => {
+  return [...teamMembers.value].sort((a, b) => {
+    // SUPER 권한자를 최상위로
+    if (a.authority === Authority.SUPER && b.authority !== Authority.SUPER) {
+      return -1
+    }
+    if (a.authority !== Authority.SUPER && b.authority === Authority.SUPER) {
+      return 1
+    }
+    
+    // 나머지는 이름 알파벳순으로 정렬
+    return (a.name || '').localeCompare(b.name || '')
+  })
+})
+
+// 현재 사용자가 SUPER 권한을 가지고 있는지 확인
+const isCurrentUserSuper = computed(() => {
+  // authStore.memberSeq가 있으면 사용, 없으면 이름으로 매칭
+  let memberSeq = authStore.memberSeq
+  if (!memberSeq) {
+    const currentUserMember = teamMembers.value.find(member => member.name === authStore.user?.name)
+    memberSeq = currentUserMember?.memberSeq
+  }
+  
+  const currentUserMember = teamMembers.value.find(member => member.memberSeq == memberSeq)
+  return currentUserMember?.authority === Authority.SUPER
+})
+
+// 사이드바 기능 목록 (프로젝트만 권한 관리)
 const sidebarFeatures = ref([
-  { key: 'dashboard', name: '대시보드', icon: 'mdi-view-dashboard', expanded: false },
-  { key: 'chat', name: '채팅', icon: 'mdi-message', expanded: false },
-  { key: 'schedule', name: '일정관리', icon: 'mdi-calendar', expanded: false },
-  { key: 'drive', name: '드라이브', icon: 'mdi-folder', expanded: false },
-  { key: 'meeting', name: '화상회의', icon: 'mdi-video', expanded: false }
+  { key: 'project', name: '프로젝트', icon: 'mdi-view-dashboard' }
 ])
 
-// 각 기능별 팀원 권한
+// 프로젝트 팀원 권한 (API에서 로드)
 const memberPermissions = ref({
-  dashboard: { 1: 'MANAGER', 2: 'PARTICIPANT', 3: 'PARTICIPANT', 4: 'PARTICIPANT', 5: 'PARTICIPANT' },
-  chat: { 1: 'MANAGER', 2: 'MANAGER', 3: 'PARTICIPANT', 4: 'PARTICIPANT', 5: 'PARTICIPANT' },
-  schedule: { 1: 'MANAGER', 2: 'PARTICIPANT', 3: 'MANAGER', 4: 'PARTICIPANT', 5: 'PARTICIPANT' },
-  drive: { 1: 'MANAGER', 2: 'PARTICIPANT', 3: 'MANAGER', 4: 'PARTICIPANT', 5: 'PARTICIPANT' },
-  meeting: { 1: 'MANAGER', 2: 'MANAGER', 3: 'PARTICIPANT', 4: 'PARTICIPANT', 5: 'PARTICIPANT' }
+  project: {}
 })
 
 // 팀 채널 목록
@@ -671,22 +730,191 @@ const isChannelExpanded = (channelId) => {
   return expandedChannels.value.has(channelId)
 }
 
-// 기능 토글
-const toggleFeature = (featureKey) => {
-  const feature = sidebarFeatures.value.find(f => f.key === featureKey)
-  if (feature) {
-    feature.expanded = !feature.expanded
+
+// 멤버 목록 로드
+const loadMembers = async () => {
+  const currentWorkspace = workspaceStore.currentWorkspaceInfo
+  
+  // personal 워크스페이스는 멤버 목록이 없음
+  if (!currentWorkspace || currentWorkspace.type === 'personal') {
+    teamMembers.value = []
+    memberPermissions.value.project = {}
+    return
+  }
+
+  try {
+    isLoadingMembers.value = true
+    const members = await getWorkspaceMembers(currentWorkspace.workSpaceSeq)
+    
+    // 멤버 데이터 매핑 (권한 정보 포함)
+    teamMembers.value = members.map(member => ({
+      id: member.memberSeq,
+      memberSeq: member.memberSeq,
+      name: member.name,
+      profileImageUrl: member.profileImageUrl,
+      avatar: member.avatarText,
+      status: member.uiStatus,
+      authority: member.authority
+    }))
+    
+    // 권한 데이터 매핑 (API에서 받은 권한 정보 사용)
+    const permissions = {}
+    members.forEach(member => {
+      permissions[member.memberSeq] = member.authority
+    })
+    
+    memberPermissions.value.project = permissions
+    
+  } catch (error) {
+    console.error('멤버 목록 로딩 실패:', error)
+    teamMembers.value = []
+    memberPermissions.value.project = {}
+  } finally {
+    isLoadingMembers.value = false
   }
 }
 
-// 권한 업데이트
-const updatePermission = (featureKey, memberId, newPermission) => {
-  memberPermissions.value[featureKey][memberId] = newPermission
+// 특정 기능에서 SUPER 권한을 가진 멤버 ID 찾기
+const findSuperMember = (featureKey) => {
+  const permissions = memberPermissions.value[featureKey]
+  for (const memberId in permissions) {
+    if (permissions[memberId] === 'SUPER') {
+      return parseInt(memberId)
+    }
+  }
+  return null
 }
 
-// 팀명 업데이트
-const updateTeamName = () => {
-  console.log('팀명 변경:', teamName.value)
+// 권한 업데이트
+const updatePermission = async (featureKey, memberId, newPermission) => {
+  const currentPermission = memberPermissions.value[featureKey][memberId]
+  const currentSuperMemberId = findSuperMember(featureKey)
+  
+  // 1. SUPER 사용자가 자신의 권한을 변경하려는 경우 막기
+  if (memberId === currentUserId.value && currentPermission === 'SUPER') {
+    alert('SUPER 권한을 가진 사용자는 자신의 권한을 변경할 수 없습니다.')
+    return
+  }
+  
+  
+  // 3. 프로젝트에서 다른 사용자를 SUPER로 변경하려는 경우 (SUPER 권한 위임)
+  if (newPermission === 'SUPER' && currentPermission !== 'SUPER' && featureKey === 'project') {
+    const member = teamMembers.value.find(m => m.id === memberId)
+    const confirmed = confirm(`해당 사용자에게 SUPER 권한을 위임하시겠습니까?\n\n${member.name}님에게 SUPER 권한을 위임하면 귀하의 권한은 참여자로 변경됩니다.`)
+    
+    if (!confirmed) {
+      return
+    }
+    
+    try {
+      console.log('권한 위임 요청:', {
+        delegateMemberSeq: member.memberSeq,
+        workSpaceSeq: props.currentWorkspace.workSpaceSeq,
+        member: member
+      })
+      
+      // Super 권한 위임 API 호출
+      await delegateSuperAuthority(member.memberSeq, props.currentWorkspace.workSpaceSeq)
+      
+      // 권한 위임 후 즉시 모달 닫기
+      workspaceSettingsOpen.value = false
+      
+      // 워크스페이스 대시보드 새로고침
+      await workspaceStore.loadMyWorkspaces()
+      await loadMembers()
+      
+      alert('프로젝트 SUPER 권한이 위임되었습니다.')
+    } catch (error) {
+      console.error('권한 위임 실패:', error)
+      alert('권한 위임에 실패했습니다.')
+    }
+  } else {
+    // 일반 권한 변경 (PARTICIPANT ↔ MANAGER)
+    memberPermissions.value[featureKey][memberId] = newPermission
+  }
+}
+
+
+// 워크스페이스 변경 감지
+watch(() => workspaceStore.currentWorkspace, () => {
+  loadMembers()
+})
+
+// props.currentWorkspace 변경 감지
+watch(() => props.currentWorkspace, () => {
+  loadMembers()
+}, { immediate: true })
+
+
+// 워크스페이스 설정 모달 열릴 때 멤버 목록 로드
+watch(() => workspaceSettingsOpen.value, (newValue) => {
+  if (newValue) {
+    loadMembers()
+  }
+})
+
+// 새로고침 시 모달창 닫기 함수
+const handleBeforeUnload = () => {
+  workspaceSettingsOpen.value = false
+}
+
+// 초기 로드
+onMounted(async () => {
+  // 워크스페이스 목록 로드
+  await workspaceStore.loadMyWorkspaces()
+  // 멤버 목록 로드
+  loadMembers()
+  
+  // 새로고침 시 모달창 닫기
+  window.addEventListener('beforeunload', handleBeforeUnload)
+})
+
+// 컴포넌트 언마운트 시 이벤트 리스너 정리
+onUnmounted(() => {
+  window.removeEventListener('beforeunload', handleBeforeUnload)
+})
+
+// 썸네일 이미지 선택
+const handleThumbnailChange = (event) => {
+  const file = event.target.files[0]
+  if (file) {
+    thumbnailImage.value = file
+    // 미리보기 생성
+    const reader = new FileReader()
+    reader.onload = (e) => {
+      thumbnailPreview.value = e.target.result
+    }
+    reader.readAsDataURL(file)
+  }
+}
+
+// 워크스페이스 업데이트
+const updateWorkspaceInfo = async () => {
+  const currentWorkspace = workspaceStore.currentWorkspaceInfo
+  if (!currentWorkspace || currentWorkspace.type !== 'project') {
+    return
+  }
+
+  try {
+    // 썸네일 이미지를 변경하지 않았으면 null 대신 undefined 전달
+    const thumbnailToSend = thumbnailImage.value instanceof File ? thumbnailImage.value : undefined
+    
+    const updatedWorkspace = await updateWorkspace(
+      currentWorkspace.workSpaceSeq, 
+      teamName.value, 
+      thumbnailToSend
+    )
+    
+    // 워크스페이스 목록 새로고침
+    await workspaceStore.loadMyWorkspaces()
+    
+    // 현재 워크스페이스 다시 선택하여 업데이트된 정보 반영
+    const currentWorkspaceId = workspaceStore.currentWorkspace
+    await workspaceStore.selectWorkspace(currentWorkspaceId)
+    
+  } catch (error) {
+    console.error('워크스페이스 수정 실패:', error)
+  }
 }
 
 // 상태 색상 가져오기
@@ -700,11 +928,10 @@ const getStatusColor = (status) => {
 }
 
 // 워크스페이스 설정 저장
-const saveWorkspaceSettings = () => {
-  console.log('팀 설정 저장:', {
-    teamName: teamName.value,
-    permissions: memberPermissions.value
-  })
+const saveWorkspaceSettings = async () => {
+  await updateWorkspaceInfo()
+  // 변경사항 초기화
+  thumbnailImage.value = null
   workspaceSettingsOpen.value = false
 }
 
@@ -838,9 +1065,9 @@ onMounted(() => {
         <v-tooltip activator="parent" location="bottom">알림</v-tooltip>
       </v-btn>
 
-      <!-- 프로젝트 설정 버튼 (프로젝트 워크스페이스일 때만 표시) -->
+      <!-- 프로젝트 설정 버튼 (프로젝트 워크스페이스이고 SUPER 권한일 때만 표시) -->
       <v-btn 
-        v-if="currentWorkspace?.type === 'project'"
+        v-if="props.currentWorkspace?.type === 'project' && isCurrentUserSuper"
         icon 
         variant="text"
         @click="workspaceSettingsOpen = true"
@@ -852,7 +1079,7 @@ onMounted(() => {
 
       <!-- 멤버 목록 토글 (프로젝트 워크스페이스일 때만 표시) -->
       <v-btn 
-        v-if="currentWorkspace?.type === 'project'"
+        v-if="props.currentWorkspace?.type === 'project'"
         icon 
         variant="text"
         :color="memberSidebarVisible ? 'primary' : ''"
@@ -917,7 +1144,7 @@ onMounted(() => {
   </v-app-bar>
 
   <!-- 팀 설정 다이얼로그 -->
-  <v-dialog v-model="workspaceSettingsOpen" max-width="800" scrollable>
+  <v-dialog v-model="workspaceSettingsOpen" max-width="600" scrollable>
     <v-card class="team-settings-dialog">
       <!-- 헤더 -->
       <div class="dialog-header">
@@ -939,29 +1166,88 @@ onMounted(() => {
 
       <v-divider />
 
-      <!-- 팀명 설정 -->
-      <div class="team-name-section">
+      <!-- 탭 네비게이션 -->
+      <v-tabs
+        v-model="settingsTab"
+        bg-color="surface"
+        color="primary"
+        fixed-tabs
+      >
+        <v-tab value="info">
+          <v-icon start>mdi-account-group</v-icon>
+          팀 정보
+        </v-tab>
+        <v-tab value="permissions">
+          <v-icon start>mdi-shield-account</v-icon>
+          멤버 권한 관리
+        </v-tab>
+      </v-tabs>
+
+      <v-divider />
+
+      <!-- 탭 컨텐츠 -->
+      <v-window v-model="settingsTab">
+        <!-- 팀 정보 탭 -->
+        <v-window-item value="info">
+          <div class="team-name-section">
         <div class="section-header">
           <v-icon class="section-icon">mdi-account-group</v-icon>
           <h3 class="section-title">팀 정보</h3>
         </div>
-        <v-text-field
-          v-model="teamName"
-          label="팀명"
-          variant="outlined"
-          density="comfortable"
-          class="team-name-field"
-          @blur="updateTeamName"
-        />
+        
+        <!-- 팀 정보 (썸네일 + 팀명) -->
+        <div class="team-info-container">
+          <!-- 썸네일 이미지 -->
+          <div class="thumbnail-preview-wrapper">
+            <v-avatar size="80" class="thumbnail-preview" color="primary">
+              <v-img 
+                v-if="thumbnailPreview"
+                :src="thumbnailPreview"
+                alt="팀 썸네일"
+                cover
+              />
+              <span v-else class="text-white font-weight-bold" style="font-size: 20px;">
+                {{ teamName.charAt(0).toUpperCase() }}
+              </span>
+            </v-avatar>
+            <v-btn
+              icon
+              size="small"
+              variant="elevated"
+              color="primary"
+              class="upload-icon-btn"
+              @click="$refs.thumbnailInput.click()"
+            >
+              <v-icon size="16">mdi-camera</v-icon>
+            </v-btn>
+          </div>
+          
+          <!-- 팀명 입력 -->
+          <v-text-field
+            v-model="teamName"
+            label="팀명"
+            variant="outlined"
+            density="comfortable"
+            class="team-name-field"
+          />
+          
+          <input
+            type="file"
+            accept="image/*"
+            @change="handleThumbnailChange"
+            style="display: none"
+            ref="thumbnailInput"
+          />
+        </div>
       </div>
+        </v-window-item>
 
-      <v-divider />
-
-      <!-- 기능별 권한 관리 -->
-      <div class="permissions-section">
+        <!-- 멤버 권한 관리 탭 -->
+        <v-window-item value="permissions">
+          <div class="permissions-section">
         <div class="section-header">
           <v-icon class="section-icon">mdi-shield-account</v-icon>
-          <h3 class="section-title">기능별 권한 관리</h3>
+          <h3 class="section-title">멤버 권한 관리</h3>
         </div>
         
         <!-- 기능 목록 -->
@@ -972,83 +1258,118 @@ onMounted(() => {
             class="feature-card"
           >
             <!-- 기능 헤더 -->
-            <div 
-              class="feature-header"
-              @click="toggleFeature(feature.key)"
-            >
+            <div class="feature-header">
               <div class="feature-info">
                 <v-icon class="feature-icon">{{ feature.icon }}</v-icon>
                 <span class="feature-name">{{ feature.name }}</span>
               </div>
-              <v-icon 
-                class="toggle-icon"
-                :class="{ 'expanded': feature.expanded }"
-              >
-                mdi-chevron-down
-              </v-icon>
             </div>
 
-            <!-- 팀원 목록 (토글) -->
-            <v-expand-transition>
-              <div v-if="feature.expanded" class="members-section">
-                <div class="members-header">
-                  <span class="members-title">팀원 권한</span>
-                  <div class="permission-legend">
-                    <div class="legend-item manager">
-                      <v-icon size="14">mdi-shield</v-icon>
-                      <span>MANAGER</span>
-                    </div>
-                    <div class="legend-item participant">
-                      <v-icon size="14">mdi-account</v-icon>
-                      <span>PARTICIPANT</span>
-                    </div>
+            <!-- 팀원 목록 -->
+            <div class="members-section">
+              <div class="members-header">
+                <span class="members-title">팀원 권한</span>
+                <div class="permission-legend">
+                  <div class="legend-item super">
+                    <v-icon size="14">mdi-shield-crown</v-icon>
+                    <span>SUPER</span>
                   </div>
-                </div>
-                
-                <div class="members-list">
-                  <div 
-                    v-for="member in teamMembers" 
-                    :key="member.id"
-                    class="member-item"
-                  >
-                    <div class="member-info">
-                      <v-avatar size="32" color="primary">
-                        <span class="text-white font-weight-bold">{{ member.avatar }}</span>
-                      </v-avatar>
-                      <div class="member-details">
-                        <div class="member-name">{{ member.name }}</div>
-                        <div 
-                          class="status-dot"
-                          :class="getStatusColor(member.status)"
-                        ></div>
-                      </div>
-                    </div>
-                    
-                    <div class="permission-toggle">
-                      <v-btn-toggle
-                        :model-value="memberPermissions[feature.key][member.id]"
-                        @update:model-value="updatePermission(feature.key, member.id, $event)"
-                        mandatory
-                        density="compact"
-                        class="permission-buttons"
-                      >
-                        <v-btn value="PARTICIPANT" size="small" class="participant-btn">
-                          <v-icon size="14">mdi-account</v-icon>
-                          <span>참여</span>
-                        </v-btn>
-                        <v-btn value="MANAGER" size="small" class="manager-btn">
-                          <v-icon size="14">mdi-shield</v-icon>
-                          <span>관리</span>
-                        </v-btn>
-                      </v-btn-toggle>
-                    </div>
+                  <div class="legend-item participant">
+                    <v-icon size="14">mdi-account</v-icon>
+                    <span>PARTICIPANT</span>
                   </div>
                 </div>
               </div>
-            </v-expand-transition>
+              
+              <div class="members-list">
+                <!-- 로딩 상태 -->
+                <div v-if="isLoadingMembers" class="loading-state">
+                  <v-progress-circular indeterminate size="24" color="primary" />
+                  <span>멤버 목록을 불러오는 중...</span>
+                </div>
+                
+                <!-- 멤버 목록이 없는 경우 -->
+                <div v-else-if="teamMembers.length === 0" class="empty-state">
+                  <v-icon size="48" color="grey">mdi-account-group-outline</v-icon>
+                  <span>멤버가 없습니다.</span>
+                </div>
+                
+                <!-- 멤버 목록 -->
+                <div 
+                  v-else
+                  v-for="member in sortedTeamMembers" 
+                  :key="member.id"
+                  class="member-item"
+                >
+                  <div class="member-info">
+                    <v-avatar size="32" color="primary">
+                      <span class="text-white font-weight-bold">{{ member.avatar }}</span>
+                    </v-avatar>
+                    <div class="member-details">
+                      <div class="member-name">
+                        {{ member.name }}
+                        <v-chip 
+                          v-if="Number(member.id) === Number(currentUserId)"
+                          size="x-small"
+                          color="primary"
+                          variant="flat"
+                          class="ml-2"
+                        >
+                          본인
+                        </v-chip>
+                      </div>
+                      <div 
+                        class="status-dot"
+                        :class="getStatusColor(member.status)"
+                      ></div>
+                    </div>
+                  </div>
+                  
+                  <div class="permission-toggle">
+                    <!-- SUPER 권한을 가진 사용자만 권한 변경 가능 -->
+                    <v-btn-toggle
+                      v-if="feature.key === 'project' && isCurrentUserSuper"
+                      :model-value="memberPermissions[feature.key][member.id]"
+                      @update:model-value="updatePermission(feature.key, member.id, $event)"
+                      :disabled="member.id === currentUserId && memberPermissions[feature.key][member.id] === 'SUPER'"
+                      mandatory
+                      density="compact"
+                      class="permission-buttons"
+                    >
+                      <v-btn value="PARTICIPANT" size="small" class="participant-btn">
+                        <v-icon size="14">mdi-account</v-icon>
+                        <span>참여</span>
+                      </v-btn>
+                      <v-btn value="SUPER" size="small" class="super-btn">
+                        <v-icon size="14">mdi-shield-crown</v-icon>
+                        <span>소유자</span>
+                      </v-btn>
+                    </v-btn-toggle>
+                    
+                    <!-- 권한 변경 불가능한 경우 현재 권한만 표시 -->
+                    <div v-else-if="feature.key === 'project'" class="permission-display">
+                      <v-chip 
+                        :color="memberPermissions[feature.key][member.id] === 'SUPER' ? 'primary' : 'grey'"
+                        size="small"
+                        variant="outlined"
+                      >
+                        <v-icon 
+                          size="14" 
+                          :icon="memberPermissions[feature.key][member.id] === 'SUPER' ? 'mdi-shield-crown' : 'mdi-account'"
+                        ></v-icon>
+                        <span>{{ memberPermissions[feature.key][member.id] === 'SUPER' ? '소유자' : '참여' }}</span>
+                      </v-chip>
+                    </div>
+                    
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
+        </v-window-item>
+      </v-window>
 
       <!-- 액션 버튼 -->
       <div class="dialog-actions">
@@ -1062,6 +1383,7 @@ onMounted(() => {
         <v-btn 
           color="primary" 
           @click="saveWorkspaceSettings"
+          :disabled="!hasChanges"
           class="save-btn"
         >
           <v-icon left>mdi-content-save</v-icon>
@@ -1418,6 +1740,10 @@ onMounted(() => {
   font-weight: 500;
 }
 
+.legend-item.super {
+  color: #dc2626;
+}
+
 .legend-item.manager {
   color: #f59e0b;
 }
@@ -1465,6 +1791,18 @@ onMounted(() => {
   font-size: 14px;
   font-weight: 500;
   color: rgb(var(--v-theme-on-surface));
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.current-user-badge {
+  font-size: 11px;
+  font-weight: 600;
+  color: rgb(var(--v-theme-primary));
+  background: rgba(var(--v-theme-primary), 0.1);
+  padding: 2px 6px;
+  border-radius: 4px;
 }
 
 .status-dot {
@@ -1493,6 +1831,11 @@ onMounted(() => {
 .permission-buttons {
   border-radius: 8px !important;
   overflow: hidden;
+}
+
+.permission-buttons.v-btn-toggle--disabled {
+  opacity: 0.6;
+  pointer-events: none;
 }
 
 .participant-btn {
@@ -1525,6 +1868,33 @@ onMounted(() => {
   background: #f59e0b !important;
   color: white !important;
   border-color: #f59e0b !important;
+}
+
+.super-btn {
+  color: #dc2626 !important;
+  background: #fef2f2 !important;
+  border: 1px solid #fecaca !important;
+  font-size: 12px !important;
+  font-weight: 500 !important;
+  text-transform: none !important;
+  min-width: 60px !important;
+}
+
+.super-btn.v-btn--active {
+  background: #dc2626 !important;
+  color: white !important;
+  border-color: #dc2626 !important;
+}
+
+.super-btn:disabled,
+.participant-btn:disabled,
+.manager-btn:disabled {
+  opacity: 0.4 !important;
+  cursor: not-allowed !important;
+}
+
+.super-btn:disabled.v-btn--active {
+  opacity: 0.7 !important;
 }
 
 /* 다이얼로그 액션 */
@@ -2092,5 +2462,47 @@ onMounted(() => {
   .empty-description {
     font-size: 12px;
   }
+}
+
+/* 팀 정보 컨테이너 스타일 */
+.team-info-container {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-top: 16px;
+}
+
+.thumbnail-preview-wrapper {
+  position: relative;
+  display: inline-block;
+}
+
+.thumbnail-preview {
+  border: 2px solid rgba(var(--v-theme-primary), 0.2);
+  transition: all 0.3s ease;
+}
+
+.thumbnail-preview:hover {
+  border-color: rgb(var(--v-theme-primary));
+  transform: scale(1.05);
+}
+
+.upload-icon-btn {
+  position: absolute;
+  bottom: -4px;
+  right: -4px;
+  width: 24px !important;
+  height: 24px !important;
+  min-width: 24px !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  border: 2px solid white;
+}
+
+.upload-icon-btn:hover {
+  transform: scale(1.1);
+}
+
+.team-name-field {
+  margin-top: 8px; /* 썸네일과 팀명 입력 필드의 수직 정렬을 위해 조정 */
 }
 </style>
