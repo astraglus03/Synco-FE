@@ -182,7 +182,7 @@ export const disconnectStomp = () => {
   
   if (client) {
     try {
-      client.deactivate();
+      client.deㅇactivate();
       console.log('🔌 STOMP 연결 해제 완료');
     } catch (error) {
       console.error('Error disconnecting STOMP:', error);
