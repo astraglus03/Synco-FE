@@ -128,10 +128,15 @@ const connectWebsocket = () => {
                 hour: "2-digit",
                 minute: "2-digit",
               }),
-              avatar: (parsed.senderName || parsed.senderSeq)
-                .toString()
-                .charAt(0),
-              profileImageUrl: parsed.senderProfileImageUrl || null, // ✅ 백엔드에서 받은 실제 프로필 이미지 사용
+              avatar:
+  parsed.senderProfileImageUrl && parsed.senderProfileImageUrl.trim() !== ""
+    ? parsed.senderProfileImageUrl // ✅ 실제 프로필 URL이 있으면 그걸 avatar로 사용
+    : (parsed.senderName || parsed.senderSeq)?.toString().charAt(0),
+profileImageUrl: parsed.senderProfileImageUrl || null,
+              // avatar: (parsed.senderName || parsed.senderSeq)
+              //   .toString()
+              //   .charAt(0),
+              // profileImageUrl: parsed.senderProfileImageUrl || null, // ✅ 백엔드에서 받은 실제 프로필 이미지 사용
               senderSeq: parsed.senderSeq,
               isOwn: parsed.senderSeq === memberSeq.value,
               unread: parsed.senderSeq !== memberSeq.value ? 1 : 0,
@@ -767,7 +772,13 @@ onUnmounted(() => {
           >
             <div class="message-content">
               <div v-if="!message.isOwn" class="message-avatar">
-                {{ message.avatar }}
+                <img
+                  v-if="message.profileImageUrl"
+                  :src="message.profileImageUrl"
+                  alt="avatar"
+                  class="avatar-image"
+                />
+                <span v-else>{{ message.avatar }}</span>
               </div>
 
               <div class="message-group">
@@ -1148,18 +1159,20 @@ onUnmounted(() => {
 }
 
 .message-avatar {
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
-  background: rgb(var(--v-theme-primary));
-  color: white;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 12px;
-  font-weight: 600;
-  flex-shrink: 0;
-  margin-top: 4px;
+  width: 40px;         /* 아바타 크기 고정 */
+  height: 40px;
+  border-radius: 50%;  /* 동그라미 모양 */
+  overflow: hidden;    /* 이미지를 원 안에 자름 */
+  background-color: #f2f2f2; /* 이미지 없을 때 배경색 */
+}
+
+.avatar-image {
+  width: 100%;         /* 부모 영역에 맞춰 */
+  height: 100%;
+  object-fit: cover;   /* 비율 유지하며 꽉 채움 */
 }
 
 .message-bubble {
