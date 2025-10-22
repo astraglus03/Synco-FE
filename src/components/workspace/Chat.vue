@@ -520,7 +520,6 @@ const getReplyToMessage = (replyToSeq) => {
   return messages.value.find((msg) => String(msg.id) === String(replyToSeq));
 };
 
-
 const scrollToOriginalMessage = (messageId) => {
   const messageElement = document.querySelector(
     `[data-message-id="${messageId}"]`
@@ -661,8 +660,6 @@ const handleInputBlur = () => {
 const handleInputChange = () => {
   isTyping.value = newMessage.value.length > 0;
 };
-
-
 
 // 이벤트 리스너 등록/해제
 onMounted(() => {
