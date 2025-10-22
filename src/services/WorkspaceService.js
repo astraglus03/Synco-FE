@@ -1,4 +1,4 @@
-import { apiGet, apiPost, apiPatch, apiPostFormData, apiPatchFormData } from '@/utils/api'
+import { apiGet, apiPost, apiPatch, apiDelete, apiPostFormData, apiPatchFormData } from '@/utils/api'
 import { 
   TeamWorkSpaceCreateReqDto,
   TeamWorkSpaceEditReqDto,
@@ -8,6 +8,7 @@ import {
   DelegateSuperAuthorityReqDto,
   GrantAuthorityReqDto,
   ChannelEditReqDto,
+  ChannelCreateReqDto,
   ChannelInfoResDto,
   ChannelMemberResDto,
   Authority
@@ -81,6 +82,9 @@ export const delegateSuperAuthority = async (delegateMemberSeq, workSpaceSeq) =>
 // ----------------------
 // 채널 목록 조회 API
 // ----------------------
+// 채팅 채널 목록 조회
+// 주의: 기본 채널(첫 번째 채널)만 멤버 리스트를 포함하여 반환
+// 나머지 채널은 channelMemberList가 빈 배열이거나 없음
 export const getChatChannels = async (workSpaceSeq) => {
   const res = await apiGet(`/chat-service/chat/channels/${workSpaceSeq}`)
   return res.map(channel => ChannelInfoResDto.fromJson(channel))
@@ -95,6 +99,15 @@ export const getScheduleChannels = async (workSpaceSeq) => {
   const res = await apiGet(`/task-service/task/channels/${workSpaceSeq}`)
   // 일정관리는 List<ChannelMemberResDto>만 반환하므로 바로 반환
   return res.map(member => ChannelMemberResDto.fromJson(member))
+}
+
+// ----------------------
+// 채팅 채널 생성 API
+// ----------------------
+export const createChatChannel = async (channelName, workSpaceSeq) => {
+  const reqDto = new ChannelCreateReqDto(channelName, workSpaceSeq)
+  const res = await apiPost('/chat-service/chat/createChannel', reqDto)
+  return res
 }
 
 // ----------------------
@@ -128,6 +141,13 @@ export const renameChatChannel = async (channelSeq, channelName) => {
 export const renameMeetingChannel = async (channelSeq, channelName) => {
   const reqDto = new ChannelEditReqDto(channelSeq, channelName)
   return await apiPatch('/task-service/virtual-meeting/rename', reqDto)
+}
+
+// ----------------------
+// 채널 삭제 API
+// ----------------------
+export const deleteChatChannel = async (channelSeq) => {
+  return await apiDelete(`/chat-service/chat/channel/${channelSeq}`)
 }
 
 // ----------------------

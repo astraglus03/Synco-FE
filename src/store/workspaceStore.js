@@ -79,8 +79,21 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     try {
       const workspaceList = await getMyWorkspaces()
       
-      // 기존 personal 워크스페이스 유지하고, API에서 가져온 워크스페이스 추가
+      // 조회 결과 로그 출력
+      console.log('🔍 API 조회 결과:', workspaceList)
+      console.log('📊 조회된 워크스페이스 개수:', workspaceList.length)
+      workspaceList.forEach((ws, index) => {
+        console.log(`  [${index + 1}] ${ws.workSpaceName}`, {
+          workSpaceSeq: ws.workSpaceSeq,
+          workSpaceType: ws.workSpaceType,
+          thumbnailImageUrl: ws.thumbnailImageUrl
+        })
+      })
+      
+      // 기존 personal 워크스페이스 유지
       const personalWorkspace = workspaces.value.find(w => w.type === 'personal')
+      
+      // API에서 가져온 워크스페이스를 모두 표시
       const apiWorkspaces = workspaceList.map(ws => ({
         id: `workspace_${ws.workSpaceSeq}`,
         workSpaceSeq: ws.workSpaceSeq,
@@ -89,6 +102,8 @@ export const useWorkspaceStore = defineStore('workspace', () => {
         profile: ws.thumbnailImageUrl,
         icon: ws.iconText
       }))
+      
+      console.log('✅ 최종 서버 사이드바 목록:', apiWorkspaces.map(ws => ws.name))
       
       workspaces.value = personalWorkspace 
         ? [personalWorkspace, ...apiWorkspaces]

@@ -7,6 +7,8 @@ const props = defineProps({
   visible: Boolean
 })
 
+const emit = defineEmits(['close'])
+
 // Store
 const workspaceStore = useWorkspaceStore()
 

@@ -609,6 +609,7 @@ const getPriorityText = (priority) => {
 
 // 워크스페이스 설정 관련
 const workspaceSettingsOpen = ref(false)
+const settingsTab = ref('info') // 'info' 또는 'permissions'
 const isWorkspaceOwner = ref(true)
 const expandedChannels = ref(new Set())
 
@@ -656,6 +657,22 @@ const currentUserId = computed(() => {
 // 팀원 데이터 (API에서 로드)
 const teamMembers = ref([])
 const isLoadingMembers = ref(false)
+
+// 정렬된 팀 멤버 목록 (SUPER 최상위, 나머지 알파벳순)
+const sortedTeamMembers = computed(() => {
+  return [...teamMembers.value].sort((a, b) => {
+    // SUPER 권한자를 최상위로
+    if (a.authority === Authority.SUPER && b.authority !== Authority.SUPER) {
+      return -1
+    }
+    if (a.authority !== Authority.SUPER && b.authority === Authority.SUPER) {
+      return 1
+    }
+    
+    // 나머지는 이름 알파벳순으로 정렬
+    return (a.name || '').localeCompare(b.name || '')
+  })
+})
 
 // 현재 사용자가 SUPER 권한을 가지고 있는지 확인
 const isCurrentUserSuper = computed(() => {
@@ -879,10 +896,13 @@ const updateWorkspaceInfo = async () => {
   }
 
   try {
+    // 썸네일 이미지를 변경하지 않았으면 null 대신 undefined 전달
+    const thumbnailToSend = thumbnailImage.value instanceof File ? thumbnailImage.value : undefined
+    
     const updatedWorkspace = await updateWorkspace(
       currentWorkspace.workSpaceSeq, 
       teamName.value, 
-      thumbnailImage.value
+      thumbnailToSend
     )
     
     // 워크스페이스 목록 새로고침
@@ -1124,7 +1144,7 @@ onMounted(() => {
   </v-app-bar>
 
   <!-- 팀 설정 다이얼로그 -->
-  <v-dialog v-model="workspaceSettingsOpen" max-width="800" scrollable>
+  <v-dialog v-model="workspaceSettingsOpen" max-width="600" scrollable>
     <v-card class="team-settings-dialog">
       <!-- 헤더 -->
       <div class="dialog-header">
@@ -1146,8 +1166,30 @@ onMounted(() => {
 
       <v-divider />
 
-      <!-- 팀 정보 설정 -->
-      <div class="team-name-section">
+      <!-- 탭 네비게이션 -->
+      <v-tabs
+        v-model="settingsTab"
+        bg-color="surface"
+        color="primary"
+        fixed-tabs
+      >
+        <v-tab value="info">
+          <v-icon start>mdi-account-group</v-icon>
+          팀 정보
+        </v-tab>
+        <v-tab value="permissions">
+          <v-icon start>mdi-shield-account</v-icon>
+          멤버 권한 관리
+        </v-tab>
+      </v-tabs>
+
+      <v-divider />
+
+      <!-- 탭 컨텐츠 -->
+      <v-window v-model="settingsTab">
+        <!-- 팀 정보 탭 -->
+        <v-window-item value="info">
+          <div class="team-name-section">
         <div class="section-header">
           <v-icon class="section-icon">mdi-account-group</v-icon>
           <h3 class="section-title">팀 정보</h3>
@@ -1198,11 +1240,11 @@ onMounted(() => {
           />
         </div>
       </div>
+        </v-window-item>
 
-      <v-divider />
-
-      <!-- 기능별 권한 관리 -->
-      <div class="permissions-section">
+        <!-- 멤버 권한 관리 탭 -->
+        <v-window-item value="permissions">
+          <div class="permissions-section">
         <div class="section-header">
           <v-icon class="section-icon">mdi-shield-account</v-icon>
           <h3 class="section-title">멤버 권한 관리</h3>
@@ -1255,7 +1297,7 @@ onMounted(() => {
                 <!-- 멤버 목록 -->
                 <div 
                   v-else
-                  v-for="member in teamMembers" 
+                  v-for="member in sortedTeamMembers" 
                   :key="member.id"
                   class="member-item"
                 >
@@ -1266,7 +1308,15 @@ onMounted(() => {
                     <div class="member-details">
                       <div class="member-name">
                         {{ member.name }}
-                        <span v-if="member.id === currentUserId" class="current-user-badge">(본인)</span>
+                        <v-chip 
+                          v-if="Number(member.id) === Number(currentUserId)"
+                          size="x-small"
+                          color="primary"
+                          variant="flat"
+                          class="ml-2"
+                        >
+                          본인
+                        </v-chip>
                       </div>
                       <div 
                         class="status-dot"
@@ -1318,6 +1368,8 @@ onMounted(() => {
           </div>
         </div>
       </div>
+        </v-window-item>
+      </v-window>
 
       <!-- 액션 버튼 -->
       <div class="dialog-actions">

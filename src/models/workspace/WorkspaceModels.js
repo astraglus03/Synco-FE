@@ -40,6 +40,7 @@ export class TeamWorkSpaceEditReqDto {
     formData.append('workSpaceSeq', this.workSpaceSeq)
     formData.append('workSpaceName', this.workSpaceName)
     
+    // 썸네일 이미지가 File 객체일 때만 추가 (null이나 undefined는 추가하지 않음)
     if (this.workSpaceThumbnailImage instanceof File) {
       formData.append('workSpaceThumbnailImage', this.workSpaceThumbnailImage)
     }
@@ -79,13 +80,17 @@ export class WorkSpaceInfoResDto {
     this.workSpaceSeq = data.workSpaceSeq
     this.workSpaceName = data.workSpaceName
     this.thumbnailImageUrl = data.thumbnailImageUrl
+    this.workSpaceType = data.workSpaceType // TEAM or INDIVIDUAL
+    this.isPersonal = data.isPersonal // Boolean 플래그
   }
 
   static fromJson(json) {
     return new WorkSpaceInfoResDto({
       workSpaceSeq: json.workSpaceSeq,
       workSpaceName: json.workSpaceName,
-      thumbnailImageUrl: json.thumbnailImageUrl
+      thumbnailImageUrl: json.thumbnailImageUrl,
+      workSpaceType: json.workSpaceType,
+      isPersonal: json.isPersonal
     })
   }
 
@@ -95,6 +100,20 @@ export class WorkSpaceInfoResDto {
     const firstChar = this.workSpaceName.charAt(0)
     // 영문인 경우 대문자로, 한글 등은 그대로
     return /[a-zA-Z]/.test(firstChar) ? firstChar.toUpperCase() : firstChar
+  }
+
+  // 팀 워크스페이스인지 확인
+  get isTeamWorkspace() {
+    // 명시적으로 개인 워크스페이스로 표시된 경우
+    if (this.isPersonal === true) return false
+    if (this.workSpaceType === 'INDIVIDUAL') return false // 개인 워크스페이스 타입
+    
+    // 워크스페이스 이름으로 판단 (fallback)
+    const personalNames = ['내 워크스페이스', '개인 워크스페이스', 'My Workspace', 'Personal Workspace']
+    if (personalNames.includes(this.workSpaceName)) return false
+    
+    // 기본값: 팀 워크스페이스로 간주
+    return true
   }
 }
 
@@ -273,6 +292,16 @@ export class ChannelInfoResDto {
       json.channelName,
       json.channelMemberList?.map(member => ChannelMemberResDto.fromJson(member)) || []
     )
+  }
+}
+
+// ----------------------
+// 채널 생성 요청 DTO
+// ----------------------
+export class ChannelCreateReqDto {
+  constructor(channelName, workSpaceSeq) {
+    this.channelName = channelName
+    this.workSpaceSeq = workSpaceSeq
   }
 }
 
