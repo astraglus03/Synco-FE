@@ -108,29 +108,31 @@ const connectWebsocket = () => {
             // if (Number(parsed.senderSeq) === Number(memberSeq.value)) return;
 
             // 🟩 1️⃣ 서버에서 다시 받은 내 메시지가 temp_로 이미 표시된 경우 → 교체 처리
-if (Number(parsed.senderSeq) === Number(memberSeq.value)) {
-  const tempMsgIndex = messages.value.findIndex(
-    (msg) =>
-      msg.isOwn &&
-      msg.content === parsed.chatMessageText &&
-      msg.messageType === parsed.messageType
-  );
+            if (Number(parsed.senderSeq) === Number(memberSeq.value)) {
+              const tempMsgIndex = messages.value.findIndex(
+                (msg) =>
+                  msg.isOwn &&
+                  msg.content === parsed.chatMessageText &&
+                  msg.messageType === parsed.messageType
+              );
 
-  if (tempMsgIndex !== -1) {
-    // 🟩 temp_ 메시지 → 실제 chatMessageSeq로 교체
-    messages.value[tempMsgIndex].id = parsed.chatMessageSeq;
-    messages.value[tempMsgIndex].replyToSeq = parsed.replyToSeq || null;
-    messages.value[tempMsgIndex].profileImageUrl =
-      parsed.senderProfileImageUrl || null;
-    messages.value[tempMsgIndex].time = new Date().toLocaleTimeString("ko-KR", {
-      hour: "2-digit",
-      minute: "2-digit",
-    });
+              if (tempMsgIndex !== -1) {
+                // 🟩 temp_ 메시지 → 실제 chatMessageSeq로 교체
+                messages.value[tempMsgIndex].id = parsed.chatMessageSeq;
+                messages.value[tempMsgIndex].replyToSeq =
+                  parsed.replyToSeq || null;
+                messages.value[tempMsgIndex].profileImageUrl =
+                  parsed.senderProfileImageUrl || null;
+                messages.value[tempMsgIndex].time =
+                  new Date().toLocaleTimeString("ko-KR", {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  });
 
-    // 🟩 교체했으면 새로 push하지 않도록 return
-    return;
-  }
-}
+                // 🟩 교체했으면 새로 push하지 않도록 return
+                return;
+              }
+            }
 
             // ✅ 파일 URL 파싱 (BE에서 chatMessageFileUrls 문자열로 전송됨)
             const urls = (parsed.chatMessageFileUrls || "")
@@ -154,9 +156,12 @@ if (Number(parsed.senderSeq) === Number(memberSeq.value)) {
                 minute: "2-digit",
               }),
               avatar:
-                parsed.senderProfileImageUrl && parsed.senderProfileImageUrl.trim() !== ""
+                parsed.senderProfileImageUrl &&
+                parsed.senderProfileImageUrl.trim() !== ""
                   ? parsed.senderProfileImageUrl // ✅ 실제 프로필 URL이 있으면 그걸 avatar로 사용
-                  : (parsed.senderName || parsed.senderSeq)?.toString().charAt(0),
+                  : (parsed.senderName || parsed.senderSeq)
+                      ?.toString()
+                      .charAt(0),
               profileImageUrl: parsed.senderProfileImageUrl || null,
               senderSeq: parsed.senderSeq,
               isOwn: parsed.senderSeq === memberSeq.value,
@@ -292,10 +297,7 @@ const uploadFilesToS3 = async () => {
 
 // ✅ 메시지 전송
 const sendMessage = async () => {
-  console.log(
-    "============= 메시지 전송 ===============",
-    memberSeq.value
-  );
+  console.log("============= 메시지 전송 ===============", memberSeq.value);
   if (!stompClient.value || !stompClient.value.connected) {
     console.error("WebSocket 연결이 없습니다!");
     return;
@@ -312,10 +314,10 @@ const sendMessage = async () => {
   // 1️⃣ 전송할 메시지 데이터 생성 (사용자 정보 포함)
   // const currentUserName = localStorage.getItem("memberName") || "사용자";
   const currentUserName =
-  localStorage.getItem("memberName") ||
-  JSON.parse(localStorage.getItem("user") || "{}").name ||
-  JSON.parse(localStorage.getItem("user") || "{}").memberName ||
-  "사용자";
+    localStorage.getItem("memberName") ||
+    JSON.parse(localStorage.getItem("user") || "{}").name ||
+    JSON.parse(localStorage.getItem("user") || "{}").memberName ||
+    "사용자";
   const currentUserProfileImage =
     localStorage.getItem("profileImageUrl") || null;
 
@@ -1185,6 +1187,8 @@ onUnmounted(() => {
   flex-direction: column;
   align-items: flex-start;
   position: relative;
+  flex: 1; /* 남은 공간을 모두 차지하도록 */
+  min-width: 0; /* flex item이 축소될 수 있도록 */
 }
 
 .message-item.own-message .message-group {
@@ -1195,17 +1199,20 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 40px;         /* 아바타 크기 고정 */
+  width: 40px; /* 아바타 크기 고정 */
   height: 40px;
-  border-radius: 50%;  /* 동그라미 모양 */
-  overflow: hidden;    /* 이미지를 원 안에 자름 */
+  border-radius: 50%; /* 동그라미 모양 */
+  overflow: hidden; /* 이미지를 원 안에 자름 */
   background-color: #f2f2f2; /* 이미지 없을 때 배경색 */
+  flex-shrink: 0; /* 아바타 크기 고정 - 축소 방지 */
+  min-width: 40px; /* 최소 너비 보장 */
+  min-height: 40px; /* 최소 높이 보장 */
 }
 
 .avatar-image {
-  width: 100%;         /* 부모 영역에 맞춰 */
+  width: 100%; /* 부모 영역에 맞춰 */
   height: 100%;
-  object-fit: cover;   /* 비율 유지하며 꽉 채움 */
+  object-fit: cover; /* 비율 유지하며 꽉 채움 */
 }
 
 .message-bubble {
