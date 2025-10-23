@@ -34,11 +34,37 @@ const isDark = computed(() => theme.global.current.value.dark)
 // 권한 시스템 초기화
 const { setUserRole } = usePermissions()
 
+// URL에서 받은 ID를 내부 형식으로 변환 (4 → workspace_4, 8 → chat_8)
+const convertToInternalId = (urlId, prefix) => {
+  if (!urlId) return urlId
+  // 숫자만 있으면 접두사 추가
+  if (/^\d+$/.test(urlId)) {
+    return `${prefix}_${urlId}`
+  }
+  // 이미 접두사가 있거나 특수 ID (personal, dashboard 등)는 그대로
+  return urlId
+}
+
+// 채널 타입을 단수형으로 변환 (chats → chat, meetings → meeting)
+const singularizeChannel = (channelType) => {
+  if (!channelType) return channelType
+  // 복수형이면 단수형으로 변환
+  if (channelType.endsWith('s')) {
+    return channelType.slice(0, -1)
+  }
+  return channelType
+}
+
 // URL 파라미터 기반 초기화
 const initializeFromRoute = async () => {
-  const workspaceId = route.params.workspaceId || 'personal'
-  const channel = route.params.channel || 'dashboard'
-  const subChannel = route.params.subChannel || ''
+  const urlWorkspaceId = route.params.workspaceId || 'personal'
+  const urlChannel = route.params.channel || 'dashboard'
+  const urlSubChannel = route.params.subChannel || ''
+  
+  // URL ID를 내부 형식으로 변환
+  const workspaceId = convertToInternalId(urlWorkspaceId, 'workspace')
+  const channel = singularizeChannel(urlChannel)
+  const subChannel = urlSubChannel ? convertToInternalId(urlSubChannel, channel) : ''
   
   // 워크스페이스 ID로 직접 찾기
   const workspace = workspaceStore.workspaces.find(w => w.id === workspaceId)
@@ -76,6 +102,27 @@ watch(() => route.params, async () => {
   await initializeFromRoute()
 }, { deep: true })
 
+// ID에서 접두사 제거 (workspace_4 → 4, chat_8 → 8)
+const extractId = (fullId) => {
+  if (!fullId) return fullId
+  // workspace_4, chat_8 등의 형식에서 숫자만 추출
+  const match = fullId.match(/_(\d+)$/)
+  if (match) {
+    return match[1]
+  }
+  // 접두사가 없으면 그대로 반환 (personal 등)
+  return fullId
+}
+
+// 채널 타입을 복수형으로 변환 (chat → chats, meeting → meetings)
+const pluralizeChannel = (channelType) => {
+  if (!channelType) return channelType
+  // 이미 복수형이면 그대로 반환
+  if (channelType.endsWith('s')) return channelType
+  // 복수형으로 변환
+  return channelType + 's'
+}
+
 // 워크스페이스 선택 (URL 업데이트 포함)
 const selectWorkspace = (workspaceId) => {
   const workspace = workspaceStore.workspaces.find(w => w.id === workspaceId)
@@ -84,8 +131,9 @@ const selectWorkspace = (workspaceId) => {
     // 워크스페이스 변경 시 멤버 사이드바 닫기
     uiStore.memberSidebarVisible = false
     
-    // URL 업데이트
-    router.push(`/workspace/${workspace.id}/dashboard`)
+    // URL 업데이트 (workspace_4 → 4)
+    const cleanId = extractId(workspace.id)
+    router.push(`/workspaces/${cleanId}/dashboard`)
   }
 }
 
@@ -93,7 +141,9 @@ const selectWorkspace = (workspaceId) => {
 const selectChannel = (channelId) => {
   const currentWorkspace = workspaceStore.currentWorkspaceInfo
   if (currentWorkspace) {
-    router.push(`/workspace/${currentWorkspace.id}/${channelId}`)
+    const cleanWorkspaceId = extractId(currentWorkspace.id)
+    const cleanChannelId = pluralizeChannel(channelId)
+    router.push(`/workspaces/${cleanWorkspaceId}/${cleanChannelId}`)
   }
 }
 
@@ -102,7 +152,10 @@ const selectSubChannel = (parentId, subChannelId) => {
   const currentWorkspace = workspaceStore.currentWorkspaceInfo
   if (currentWorkspace) {
     // 하위 채널의 경우 URL에 subChannel 정보 포함
-    router.push(`/workspace/${currentWorkspace.id}/${parentId}/${subChannelId}`)
+    const cleanWorkspaceId = extractId(currentWorkspace.id)
+    const cleanParentId = pluralizeChannel(parentId)
+    const cleanSubChannelId = extractId(subChannelId)
+    router.push(`/workspaces/${cleanWorkspaceId}/${cleanParentId}/${cleanSubChannelId}`)
   }
 }
 

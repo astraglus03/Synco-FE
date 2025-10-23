@@ -982,7 +982,7 @@ const userInitial = computed(() => {
 // 마이페이지로 이동 (SPA 라우팅)
 const goToMyPage = () => {
   profileMenuOpen.value = false
-  router.push('/workspace/personal/profile')
+  router.push('/workspaces/personal/profile')
 }
 
 // 로그아웃

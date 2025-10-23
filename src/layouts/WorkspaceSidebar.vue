@@ -784,6 +784,7 @@ const getStatusColor = (status) => {
             </v-icon>
             
             <!-- 채널 설정 버튼 (채팅, 일정관리, 화상회의만 최상위에 표시, 드라이브 제외) -->
+            <!-- 모든 멤버가 권한 목록을 조회할 수 있도록 톱니바퀴 표시 -->
             <v-icon 
               v-if="(channel.id === 'chat' || channel.id === 'schedule' || channel.id === 'meeting') && 
                     channel.id !== 'drive' && 
