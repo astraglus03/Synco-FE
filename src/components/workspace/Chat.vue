@@ -377,7 +377,9 @@ const sendMessage = async () => {
 // ✅ 메시지 삭제 (하드 삭제)
 const deleteMessage = async (message) => {
   try {
-    const url = `${import.meta.env.VITE_API_URL}/chat-service/chat/messages/${message.id}`;
+    const url = `${import.meta.env.VITE_API_URL}/chat-service/chat/messages/${
+      message.id
+    }`;
     const res = await axios.delete(url, {
       headers: {
         "X-Member-Seq": memberSeq.value,
@@ -393,7 +395,7 @@ const deleteMessage = async (message) => {
   } catch (err) {
     console.error("❌ 메시지 삭제 실패:", err.response?.data || err);
   }
-}
+};
 
 // 채널 생성
 const createChannel = () => {
@@ -1113,7 +1115,6 @@ onUnmounted(() => {
           <!-- 전송 버튼 -->
           <div class="send-actions">
             <v-btn
-              v-if="isTyping || attachedFiles.length > 0"
               color="primary"
               icon
               class="send-btn"
