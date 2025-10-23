@@ -162,7 +162,11 @@ const connectWebsocket = () => {
                   : (parsed.senderName || parsed.senderSeq)
                       ?.toString()
                       .charAt(0),
-              profileImageUrl: parsed.senderProfileImageUrl || null,
+              // profileImageUrl: parsed.senderProfileImageUrl || null,
+              profileImageUrl:
+                parsed.senderProfileImageUrl && parsed.senderProfileImageUrl.trim() !== ""
+                  ? parsed.senderProfileImageUrl
+                  : null,
               senderSeq: parsed.senderSeq,
               isOwn: parsed.senderSeq === memberSeq.value,
               unread: parsed.senderSeq !== memberSeq.value ? 1 : 0,
@@ -607,11 +611,11 @@ const getChannelMembers = async () => {
 
     console.log("📡 서버 응답 원본:", res.data);
 
-    // 백엔드에서 ChannelMemberResDto 리스트 반환됨 [{ memberSeq, memberName, profileImageUrl }]
+    // 백엔드에서 ChannelMemberResDto 리스트 반환됨 [{ memberSeq, memberName, memberProfileUrl }]
     mentionList.value = res.data.data.map((m) => ({
       id: m.memberSeq,
       name: m.memberName,
-      profileImage: m.profileImageUrl,
+      profileImage: m.memberProfileUrl,
     }));
 
     // 현재 로그인 사용자 제외
