@@ -82,6 +82,7 @@ const mentionStartIndex = ref(-1);
 const mentionEndIndex = ref(-1);
 const filteredMentions = ref([]);
 const selectedMentionIndex = ref(0); // 키보드 네비게이션용 선택된 인덱스
+const messageTextarea = ref(null);
 
 // 멘션 하이라이트된 메시지 텍스트
 const highlightedMessage = computed(() => {
@@ -661,6 +662,11 @@ const handleMessageInput = (event) => {
   }
 };
 
+// 입력창 클릭 시 포커스
+const focusTextarea = () => {
+  messageTextarea.value?.focus();
+};
+
 const selectMention = (member) => {
   const beforeMention = newMessage.value.substring(0, mentionStartIndex.value);
   const afterMention = newMessage.value.substring(mentionEndIndex.value);
@@ -1089,7 +1095,7 @@ onUnmounted(() => {
           </div>
 
           <!-- 메시지 입력 필드 -->
-          <div class="input-field">
+          <div class="input-field" @click="focusTextarea">
             <!-- 멘션 하이라이트 오버레이 -->
             <div
               v-if="newMessage && newMessage.includes('@')"
@@ -1109,6 +1115,7 @@ onUnmounted(() => {
               @keypress="handleKeyPress"
               @focus="handleInputFocus"
               @blur="handleInputBlur"
+              ref="messageTextarea"
             />
           </div>
 
@@ -1483,6 +1490,8 @@ onUnmounted(() => {
 .input-field {
   flex: 1;
   position: relative;
+  cursor: text;
+  width: 100%;
 }
 
 /* 멘션 하이라이트 오버레이 */
