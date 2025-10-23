@@ -24,7 +24,7 @@ const decodeJWT = (token) => {
 // Axios 인스턴스
 // ----------------------
 const apiClient = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080',
+  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:8080',
   timeout: 10000,
   headers: { 'Content-Type': 'application/json' },
   withCredentials: true, // ✅ 쿠키 전송 활성화

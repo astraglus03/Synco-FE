@@ -14,6 +14,7 @@ import {
 } from '@/services/WorkspaceService'
 import { useAuthStore } from '@/store/authStore'
 import { useWorkspaceStore } from '@/store/workspaceStore'
+import { useWorkspaceMemberStore } from '@/store/workspaceMemberStore'
 import { Authority } from '@/models/workspace/WorkspaceModels'
 
 const props = defineProps({
@@ -43,7 +44,7 @@ const showChannelSettingsModal = ref(false)
 const selectedChannel = ref(null)
 const channelPermissions = ref({})
 
-// 현재 선택된 채널의 멤버 목록
+// 현재 선택된 채널의 멤버 목록 (Store 기반)
 const channelMembers = computed(() => {
   if (!selectedChannel.value) return []
   
@@ -52,30 +53,29 @@ const channelMembers = computed(() => {
   // 채팅 최상위 채널 (channel.id === 'chat')
   if (selectedChannel.value.id === 'chat') {
     // 기본 채널(첫 번째 채널)의 멤버 리스트 사용
-    if (chatChannels.value && chatChannels.value.length > 0) {
-      memberList = chatChannels.value[0].channelMemberList || []
+    if (workspaceMemberStore.chatChannels.length > 0) {
+      memberList = workspaceMemberStore.chatChannels[0].channelMemberList || []
     }
   } else if (selectedChannel.value.channelData) {
     // 채팅 하위 채널
-    // 기본 채널(첫 번째 채널)만 멤버 리스트를 가지고 있음
-    // 다른 채널은 멤버 리스트가 없으므로 기본 채널의 멤버 리스트 사용
     if (selectedChannel.value.channelData.channelMemberList && selectedChannel.value.channelData.channelMemberList.length > 0) {
       memberList = selectedChannel.value.channelData.channelMemberList
-    } else if (chatChannels.value && chatChannels.value.length > 0) {
+    } else if (workspaceMemberStore.chatChannels.length > 0) {
       // 기본 채널(첫 번째 채널)의 멤버 리스트 사용
-      memberList = chatChannels.value[0].channelMemberList || []
+      memberList = workspaceMemberStore.chatChannels[0].channelMemberList || []
     }
   } else if (selectedChannel.value.scheduleData) {
     // 일정관리 (ChannelMemberResDto 배열)
     memberList = selectedChannel.value.scheduleData || []
-  } else if (selectedChannel.value.meetingData) {
-    // 화상회의 (첫 번째 채널의 ChannelInfoResDto)
-    memberList = selectedChannel.value.meetingData.channelMemberList || []
+  } else if (selectedChannel.value.id === 'meeting') {
+    // 화상회의 - meetingChannels에서 첫 번째 채널의 멤버 리스트 사용
+    if (workspaceMemberStore.meetingChannels.length > 0) {
+      memberList = workspaceMemberStore.meetingChannels[0].channelMemberList || []
+    }
   }
   
   // 정렬: SUPER > MANAGER > 나머지(알파벳순)
   return [...memberList].sort((a, b) => {
-    // 권한별 우선순위 부여
     const authorityPriority = {
       'SUPER': 1,
       'MANAGER': 2,
@@ -85,12 +85,10 @@ const channelMembers = computed(() => {
     const priorityA = authorityPriority[a.authority] || 999
     const priorityB = authorityPriority[b.authority] || 999
     
-    // 권한이 다르면 권한 순으로 정렬
     if (priorityA !== priorityB) {
       return priorityA - priorityB
     }
     
-    // 같은 권한이면 이름으로 알파벳순 정렬
     return (a.memberName || '').localeCompare(b.memberName || '')
   })
 })
@@ -101,17 +99,19 @@ const hoveredChannel = ref(null)
 // 스토어
 const authStore = useAuthStore()
 const workspaceStore = useWorkspaceStore()
-
-// 실제 채널 데이터
-const chatChannels = ref([])
-const meetingChannels = ref([])
-const scheduleChannels = ref([])
-const isLoadingChannels = ref(false)
+const workspaceMemberStore = useWorkspaceMemberStore()
 
 // 채널 접기/펼치기 상태
 const chatExpanded = ref(true)  // 기본값: 펼침
 const scheduleExpanded = ref(false)
-const meetingExpanded = ref(false)
+
+// 로딩 상태
+const isLoadingChannels = computed(() => workspaceMemberStore.isLoading)
+
+// 채널 데이터 computed properties
+const chatChannels = computed(() => workspaceMemberStore.chatChannels)
+const meetingChannels = computed(() => workspaceMemberStore.meetingChannels)
+const scheduleChannels = computed(() => workspaceMemberStore.scheduleChannels)
 
 // 현재 사용자의 memberSeq를 채널 멤버 리스트에서 찾기
 const getCurrentUserMemberSeq = (channelMemberList) => {
@@ -132,69 +132,52 @@ const getCurrentUserMemberSeq = (channelMemberList) => {
   return currentUser?.memberSeq || null
 }
 
-// 채팅 채널 생성 권한 확인
-// 기본 채널(첫 번째 채널)의 권한이 SUPER 또는 MANAGER인지 확인
-// 주의: API에서 기본 채널만 멤버 리스트를 반환하므로, 첫 번째 채널의 멤버 리스트 사용
+// 채팅 채널 생성 권한 확인 (채널 멤버 권한 기반)
 const canCreateChatChannel = computed(() => {
-  // 프로젝트 워크스페이스가 아니면 권한 없음
   if (props.workspaceType !== 'project') return false
   
-  // 채팅 채널이 없으면 권한 없음
-  if (!chatChannels.value || chatChannels.value.length === 0) return false
+  // 채팅 채널이 있는지 확인
+  if (!workspaceMemberStore.chatChannels?.length) {
+    return false
+  }
   
-  // 기본 채널(첫 번째 채널) - 멤버 리스트를 가진 유일한 채널
-  const firstChannel = chatChannels.value[0]
-  if (!firstChannel || !firstChannel.channelMemberList) return false
+  // 첫 번째 채팅 채널의 멤버 목록에서 현재 사용자 찾기
+  const firstChatChannel = workspaceMemberStore.chatChannels[0]
+  const channelMembers = firstChatChannel?.channelMemberList || []
   
-  // 현재 사용자의 memberSeq 찾기 (숫자로 변환)
-  const currentUserMemberSeq = Number(authStore.memberSeq)
-  if (!currentUserMemberSeq) return false
-  
-  // 현재 사용자의 멤버 정보 찾기 (타입 일치 보장)
-  const currentMember = firstChannel.channelMemberList.find(
-    member => Number(member.memberSeq) === currentUserMemberSeq
+  const currentUser = channelMembers.find(member => 
+    Number(member.memberSeq) === Number(authStore.memberSeq)
   )
   
-  if (!currentMember) return false
-  
-  // SUPER 또는 MANAGER 권한인지 확인
-  return currentMember.authority === Authority.SUPER || currentMember.authority === 'MANAGER'
+  // SUPER 또는 MANAGER 권한이 있으면 채널 생성 가능
+  return currentUser?.authority === 'SUPER' || currentUser?.authority === 'MANAGER'
 })
 
-// 채팅 채널 SUPER 권한 확인 (톱니바퀴용)
+// 채팅 채널 SUPER 권한 확인 (톱니바퀴용) - Store 기반
 const hasChatSuperPermission = computed(() => {
   if (props.workspaceType !== 'project') return false
-  if (!chatChannels.value || chatChannels.value.length === 0) return false
-  
-  const firstChannel = chatChannels.value[0]
-  if (!firstChannel?.channelMemberList) return false
-  
-  const currentUserMemberSeq = Number(authStore.memberSeq)
-  if (!currentUserMemberSeq) return false
-  
-  const currentMember = firstChannel.channelMemberList.find(
-    member => Number(member.memberSeq) === currentUserMemberSeq
-  )
-  
-  return currentMember?.authority === Authority.SUPER
+  return workspaceMemberStore.isCurrentUserSuper(authStore)
 })
 
-// 채팅 채널 MANAGER 또는 SUPER 권한 확인 (메뉴 버튼용)
+// 채팅 채널 MANAGER 또는 SUPER 권한 확인 (채널 멤버 권한 기반)
 const hasChatManagerOrSuperPermission = computed(() => {
   if (props.workspaceType !== 'project') return false
-  if (!chatChannels.value || chatChannels.value.length === 0) return false
   
-  const firstChannel = chatChannels.value[0]
-  if (!firstChannel?.channelMemberList) return false
+  // 채팅 채널이 있는지 확인
+  if (!workspaceMemberStore.chatChannels?.length) {
+    return false
+  }
   
-  const currentUserMemberSeq = Number(authStore.memberSeq)
-  if (!currentUserMemberSeq) return false
+  // 첫 번째 채팅 채널의 멤버 목록에서 현재 사용자 찾기
+  const firstChatChannel = workspaceMemberStore.chatChannels[0]
+  const channelMembers = firstChatChannel?.channelMemberList || []
   
-  const currentMember = firstChannel.channelMemberList.find(
-    member => Number(member.memberSeq) === currentUserMemberSeq
+  const currentUser = channelMembers.find(member => 
+    Number(member.memberSeq) === Number(authStore.memberSeq)
   )
   
-  return currentMember?.authority === Authority.SUPER || currentMember?.authority === 'MANAGER'
+  // SUPER 또는 MANAGER 권한이 있으면 채널 관리 가능
+  return currentUser?.authority === 'SUPER' || currentUser?.authority === 'MANAGER'
 })
 
 
@@ -205,48 +188,6 @@ const personalChannels = ref([
   { id: 'drive', name: '내 드라이브', icon: 'mdi-folder-account', type: 'main' },
   { id: 'calendar', name: '내 일정관리', icon: 'mdi-calendar', type: 'main' },
   { id: 'profile', name: '마이페이지', icon: 'mdi-account-cog', type: 'main' }
-])
-
-// 프로젝트 워크스페이스 채널 목록
-const projectChannels = ref([
-  { id: 'dashboard', name: '프로젝트 대시보드', icon: 'mdi-view-dashboard', type: 'main' },
-  { 
-    id: 'chat', 
-    name: '프로젝트 채팅', 
-    icon: 'mdi-chat', 
-    type: 'main',
-    expanded: true,  // 기본값: 펼침
-    subChannels: [
-      { id: 'general', name: '일반', type: 'text', unread: 3 },
-      { id: 'marketing', name: '마케팅', type: 'text', unread: 0 },
-      { id: 'development', name: '개발', type: 'text', unread: 1 }
-    ]
-  },
-  { 
-    id: 'schedule', 
-    name: '프로젝트 일정관리', 
-    icon: 'mdi-calendar-check', 
-    type: 'main',
-    expanded: false,
-    subChannels: [
-      { id: 'general-schedule', name: '일반 일정', type: 'schedule' },
-      { id: 'project-schedule', name: '프로젝트 일정', type: 'schedule' },
-      { id: 'meeting-schedule', name: '회의 일정', type: 'schedule' }
-    ]
-  },
-  { id: 'drive', name: '드라이브', icon: 'mdi-folder', type: 'main' },
-  { 
-    id: 'meeting', 
-    name: '화상회의', 
-    icon: 'mdi-video', 
-    type: 'main',
-    expanded: false,
-    subChannels: [
-      { id: 'general-meeting', name: '일반 회의실', type: 'video', isActive: false },
-      { id: 'project-meeting', name: '프로젝트 회의실', type: 'video', isActive: true },
-      { id: 'brainstorming', name: '브레인스토밍', type: 'video', isActive: false }
-    ]
-  }
 ])
 
 // 1:1 채팅 목록 (개인 워크스페이스일 때만)
@@ -273,13 +214,13 @@ const directMessages = ref([
   { id: 'jung_sohee', name: '정소희', status: 'offline', lastMessage: '인사팀과 급여 관련 논의', time: '3일 전', unread: 0 }
 ])
 
-// 현재 채널 목록 (실제 API 데이터 사용)
+// 현재 채널 목록 (Store 기반)
 const currentChannels = computed(() => {
   if (props.workspaceType === 'personal') {
     return personalChannels.value
   }
 
-  // 프로젝트 워크스페이스의 경우 실제 API 데이터 사용
+  // 프로젝트 워크스페이스의 경우 Store 데이터 사용
   return [
     { id: 'dashboard', name: '프로젝트 대시보드', icon: 'mdi-view-dashboard', type: 'main' },
     { 
@@ -288,7 +229,7 @@ const currentChannels = computed(() => {
       icon: 'mdi-chat', 
       type: 'main',
       expanded: chatExpanded.value,
-      subChannels: chatChannels.value?.map(channel => ({
+      subChannels: workspaceMemberStore.chatChannels?.map(channel => ({
         id: `chat_${channel.channelSeq}`,
         name: channel.channelName,
         type: 'text',
@@ -302,7 +243,7 @@ const currentChannels = computed(() => {
       icon: 'mdi-calendar-check', 
       type: 'main',
       expanded: scheduleExpanded.value,
-      scheduleData: scheduleChannels.value // 멤버 정보를 위한 데이터
+      scheduleData: workspaceMemberStore.scheduleChannels // 멤버 정보를 위한 데이터
     },
     { id: 'drive', name: '드라이브', icon: 'mdi-folder', type: 'main' },
     { 
@@ -310,9 +251,7 @@ const currentChannels = computed(() => {
       name: '화상회의', 
       icon: 'mdi-video', 
       type: 'main',
-      expanded: meetingExpanded.value,
-      // 화상회의는 첫 번째 채널의 멤버 정보만 사용
-      meetingData: meetingChannels.value?.[0]
+      meetingData: workspaceMemberStore.meetingChannels?.[0] || null // 첫 번째 채널 데이터
     }
   ]
 })
@@ -426,35 +365,26 @@ const closeCreateChannelModal = () => {
   newChannelName.value = ''
 }
 
-// 채널 설정 모달 열기
+// 채널 설정 모달 열기 (Store 기반)
 const openChannelSettings = (channel) => {
   selectedChannel.value = channel
   
-  // 채널 타입에 따라 멤버 목록 가져오기
+  // 채널별 멤버 목록 가져오기
   let memberList = []
   
-  // 채팅 최상위 채널 (channel.id === 'chat')
   if (channel.id === 'chat') {
-    // 기본 채널(첫 번째 채널)의 멤버 리스트 사용
-    if (chatChannels.value && chatChannels.value.length > 0) {
-      memberList = chatChannels.value[0].channelMemberList || []
+    if (workspaceMemberStore.chatChannels.length > 0) {
+      memberList = workspaceMemberStore.chatChannels[0].channelMemberList || []
+    }
+  } else if (channel.id === 'schedule') {
+    memberList = workspaceMemberStore.scheduleChannels || []
+  } else if (channel.id === 'meeting') {
+    if (workspaceMemberStore.meetingChannels.length > 0) {
+      memberList = workspaceMemberStore.meetingChannels[0].channelMemberList || []
     }
   } else if (channel.channelData) {
-    // 채팅 하위 채널
-    // 기본 채널(첫 번째 채널)만 멤버 리스트를 가지고 있음
-    // 다른 채널은 멤버 리스트가 없으므로 기본 채널의 멤버 리스트 사용
-    if (channel.channelData.channelMemberList && channel.channelData.channelMemberList.length > 0) {
-      memberList = channel.channelData.channelMemberList
-    } else if (chatChannels.value && chatChannels.value.length > 0) {
-      // 기본 채널(첫 번째 채널)의 멤버 리스트 사용
-      memberList = chatChannels.value[0].channelMemberList || []
-    }
-  } else if (channel.scheduleData) {
-    // 일정관리 (ChannelMemberResDto 배열)
-    memberList = channel.scheduleData || []
-  } else if (channel.meetingData) {
-    // 화상회의 (첫 번째 채널의 ChannelInfoResDto)
-    memberList = channel.meetingData.channelMemberList || []
+    // 하위 채널의 경우
+    memberList = channel.channelData.channelMemberList || []
   }
   
   // 권한 정보를 객체로 변환
@@ -473,17 +403,24 @@ const closeChannelSettings = () => {
   channelPermissions.value = {}
 }
 
-// 현재 사용자가 SUPER 권한을 가지고 있는지 확인
+// 현재 사용자가 선택된 채널에서 SUPER 권한을 가지고 있는지 확인
 const isCurrentUserSuper = computed(() => {
-  const currentMemberSeq = getCurrentUserMemberSeq(channelMembers.value)
-  if (!currentMemberSeq) return false
+  if (!selectedChannel.value) return false
   
-  return channelPermissions.value[currentMemberSeq] === 'SUPER'
+  let channelType = 'chat'
+  if (selectedChannel.value.id === 'schedule') {
+    channelType = 'schedule'
+  } else if (selectedChannel.value.id === 'meeting') {
+    channelType = 'meeting'
+  }
+  
+  const currentUserAuthority = getChannelMemberAuthority(channelType, authStore.memberSeq)
+  return currentUserAuthority === 'SUPER'
 })
 
-// 권한 업데이트
+// 권한 업데이트 (Store 기반)
 const updateChannelPermission = async (memberSeq, newPermission) => {
-  const currentMemberSeq = getCurrentUserMemberSeq(channelMembers.value)
+  const currentMemberSeq = getCurrentUserMemberSeq()
   const currentPermission = channelPermissions.value[memberSeq]
   
   // SUPER 권한자만 권한 변경 가능
@@ -494,192 +431,105 @@ const updateChannelPermission = async (memberSeq, newPermission) => {
   
   // 자기 자신의 SUPER 권한은 변경 불가
   if (memberSeq == currentMemberSeq && currentPermission === 'SUPER') {
-    alert('SUPER 권한을 가진 사용자는 자신의 권한을 변경할 수 없습니다.')
-    return
-  }
-  
-  // SUPER 권한으로 변경 시도 차단
-  if (newPermission === 'SUPER' && currentPermission !== 'SUPER') {
-    alert('채널에서는 SUPER 권한을 위임할 수 없습니다.')
+    alert('자신의 SUPER 권한은 변경할 수 없습니다.')
     return
   }
   
   try {
     const workSpaceSeq = props.currentWorkspaceData.workSpaceSeq
     
-    // 채널 타입에 따라 적절한 API 호출
-    if (selectedChannel.value.id === 'chat') {
-      // 채팅 최상위 채널 - 기본 채널(첫 번째 채널)에 권한 변경
-      if (chatChannels.value && chatChannels.value.length > 0) {
-        const channelSeq = chatChannels.value[0].channelSeq
-        await changeChatChannelAuthority(workSpaceSeq, memberSeq, channelSeq, newPermission)
-      }
-    } else if (selectedChannel.value.channelData) {
-      // 채팅 하위 채널
-      const channelSeq = selectedChannel.value.channelData.channelSeq
-      await changeChatChannelAuthority(workSpaceSeq, memberSeq, channelSeq, newPermission)
-    } else if (selectedChannel.value.scheduleData) {
-      // 일정관리
-      await changeScheduleChannelAuthority(workSpaceSeq, memberSeq, newPermission)
-    } else if (selectedChannel.value.meetingData) {
-      // 화상회의
-      await changeMeetingChannelAuthority(workSpaceSeq, memberSeq, newPermission)
+    // 채널 타입에 따라 다른 API 호출
+    let channelType = 'chat'
+    if (selectedChannel.value.id === 'schedule') {
+      channelType = 'schedule'
+    } else if (selectedChannel.value.id === 'meeting') {
+      channelType = 'meeting'
     }
     
-    // 권한 변경 성공 시 로컬 상태 업데이트
+    // Store의 updateChannelMemberAuthority 사용
+    await workspaceMemberStore.updateChannelMemberAuthority(
+      channelType,
+      workSpaceSeq,
+      memberSeq,
+      newPermission
+    )
+    
+    // 로컬 권한 정보도 업데이트
     channelPermissions.value[memberSeq] = newPermission
     
-    // 채널 데이터 새로고침
-    await loadChannels()
+    alert('권한이 성공적으로 변경되었습니다.')
     
-    // 모달의 멤버 리스트도 다시 로드
-    const channel = selectedChannel.value
-    if (channel.id === 'chat') {
-      // 채팅 최상위 채널: 기본 채널 데이터 업데이트
-      // (이미 loadChannels()로 chatChannels가 새로고침됨)
-    } else if (channel.channelData) {
-      // 채팅 하위 채널: chatChannels에서 찾기
-      const updatedChannel = chatChannels.value.find(c => c.channelSeq === channel.channelData.channelSeq)
-      if (updatedChannel) {
-        selectedChannel.value.channelData = updatedChannel
-      }
-    } else if (channel.scheduleData) {
-      // 일정관리: scheduleChannels 업데이트
-      selectedChannel.value.scheduleData = scheduleChannels.value
-    } else if (channel.meetingData) {
-      // 화상회의: meetingChannels에서 첫 번째 채널 찾기
-      if (meetingChannels.value.length > 0) {
-        selectedChannel.value.meetingData = meetingChannels.value[0]
-      }
-    }
-    
-    // 권한 정보 다시 설정
-    const memberList = channelMembers.value
-    channelPermissions.value = {}
-    memberList.forEach(member => {
-      channelPermissions.value[member.memberSeq] = member.authority
-    })
   } catch (error) {
     alert('권한 변경에 실패했습니다.')
   }
 }
 
-// 채널 데이터 로드
+// 채널 데이터 로드 (Store 기반)
 const loadChannels = async () => {
   if (props.workspaceType !== 'project' || !props.currentWorkspaceData?.workSpaceSeq) {
     return
   }
 
   try {
-    isLoadingChannels.value = true
     const workSpaceSeq = props.currentWorkspaceData.workSpaceSeq
 
-    // 각 채널을 개별적으로 로드하여 에러 발생 시에도 다른 채널은 정상 로드
-    let chatData = []
-    let meetingData = []
-    let scheduleData = []
-
-    // 채팅 채널 로드
-    try {
-      chatData = await getChatChannels(workSpaceSeq)
-    } catch (error) {
-      // 에러 발생시에도 계속 진행
-    }
-
-    // 화상회의 채널 로드
-    try {
-      meetingData = await getMeetingChannels(workSpaceSeq)
-    } catch (error) {
-      // 에러 발생시에도 계속 진행
-    }
-
-    // 일정관리 채널 로드
-    try {
-      scheduleData = await getScheduleChannels(workSpaceSeq)
-    } catch (error) {
-      // 에러 발생시에도 계속 진행
-    }
-
-    // 채널 데이터 업데이트
-    chatChannels.value = chatData
-    meetingChannels.value = meetingData
-    scheduleChannels.value = scheduleData
+    // Store에서 워크스페이스 멤버와 채널 데이터 로드
+    await Promise.all([
+      workspaceMemberStore.loadWorkspaceMembers(workSpaceSeq),
+      workspaceMemberStore.loadChannels(workSpaceSeq)
+    ])
 
   } catch (error) {
-    // 예상치 못한 에러 발생
-  } finally {
-    isLoadingChannels.value = false
+    console.error('채널 데이터 로드 실패:', error)
   }
 }
 
-// 사용자 권한 확인 (워크스페이스 SUPER 또는 채널 권한)
+// 채널별 멤버 권한 확인 함수들
+const getChannelMemberAuthority = (channelType, memberSeq) => {
+  let memberList = []
+  
+  switch (channelType) {
+    case 'chat':
+      if (workspaceMemberStore.chatChannels.length > 0) {
+        memberList = workspaceMemberStore.chatChannels[0].channelMemberList || []
+      }
+      break
+    case 'schedule':
+      memberList = workspaceMemberStore.scheduleChannels || []
+      break
+    case 'meeting':
+      if (workspaceMemberStore.meetingChannels.length > 0) {
+        memberList = workspaceMemberStore.meetingChannels[0].channelMemberList || []
+      }
+      break
+  }
+  
+  const member = memberList.find(m => Number(m.memberSeq) === Number(memberSeq))
+  return member?.authority || null
+}
+
+// 채널별 권한 확인 함수들
+const hasChannelManagePermission = (channelType) => {
+  const currentUserAuthority = getChannelMemberAuthority(channelType, authStore.memberSeq)
+  // 모든 권한(SUPER, MANAGER, PARTICIPANT)에서 톱니바퀴 표시
+  return currentUserAuthority === 'SUPER' || currentUserAuthority === 'MANAGER' || currentUserAuthority === 'PARTICIPANT'
+}
+
+// 사용자 권한 확인 (Store 기반)
 const hasChannelPermission = (channelData) => {
-  if (!channelData) {
-    return false
-  }
-  
-  // 현재 사용자의 memberSeq 가져오기 (채널 멤버 리스트에서 이름으로 찾기)
-  const currentMemberSeq = getCurrentUserMemberSeq(channelData.channelMemberList)
-  
-  if (!currentMemberSeq) {
-    return false
-  }
-  
-  // 채널 멤버 권한 확인 (타입 불일치 대비 == 사용)
-  const memberInChannel = channelData.channelMemberList?.find(
-    member => member.memberSeq == currentMemberSeq
-  )
-  
-  return memberInChannel && (
-    memberInChannel.authority === Authority.SUPER || 
-    memberInChannel.authority === 'MANAGER'
-  )
+  if (!channelData) return false
+  return hasChannelManagePermission('chat')
 }
 
-// 일정관리 권한 확인 (scheduleData는 ChannelMemberResDto 배열)
+// 일정관리 권한 확인 (Store 기반)
 const hasSchedulePermission = (scheduleData) => {
-  if (!scheduleData || scheduleData.length === 0) {
-    return false
-  }
-  
-  // scheduleData는 ChannelMemberResDto 배열이므로 직접 권한 확인
-  const currentMemberSeq = getCurrentUserMemberSeq(scheduleData)
-  
-  if (!currentMemberSeq) {
-    return false
-  }
-  
-  const currentMember = scheduleData.find(
-    member => member.memberSeq == currentMemberSeq
-  )
-  
-  return currentMember && (
-    currentMember.authority === Authority.SUPER || 
-    currentMember.authority === 'MANAGER'
-  )
+  return hasChannelManagePermission('schedule')
 }
 
-// 화상회의 권한 확인 (meetingData는 첫 번째 채널의 ChannelInfoResDto)
+// 화상회의 권한 확인 (Store 기반)
 const hasMeetingPermission = (meetingData) => {
-  if (!meetingData) {
-    return false
-  }
-  
-  // meetingData는 ChannelInfoResDto이므로 channelMemberList에서 권한 확인
-  const currentMemberSeq = getCurrentUserMemberSeq(meetingData.channelMemberList)
-  
-  if (!currentMemberSeq) {
-    return false
-  }
-  
-  const currentMember = meetingData.channelMemberList?.find(
-    member => member.memberSeq == currentMemberSeq
-  )
-  
-  return currentMember && (
-    currentMember.authority === Authority.SUPER || 
-    currentMember.authority === 'MANAGER'
-  )
+  if (!meetingData) return false
+  return hasChannelManagePermission('meeting')
 }
 
 // 컴포넌트 마운트 시 채널 데이터 로드
@@ -711,7 +561,7 @@ const createMeeting = () => {
   }
   
   // 프로젝트 화상회의의 하위 채널에 추가
-  const meetingChannel = projectChannels.value.find(ch => ch.id === 'meeting')
+  const meetingChannel = currentChannels.value.find(ch => ch.id === 'meeting')
   if (meetingChannel && meetingChannel.subChannels) {
     meetingChannel.subChannels.push(newMeeting)
   }
@@ -738,7 +588,7 @@ const createSchedule = () => {
   }
   
   // 프로젝트 일정관리의 하위 채널에 추가
-  const scheduleChannel = projectChannels.value.find(ch => ch.id === 'schedule')
+  const scheduleChannel = currentChannels.value.find(ch => ch.id === 'schedule')
   if (scheduleChannel && scheduleChannel.subChannels) {
     scheduleChannel.subChannels.push(newSchedule)
   }
@@ -758,7 +608,13 @@ const closeCreateScheduleModal = () => {
 
 // 채널 선택 함수
 const selectChannel = (channelId) => {
-  const channel = projectChannels.value.find(c => c.id === channelId)
+  // meeting 채널은 바로 선택 (토글하지 않음)
+  if (channelId === 'meeting') {
+    emit('select-channel', channelId)
+    return
+  }
+  
+  const channel = currentChannels.value.find(c => c.id === channelId)
   if (channel && channel.subChannels) {
     // 하위 채널이 있는 경우 토글
     toggleChannel(channelId)
@@ -774,11 +630,9 @@ const toggleChannel = (channelId) => {
     chatExpanded.value = !chatExpanded.value
   } else if (channelId === 'schedule') {
     scheduleExpanded.value = !scheduleExpanded.value
-  } else if (channelId === 'meeting') {
-    meetingExpanded.value = !meetingExpanded.value
   } else {
     // 개인 워크스페이스의 경우 기존 로직 사용
-    const channel = projectChannels.value.find(c => c.id === channelId)
+    const channel = currentChannels.value.find(c => c.id === channelId)
     if (channel && channel.subChannels) {
       channel.expanded = !channel.expanded
     }
@@ -934,7 +788,9 @@ const getStatusColor = (status) => {
               v-if="(channel.id === 'chat' || channel.id === 'schedule' || channel.id === 'meeting') && 
                     channel.id !== 'drive' && 
                     (!collapsed || workspaceType === 'personal') && 
-                    (channel.id === 'chat' ? (workspaceType === 'project' && chatChannels.length > 0) : channel.id === 'schedule' ? hasSchedulePermission(channel.scheduleData) : hasMeetingPermission(channel.meetingData)) &&
+                    (channel.id === 'chat' ? (workspaceType === 'project' && chatChannels.length > 0) : 
+                     channel.id === 'schedule' ? hasSchedulePermission(channel.scheduleData) : 
+                     channel.id === 'meeting' ? (workspaceType === 'project' && meetingChannels.length > 0) : false) &&
                     hoveredChannel === channel.id"
               class="channel-settings-btn"
               @click.stop="openChannelSettings(channel)"
@@ -971,8 +827,8 @@ const getStatusColor = (status) => {
               </v-icon>
               <span class="subchannel-name">{{ subChannel.name }}</span>
               
-              <!-- 채팅 채널: 메뉴 버튼 (이름 수정, 삭제) - MANAGER 또는 SUPER 권한일 때 -->
-              <v-menu v-if="channel.id === 'chat' && hasChatManagerOrSuperPermission">
+              <!-- 채팅 채널: 메뉴 버튼 (이름 수정, 삭제) - MANAGER 또는 SUPER 권한일 때, 첫 번째 채널 제외 -->
+              <v-menu v-if="channel.id === 'chat' && hasChatManagerOrSuperPermission && subChannel.channelData?.channelSeq !== chatChannels[0]?.channelSeq">
                 <template v-slot:activator="{ props }">
                   <v-icon 
                     v-if="hoveredChannel === subChannel.id"
@@ -990,11 +846,7 @@ const getStatusColor = (status) => {
                     </template>
                     <v-list-item-title>채널 이름 수정</v-list-item-title>
                   </v-list-item>
-                  <!-- 기본 채널(첫 번째 채널)이 아닐 때만 삭제 메뉴 표시 -->
-                  <v-list-item 
-                    v-if="subChannel.channelData?.channelSeq !== chatChannels[0]?.channelSeq"
-                    @click="deleteChannel(subChannel)"
-                  >
+                  <v-list-item @click="deleteChannel(subChannel)">
                     <template v-slot:prepend>
                       <v-icon size="16" color="error">mdi-delete</v-icon>
                     </template>
