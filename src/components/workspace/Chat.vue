@@ -7,6 +7,21 @@ import SockJS from "sockjs-client";
 import Stomp from "webstomp-client";
 import axios from "axios";
 
+// ✅ 현재 사용자가 멘션된 메시지인지 확인
+const isMentionedMessage = (message) => {
+  if (!message.content || !localStorage.getItem("user")) return false;
+
+  // 내 이름 가져오기
+  const currentUser =
+    JSON.parse(localStorage.getItem("user") || "{}").name ||
+    localStorage.getItem("memberName") ||
+    "";
+
+  // 멘션 패턴 검사
+  const mentionRegex = new RegExp(`@${currentUser}`, "g");
+  return mentionRegex.test(message.content);
+};
+
 // JWT에서 payload 추출
 const parseJwt = (token) => {
   try {
@@ -932,8 +947,12 @@ onUnmounted(() => {
                     "
                   ></div>
                 </div>
-
-                <div class="message-bubble">
+                <div
+                  class="message-bubble"
+                  :class="{
+                    mentioned: isMentionedMessage(message)
+                  }"
+                >
                   <div
                     v-if="message.content"
                     class="message-text"
@@ -2155,4 +2174,30 @@ onUnmounted(() => {
   overflow-wrap: break-word !important;
 }
 
+/* ✅ 내가 멘션된 메시지 배경 하이라이트 (강조 버전) */
+.message-bubble.mentioned {
+  background: linear-gradient(135deg, #ede9fe, #ddd6fe) !important; /* 보라빛 그라데이션 */
+  box-shadow: 0 0 10px rgba(124, 58, 237, 0.5) !important; /* 외곽광 */
+  animation: mentionGlow 2s ease-in-out infinite alternate;
+  transition: all 0.3s ease;
+}
+
+/* 💡 하이라이트 애니메이션 */
+@keyframes mentionGlow {
+  0% {
+    box-shadow: 0 0 8px rgba(124, 58, 237, 0.3);
+  }
+  50% {
+    box-shadow: 0 0 16px rgba(124, 58, 237, 0.6);
+  }
+  100% {
+    box-shadow: 0 0 8px rgba(124, 58, 237, 0.3);
+  }
+}
+
+🟣 메시지 텍스트 색도 살짝 강조
+.message-bubble.mentioned .message-text {
+  color: #4c1d95 !important;
+  font-weight: 600;
+}
 </style>
