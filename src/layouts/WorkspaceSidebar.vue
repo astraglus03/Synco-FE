@@ -1,5 +1,20 @@
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
+import { 
+  getChatChannels, 
+  getMeetingChannels, 
+  getScheduleChannels,
+  changeChatChannelAuthority,
+  changeScheduleChannelAuthority,
+  changeMeetingChannelAuthority,
+  renameChatChannel,
+  renameMeetingChannel,
+  createChatChannel,
+  deleteChatChannel
+} from '@/services/WorkspaceService'
+import { useAuthStore } from '@/store/authStore'
+import { useWorkspaceStore } from '@/store/workspaceStore'
+import { Authority } from '@/models/workspace/WorkspaceModels'
 
 const props = defineProps({
   collapsed: Boolean,
@@ -23,6 +38,165 @@ const newMeetingName = ref('')
 const showCreateScheduleModal = ref(false)
 const newScheduleName = ref('')
 
+// 채널 설정 모달 상태
+const showChannelSettingsModal = ref(false)
+const selectedChannel = ref(null)
+const channelPermissions = ref({})
+
+// 현재 선택된 채널의 멤버 목록
+const channelMembers = computed(() => {
+  if (!selectedChannel.value) return []
+  
+  let memberList = []
+  
+  // 채팅 최상위 채널 (channel.id === 'chat')
+  if (selectedChannel.value.id === 'chat') {
+    // 기본 채널(첫 번째 채널)의 멤버 리스트 사용
+    if (chatChannels.value && chatChannels.value.length > 0) {
+      memberList = chatChannels.value[0].channelMemberList || []
+    }
+  } else if (selectedChannel.value.channelData) {
+    // 채팅 하위 채널
+    // 기본 채널(첫 번째 채널)만 멤버 리스트를 가지고 있음
+    // 다른 채널은 멤버 리스트가 없으므로 기본 채널의 멤버 리스트 사용
+    if (selectedChannel.value.channelData.channelMemberList && selectedChannel.value.channelData.channelMemberList.length > 0) {
+      memberList = selectedChannel.value.channelData.channelMemberList
+    } else if (chatChannels.value && chatChannels.value.length > 0) {
+      // 기본 채널(첫 번째 채널)의 멤버 리스트 사용
+      memberList = chatChannels.value[0].channelMemberList || []
+    }
+  } else if (selectedChannel.value.scheduleData) {
+    // 일정관리 (ChannelMemberResDto 배열)
+    memberList = selectedChannel.value.scheduleData || []
+  } else if (selectedChannel.value.meetingData) {
+    // 화상회의 (첫 번째 채널의 ChannelInfoResDto)
+    memberList = selectedChannel.value.meetingData.channelMemberList || []
+  }
+  
+  // 정렬: SUPER > MANAGER > 나머지(알파벳순)
+  return [...memberList].sort((a, b) => {
+    // 권한별 우선순위 부여
+    const authorityPriority = {
+      'SUPER': 1,
+      'MANAGER': 2,
+      'PARTICIPANT': 3
+    }
+    
+    const priorityA = authorityPriority[a.authority] || 999
+    const priorityB = authorityPriority[b.authority] || 999
+    
+    // 권한이 다르면 권한 순으로 정렬
+    if (priorityA !== priorityB) {
+      return priorityA - priorityB
+    }
+    
+    // 같은 권한이면 이름으로 알파벳순 정렬
+    return (a.memberName || '').localeCompare(b.memberName || '')
+  })
+})
+
+// 호버 상태 관리
+const hoveredChannel = ref(null)
+
+// 스토어
+const authStore = useAuthStore()
+const workspaceStore = useWorkspaceStore()
+
+// 실제 채널 데이터
+const chatChannels = ref([])
+const meetingChannels = ref([])
+const scheduleChannels = ref([])
+const isLoadingChannels = ref(false)
+
+// 채널 접기/펼치기 상태
+const chatExpanded = ref(true)  // 기본값: 펼침
+const scheduleExpanded = ref(false)
+const meetingExpanded = ref(false)
+
+// 현재 사용자의 memberSeq를 채널 멤버 리스트에서 찾기
+const getCurrentUserMemberSeq = (channelMemberList) => {
+  // authStore에 memberSeq가 있으면 사용
+  if (authStore.memberSeq) {
+    return authStore.memberSeq
+  }
+  
+  // 없으면 채널 멤버 리스트에서 이름으로 찾기
+  if (!channelMemberList || !authStore.user?.name) {
+    return null
+  }
+  
+  const currentUser = channelMemberList.find(
+    member => member.memberName === authStore.user.name
+  )
+  
+  return currentUser?.memberSeq || null
+}
+
+// 채팅 채널 생성 권한 확인
+// 기본 채널(첫 번째 채널)의 권한이 SUPER 또는 MANAGER인지 확인
+// 주의: API에서 기본 채널만 멤버 리스트를 반환하므로, 첫 번째 채널의 멤버 리스트 사용
+const canCreateChatChannel = computed(() => {
+  // 프로젝트 워크스페이스가 아니면 권한 없음
+  if (props.workspaceType !== 'project') return false
+  
+  // 채팅 채널이 없으면 권한 없음
+  if (!chatChannels.value || chatChannels.value.length === 0) return false
+  
+  // 기본 채널(첫 번째 채널) - 멤버 리스트를 가진 유일한 채널
+  const firstChannel = chatChannels.value[0]
+  if (!firstChannel || !firstChannel.channelMemberList) return false
+  
+  // 현재 사용자의 memberSeq 찾기 (숫자로 변환)
+  const currentUserMemberSeq = Number(authStore.memberSeq)
+  if (!currentUserMemberSeq) return false
+  
+  // 현재 사용자의 멤버 정보 찾기 (타입 일치 보장)
+  const currentMember = firstChannel.channelMemberList.find(
+    member => Number(member.memberSeq) === currentUserMemberSeq
+  )
+  
+  if (!currentMember) return false
+  
+  // SUPER 또는 MANAGER 권한인지 확인
+  return currentMember.authority === Authority.SUPER || currentMember.authority === 'MANAGER'
+})
+
+// 채팅 채널 SUPER 권한 확인 (톱니바퀴용)
+const hasChatSuperPermission = computed(() => {
+  if (props.workspaceType !== 'project') return false
+  if (!chatChannels.value || chatChannels.value.length === 0) return false
+  
+  const firstChannel = chatChannels.value[0]
+  if (!firstChannel?.channelMemberList) return false
+  
+  const currentUserMemberSeq = Number(authStore.memberSeq)
+  if (!currentUserMemberSeq) return false
+  
+  const currentMember = firstChannel.channelMemberList.find(
+    member => Number(member.memberSeq) === currentUserMemberSeq
+  )
+  
+  return currentMember?.authority === Authority.SUPER
+})
+
+// 채팅 채널 MANAGER 또는 SUPER 권한 확인 (메뉴 버튼용)
+const hasChatManagerOrSuperPermission = computed(() => {
+  if (props.workspaceType !== 'project') return false
+  if (!chatChannels.value || chatChannels.value.length === 0) return false
+  
+  const firstChannel = chatChannels.value[0]
+  if (!firstChannel?.channelMemberList) return false
+  
+  const currentUserMemberSeq = Number(authStore.memberSeq)
+  if (!currentUserMemberSeq) return false
+  
+  const currentMember = firstChannel.channelMemberList.find(
+    member => Number(member.memberSeq) === currentUserMemberSeq
+  )
+  
+  return currentMember?.authority === Authority.SUPER || currentMember?.authority === 'MANAGER'
+})
+
 
 // 개인 워크스페이스 채널 목록
 const personalChannels = ref([
@@ -41,7 +215,7 @@ const projectChannels = ref([
     name: '프로젝트 채팅', 
     icon: 'mdi-chat', 
     type: 'main',
-    expanded: false,
+    expanded: true,  // 기본값: 펼침
     subChannels: [
       { id: 'general', name: '일반', type: 'text', unread: 3 },
       { id: 'marketing', name: '마케팅', type: 'text', unread: 0 },
@@ -99,34 +273,151 @@ const directMessages = ref([
   { id: 'jung_sohee', name: '정소희', status: 'offline', lastMessage: '인사팀과 급여 관련 논의', time: '3일 전', unread: 0 }
 ])
 
-// 현재 채널 목록
+// 현재 채널 목록 (실제 API 데이터 사용)
 const currentChannels = computed(() => {
-  return props.workspaceType === 'personal' ? personalChannels.value : projectChannels.value
+  if (props.workspaceType === 'personal') {
+    return personalChannels.value
+  }
+
+  // 프로젝트 워크스페이스의 경우 실제 API 데이터 사용
+  return [
+    { id: 'dashboard', name: '프로젝트 대시보드', icon: 'mdi-view-dashboard', type: 'main' },
+    { 
+      id: 'chat', 
+      name: '프로젝트 채팅', 
+      icon: 'mdi-chat', 
+      type: 'main',
+      expanded: chatExpanded.value,
+      subChannels: chatChannels.value?.map(channel => ({
+        id: `chat_${channel.channelSeq}`,
+        name: channel.channelName,
+        type: 'text',
+        unread: 0,
+        channelData: channel
+      })) || []
+    },
+    { 
+      id: 'schedule', 
+      name: '프로젝트 일정관리', 
+      icon: 'mdi-calendar-check', 
+      type: 'main',
+      expanded: scheduleExpanded.value,
+      scheduleData: scheduleChannels.value // 멤버 정보를 위한 데이터
+    },
+    { id: 'drive', name: '드라이브', icon: 'mdi-folder', type: 'main' },
+    { 
+      id: 'meeting', 
+      name: '화상회의', 
+      icon: 'mdi-video', 
+      type: 'main',
+      expanded: meetingExpanded.value,
+      // 화상회의는 첫 번째 채널의 멤버 정보만 사용
+      meetingData: meetingChannels.value?.[0]
+    }
+  ]
 })
 
 // 채널 생성
-const createChannel = () => {
+const createChannel = async () => {
   if (!newChannelName.value.trim()) return
   
-  const newChannel = {
-    id: `channel_${Date.now()}`,
-    name: newChannelName.value.trim(),
-    type: 'text',
-    unread: 0
+  // 권한 확인
+  if (!canCreateChatChannel.value) {
+    alert('채널 생성 권한이 없습니다. SUPER 또는 MANAGER 권한이 필요합니다.')
+    return
   }
   
-  // 프로젝트 채팅의 하위 채널에 추가
-  const chatChannel = projectChannels.value.find(ch => ch.id === 'chat')
-  if (chatChannel && chatChannel.subChannels) {
-    chatChannel.subChannels.push(newChannel)
+  // workSpaceSeq 가져오기
+  const currentWorkspace = workspaceStore.currentWorkspaceInfo
+  if (!currentWorkspace || !currentWorkspace.workSpaceSeq) {
+    alert('워크스페이스 정보를 찾을 수 없습니다.')
+    return
   }
   
-  // 부모 컴포넌트에 알림
-  emit('create-channel', newChannel)
+  try {
+    // API 호출
+    await createChatChannel(newChannelName.value.trim(), currentWorkspace.workSpaceSeq)
+    
+    // 채널 목록 새로고침
+    await loadChannels()
+    
+    // 폼 초기화
+    newChannelName.value = ''
+    showCreateChannelModal.value = false
+  } catch (error) {
+    alert('채널 생성에 실패했습니다.')
+  }
+}
+
+// 채널 이름 수정 다이얼로그
+const renameChannelDialog = ref(false)
+const renamingChannel = ref(null)
+const newChannelNameForRename = ref('')
+
+const openRenameChannelDialog = (channel) => {
+  renamingChannel.value = channel
+  newChannelNameForRename.value = channel.name
+  renameChannelDialog.value = true
+}
+
+const closeRenameChannelDialog = () => {
+  renameChannelDialog.value = false
+  renamingChannel.value = null
+  newChannelNameForRename.value = ''
+}
+
+const saveChannelName = async () => {
+  if (!newChannelNameForRename.value.trim()) {
+    alert('채널 이름을 입력해주세요.')
+    return
+  }
   
-  // 폼 초기화
-  newChannelName.value = ''
-  showCreateChannelModal.value = false
+  if (!renamingChannel.value) {
+    alert('채널 정보를 찾을 수 없습니다.')
+    return
+  }
+  
+  if (!renamingChannel.value.channelData) {
+    alert('채널 정보를 찾을 수 없습니다.')
+    return
+  }
+  
+  const channelSeq = renamingChannel.value.channelData.channelSeq
+  
+  try {
+    // API 호출
+    await renameChatChannel(channelSeq, newChannelNameForRename.value.trim())
+    
+    // 채널 목록 새로고침
+    await loadChannels()
+    
+    closeRenameChannelDialog()
+  } catch (error) {
+    alert('채널 이름 변경에 실패했습니다.')
+  }
+}
+
+// 채널 삭제
+const deleteChannel = async (channel) => {
+  if (!channel || !channel.channelData) {
+    alert('채널 정보를 찾을 수 없습니다.')
+    return
+  }
+  
+  const confirmed = confirm(`'${channel.name}' 채널을 삭제하시겠습니까?\n이 작업은 되돌릴 수 없습니다.`)
+  if (!confirmed) return
+  
+  try {
+    // API 호출 - 채널 삭제
+    await deleteChatChannel(channel.channelData.channelSeq)
+    
+    // 채널 목록 새로고침
+    await loadChannels()
+    
+    alert('채널이 삭제되었습니다.')
+  } catch (error) {
+    alert('채널 삭제에 실패했습니다.')
+  }
 }
 
 // 모달 닫기
@@ -134,6 +425,279 @@ const closeCreateChannelModal = () => {
   showCreateChannelModal.value = false
   newChannelName.value = ''
 }
+
+// 채널 설정 모달 열기
+const openChannelSettings = (channel) => {
+  selectedChannel.value = channel
+  
+  // 채널 타입에 따라 멤버 목록 가져오기
+  let memberList = []
+  
+  // 채팅 최상위 채널 (channel.id === 'chat')
+  if (channel.id === 'chat') {
+    // 기본 채널(첫 번째 채널)의 멤버 리스트 사용
+    if (chatChannels.value && chatChannels.value.length > 0) {
+      memberList = chatChannels.value[0].channelMemberList || []
+    }
+  } else if (channel.channelData) {
+    // 채팅 하위 채널
+    // 기본 채널(첫 번째 채널)만 멤버 리스트를 가지고 있음
+    // 다른 채널은 멤버 리스트가 없으므로 기본 채널의 멤버 리스트 사용
+    if (channel.channelData.channelMemberList && channel.channelData.channelMemberList.length > 0) {
+      memberList = channel.channelData.channelMemberList
+    } else if (chatChannels.value && chatChannels.value.length > 0) {
+      // 기본 채널(첫 번째 채널)의 멤버 리스트 사용
+      memberList = chatChannels.value[0].channelMemberList || []
+    }
+  } else if (channel.scheduleData) {
+    // 일정관리 (ChannelMemberResDto 배열)
+    memberList = channel.scheduleData || []
+  } else if (channel.meetingData) {
+    // 화상회의 (첫 번째 채널의 ChannelInfoResDto)
+    memberList = channel.meetingData.channelMemberList || []
+  }
+  
+  // 권한 정보를 객체로 변환
+  channelPermissions.value = {}
+  memberList.forEach(member => {
+    channelPermissions.value[member.memberSeq] = member.authority
+  })
+  
+  showChannelSettingsModal.value = true
+}
+
+// 채널 설정 모달 닫기
+const closeChannelSettings = () => {
+  showChannelSettingsModal.value = false
+  selectedChannel.value = null
+  channelPermissions.value = {}
+}
+
+// 현재 사용자가 SUPER 권한을 가지고 있는지 확인
+const isCurrentUserSuper = computed(() => {
+  const currentMemberSeq = getCurrentUserMemberSeq(channelMembers.value)
+  if (!currentMemberSeq) return false
+  
+  return channelPermissions.value[currentMemberSeq] === 'SUPER'
+})
+
+// 권한 업데이트
+const updateChannelPermission = async (memberSeq, newPermission) => {
+  const currentMemberSeq = getCurrentUserMemberSeq(channelMembers.value)
+  const currentPermission = channelPermissions.value[memberSeq]
+  
+  // SUPER 권한자만 권한 변경 가능
+  if (!isCurrentUserSuper.value) {
+    alert('권한 변경은 SUPER 권한을 가진 사용자만 가능합니다.')
+    return
+  }
+  
+  // 자기 자신의 SUPER 권한은 변경 불가
+  if (memberSeq == currentMemberSeq && currentPermission === 'SUPER') {
+    alert('SUPER 권한을 가진 사용자는 자신의 권한을 변경할 수 없습니다.')
+    return
+  }
+  
+  // SUPER 권한으로 변경 시도 차단
+  if (newPermission === 'SUPER' && currentPermission !== 'SUPER') {
+    alert('채널에서는 SUPER 권한을 위임할 수 없습니다.')
+    return
+  }
+  
+  try {
+    const workSpaceSeq = props.currentWorkspaceData.workSpaceSeq
+    
+    // 채널 타입에 따라 적절한 API 호출
+    if (selectedChannel.value.id === 'chat') {
+      // 채팅 최상위 채널 - 기본 채널(첫 번째 채널)에 권한 변경
+      if (chatChannels.value && chatChannels.value.length > 0) {
+        const channelSeq = chatChannels.value[0].channelSeq
+        await changeChatChannelAuthority(workSpaceSeq, memberSeq, channelSeq, newPermission)
+      }
+    } else if (selectedChannel.value.channelData) {
+      // 채팅 하위 채널
+      const channelSeq = selectedChannel.value.channelData.channelSeq
+      await changeChatChannelAuthority(workSpaceSeq, memberSeq, channelSeq, newPermission)
+    } else if (selectedChannel.value.scheduleData) {
+      // 일정관리
+      await changeScheduleChannelAuthority(workSpaceSeq, memberSeq, newPermission)
+    } else if (selectedChannel.value.meetingData) {
+      // 화상회의
+      await changeMeetingChannelAuthority(workSpaceSeq, memberSeq, newPermission)
+    }
+    
+    // 권한 변경 성공 시 로컬 상태 업데이트
+    channelPermissions.value[memberSeq] = newPermission
+    
+    // 채널 데이터 새로고침
+    await loadChannels()
+    
+    // 모달의 멤버 리스트도 다시 로드
+    const channel = selectedChannel.value
+    if (channel.id === 'chat') {
+      // 채팅 최상위 채널: 기본 채널 데이터 업데이트
+      // (이미 loadChannels()로 chatChannels가 새로고침됨)
+    } else if (channel.channelData) {
+      // 채팅 하위 채널: chatChannels에서 찾기
+      const updatedChannel = chatChannels.value.find(c => c.channelSeq === channel.channelData.channelSeq)
+      if (updatedChannel) {
+        selectedChannel.value.channelData = updatedChannel
+      }
+    } else if (channel.scheduleData) {
+      // 일정관리: scheduleChannels 업데이트
+      selectedChannel.value.scheduleData = scheduleChannels.value
+    } else if (channel.meetingData) {
+      // 화상회의: meetingChannels에서 첫 번째 채널 찾기
+      if (meetingChannels.value.length > 0) {
+        selectedChannel.value.meetingData = meetingChannels.value[0]
+      }
+    }
+    
+    // 권한 정보 다시 설정
+    const memberList = channelMembers.value
+    channelPermissions.value = {}
+    memberList.forEach(member => {
+      channelPermissions.value[member.memberSeq] = member.authority
+    })
+  } catch (error) {
+    alert('권한 변경에 실패했습니다.')
+  }
+}
+
+// 채널 데이터 로드
+const loadChannels = async () => {
+  if (props.workspaceType !== 'project' || !props.currentWorkspaceData?.workSpaceSeq) {
+    return
+  }
+
+  try {
+    isLoadingChannels.value = true
+    const workSpaceSeq = props.currentWorkspaceData.workSpaceSeq
+
+    // 각 채널을 개별적으로 로드하여 에러 발생 시에도 다른 채널은 정상 로드
+    let chatData = []
+    let meetingData = []
+    let scheduleData = []
+
+    // 채팅 채널 로드
+    try {
+      chatData = await getChatChannels(workSpaceSeq)
+    } catch (error) {
+      // 에러 발생시에도 계속 진행
+    }
+
+    // 화상회의 채널 로드
+    try {
+      meetingData = await getMeetingChannels(workSpaceSeq)
+    } catch (error) {
+      // 에러 발생시에도 계속 진행
+    }
+
+    // 일정관리 채널 로드
+    try {
+      scheduleData = await getScheduleChannels(workSpaceSeq)
+    } catch (error) {
+      // 에러 발생시에도 계속 진행
+    }
+
+    // 채널 데이터 업데이트
+    chatChannels.value = chatData
+    meetingChannels.value = meetingData
+    scheduleChannels.value = scheduleData
+
+  } catch (error) {
+    // 예상치 못한 에러 발생
+  } finally {
+    isLoadingChannels.value = false
+  }
+}
+
+// 사용자 권한 확인 (워크스페이스 SUPER 또는 채널 권한)
+const hasChannelPermission = (channelData) => {
+  if (!channelData) {
+    return false
+  }
+  
+  // 현재 사용자의 memberSeq 가져오기 (채널 멤버 리스트에서 이름으로 찾기)
+  const currentMemberSeq = getCurrentUserMemberSeq(channelData.channelMemberList)
+  
+  if (!currentMemberSeq) {
+    return false
+  }
+  
+  // 채널 멤버 권한 확인 (타입 불일치 대비 == 사용)
+  const memberInChannel = channelData.channelMemberList?.find(
+    member => member.memberSeq == currentMemberSeq
+  )
+  
+  return memberInChannel && (
+    memberInChannel.authority === Authority.SUPER || 
+    memberInChannel.authority === 'MANAGER'
+  )
+}
+
+// 일정관리 권한 확인 (scheduleData는 ChannelMemberResDto 배열)
+const hasSchedulePermission = (scheduleData) => {
+  if (!scheduleData || scheduleData.length === 0) {
+    return false
+  }
+  
+  // scheduleData는 ChannelMemberResDto 배열이므로 직접 권한 확인
+  const currentMemberSeq = getCurrentUserMemberSeq(scheduleData)
+  
+  if (!currentMemberSeq) {
+    return false
+  }
+  
+  const currentMember = scheduleData.find(
+    member => member.memberSeq == currentMemberSeq
+  )
+  
+  return currentMember && (
+    currentMember.authority === Authority.SUPER || 
+    currentMember.authority === 'MANAGER'
+  )
+}
+
+// 화상회의 권한 확인 (meetingData는 첫 번째 채널의 ChannelInfoResDto)
+const hasMeetingPermission = (meetingData) => {
+  if (!meetingData) {
+    return false
+  }
+  
+  // meetingData는 ChannelInfoResDto이므로 channelMemberList에서 권한 확인
+  const currentMemberSeq = getCurrentUserMemberSeq(meetingData.channelMemberList)
+  
+  if (!currentMemberSeq) {
+    return false
+  }
+  
+  const currentMember = meetingData.channelMemberList?.find(
+    member => member.memberSeq == currentMemberSeq
+  )
+  
+  return currentMember && (
+    currentMember.authority === Authority.SUPER || 
+    currentMember.authority === 'MANAGER'
+  )
+}
+
+// 컴포넌트 마운트 시 채널 데이터 로드
+onMounted(() => {
+  loadChannels()
+})
+
+// 워크스페이스 변경 시 채널 데이터 다시 로드
+watch(() => props.currentWorkspaceData, () => {
+  loadChannels()
+}, { deep: true })
+
+// workspaceType 변경 감지
+watch(() => props.workspaceType, (newType) => {
+  if (newType === 'project') {
+    loadChannels()
+  }
+})
 
 // 화상회의 생성
 const createMeeting = () => {
@@ -206,15 +770,30 @@ const selectChannel = (channelId) => {
 
 // 채널 토글
 const toggleChannel = (channelId) => {
-  const channel = projectChannels.value.find(c => c.id === channelId)
-  if (channel && channel.subChannels) {
-    channel.expanded = !channel.expanded
+  if (channelId === 'chat') {
+    chatExpanded.value = !chatExpanded.value
+  } else if (channelId === 'schedule') {
+    scheduleExpanded.value = !scheduleExpanded.value
+  } else if (channelId === 'meeting') {
+    meetingExpanded.value = !meetingExpanded.value
+  } else {
+    // 개인 워크스페이스의 경우 기존 로직 사용
+    const channel = projectChannels.value.find(c => c.id === channelId)
+    if (channel && channel.subChannels) {
+      channel.expanded = !channel.expanded
+    }
   }
 }
 
 // 하위 채널 선택
 const selectSubChannel = (parentId, subChannelId) => {
   emit('select-subchannel', parentId, subChannelId)
+}
+
+// 접힌 상태에서 채팅 채널 클릭 시 처리
+const handleCollapsedChannelClick = (chatChannel) => {
+  // 사이드바는 접힌 상태 유지, 채널만 선택
+  selectSubChannel('chat', `chat_${chatChannel.channelSeq}`)
 }
 
 // 1:1 채팅 선택 함수
@@ -257,13 +836,64 @@ const getStatusColor = (status) => {
       </div>
       
       <div class="channel-list">
+        <!-- 로딩 상태 표시 -->
+        <div v-if="isLoadingChannels" class="loading-channels">
+          <v-progress-circular indeterminate size="20" width="2" />
+          <span v-if="!collapsed || workspaceType === 'personal'" class="loading-text">채널 로딩 중...</span>
+        </div>
+        
         <div
           v-for="channel in currentChannels"
           :key="channel.id"
           class="channel-group"
         >
           <!-- 메인 채널 -->
+          <!-- 채팅 채널 - 접힌 상태일 때 클릭 시 드롭다운 메뉴 -->
+          <v-menu
+            v-if="channel.id === 'chat' && collapsed && workspaceType === 'project' && chatChannels.length > 0"
+            location="end"
+            offset="8"
+          >
+            <template v-slot:activator="{ props: menuProps }">
+              <div
+                class="channel-item"
+                :class="{ 
+                  'active': currentChannel === channel.id, 
+                  'collapsed': collapsed && workspaceType === 'project',
+                  'has-subchannels': channel.subChannels
+                }"
+                v-bind="menuProps"
+                @mouseenter="hoveredChannel = channel.id"
+                @mouseleave="hoveredChannel = null"
+              >
+                <v-icon class="channel-icon">
+                  {{ channel.icon }}
+                </v-icon>
+                <span v-if="!collapsed || workspaceType === 'personal'" class="channel-name">{{ channel.name }}</span>
+              </div>
+            </template>
+            
+            <v-card class="collapsed-chat-menu" min-width="200" max-width="250">
+              <v-list density="compact">
+                <v-list-subheader>채팅 채널</v-list-subheader>
+                <v-list-item
+                  v-for="chatChannel in chatChannels"
+                  :key="chatChannel.channelSeq"
+                  @click="handleCollapsedChannelClick(chatChannel)"
+                  :active="selectedSubChannel === `chat_${chatChannel.channelSeq}`"
+                >
+                  <template v-slot:prepend>
+                    <v-icon size="18">mdi-pound</v-icon>
+                  </template>
+                  <v-list-item-title>{{ chatChannel.channelName }}</v-list-item-title>
+                </v-list-item>
+              </v-list>
+            </v-card>
+          </v-menu>
+
+          <!-- 일반 채널 (채팅이 아니거나 펼쳐진 상태일 때) -->
           <div
+            v-else
             class="channel-item"
             :class="{ 
               'active': currentChannel === channel.id, 
@@ -271,27 +901,24 @@ const getStatusColor = (status) => {
               'has-subchannels': channel.subChannels
             }"
             @click="selectChannel(channel.id)"
+            @mouseenter="hoveredChannel = channel.id"
+            @mouseleave="hoveredChannel = null"
           >
-            <v-icon class="channel-icon">{{ channel.icon }}</v-icon>
+            <v-icon class="channel-icon">
+              {{ channel.icon }}
+            </v-icon>
+            
             <span v-if="!collapsed || workspaceType === 'personal'" class="channel-name">{{ channel.name }}</span>
             
-            <!-- 채널 생성 버튼 (프로젝트 채팅일 때만) -->
+            <!-- 채널 생성 버튼 (프로젝트 채팅일 때만, SUPER/MANAGER 권한 필요) -->
             <v-icon 
-              v-if="channel.id === 'chat' && workspaceType === 'project' && (!collapsed || workspaceType === 'personal')"
+              v-if="channel.id === 'chat' && workspaceType === 'project' && (!collapsed || workspaceType === 'personal') && canCreateChatChannel"
               class="create-channel-btn"
               @click.stop="showCreateChannelModal = true"
             >
               mdi-plus
             </v-icon>
             
-            <!-- 화상회의 생성 버튼 (프로젝트 화상회의일 때만) -->
-            <v-icon 
-              v-if="channel.id === 'meeting' && workspaceType === 'project' && (!collapsed || workspaceType === 'personal')"
-              class="create-channel-btn"
-              @click.stop="showCreateMeetingModal = true"
-            >
-              mdi-plus
-            </v-icon>
             
             <!-- 프로젝트 일정 생성 버튼 (프로젝트 일정관리일 때만) -->
             <v-icon 
@@ -302,11 +929,24 @@ const getStatusColor = (status) => {
               mdi-plus
             </v-icon>
             
+            <!-- 채널 설정 버튼 (채팅, 일정관리, 화상회의만 최상위에 표시, 드라이브 제외) -->
+            <v-icon 
+              v-if="(channel.id === 'chat' || channel.id === 'schedule' || channel.id === 'meeting') && 
+                    channel.id !== 'drive' && 
+                    (!collapsed || workspaceType === 'personal') && 
+                    (channel.id === 'chat' ? (workspaceType === 'project' && chatChannels.length > 0) : channel.id === 'schedule' ? hasSchedulePermission(channel.scheduleData) : hasMeetingPermission(channel.meetingData)) &&
+                    hoveredChannel === channel.id"
+              class="channel-settings-btn"
+              @click.stop="openChannelSettings(channel)"
+            >
+              mdi-cog
+            </v-icon>
             
             <v-icon 
               v-if="channel.subChannels && (!collapsed || workspaceType === 'personal')" 
               class="expand-icon"
               :class="{ 'expanded': channel.expanded }"
+              @click.stop="toggleChannel(channel.id)"
             >
               mdi-chevron-down
             </v-icon>
@@ -323,11 +963,55 @@ const getStatusColor = (status) => {
               class="subchannel-item"
               :class="{ 'active': selectedSubChannel === subChannel.id }"
               @click="selectSubChannel(channel.id, subChannel.id)"
+              @mouseenter="hoveredChannel = subChannel.id"
+              @mouseleave="hoveredChannel = null"
             >
               <v-icon class="subchannel-icon">
                 {{ subChannel.type === 'video' ? 'mdi-video' : subChannel.type === 'schedule' ? 'mdi-calendar' : 'mdi-pound' }}
               </v-icon>
               <span class="subchannel-name">{{ subChannel.name }}</span>
+              
+              <!-- 채팅 채널: 메뉴 버튼 (이름 수정, 삭제) - MANAGER 또는 SUPER 권한일 때 -->
+              <v-menu v-if="channel.id === 'chat' && hasChatManagerOrSuperPermission">
+                <template v-slot:activator="{ props }">
+                  <v-icon 
+                    v-if="hoveredChannel === subChannel.id"
+                    v-bind="props"
+                    class="subchannel-menu-btn"
+                    @click.stop
+                  >
+                    mdi-dots-vertical
+                  </v-icon>
+                </template>
+                <v-list density="compact" class="channel-context-menu">
+                  <v-list-item @click="openRenameChannelDialog(subChannel)">
+                    <template v-slot:prepend>
+                      <v-icon size="16">mdi-pencil</v-icon>
+                    </template>
+                    <v-list-item-title>채널 이름 수정</v-list-item-title>
+                  </v-list-item>
+                  <!-- 기본 채널(첫 번째 채널)이 아닐 때만 삭제 메뉴 표시 -->
+                  <v-list-item 
+                    v-if="subChannel.channelData?.channelSeq !== chatChannels[0]?.channelSeq"
+                    @click="deleteChannel(subChannel)"
+                  >
+                    <template v-slot:prepend>
+                      <v-icon size="16" color="error">mdi-delete</v-icon>
+                    </template>
+                    <v-list-item-title class="text-error">채널 삭제</v-list-item-title>
+                  </v-list-item>
+                </v-list>
+              </v-menu>
+              
+              <!-- 채팅 외 채널: 기존 설정 버튼 유지 -->
+              <v-icon 
+                v-else-if="channel.id !== 'chat' && hoveredChannel === subChannel.id && hasChannelPermission(subChannel.channelData)"
+                class="subchannel-settings-btn"
+                @click.stop="openChannelSettings(subChannel)"
+              >
+                mdi-cog
+              </v-icon>
+              
               <div 
                 v-if="subChannel.unread > 0" 
                 class="unread-badge"
@@ -432,6 +1116,54 @@ const getStatusColor = (status) => {
     </v-card>
   </v-dialog>
 
+  <!-- 채널 이름 수정 모달 -->
+  <v-dialog v-model="renameChannelDialog" max-width="400">
+    <v-card class="rename-channel-modal">
+      <div class="modal-header">
+        <div class="header-content">
+          <v-icon class="header-icon">mdi-pencil</v-icon>
+          <h3 class="modal-title">채널 이름 수정</h3>
+        </div>
+        <v-btn
+          icon="mdi-close"
+          variant="text"
+          size="small"
+          @click="closeRenameChannelDialog"
+        />
+      </div>
+      
+      <div class="modal-body">
+        <div class="input-group">
+          <label class="input-label">새 채널 이름</label>
+          <v-text-field
+            v-model="newChannelNameForRename"
+            placeholder="채널 이름을 입력하세요"
+            variant="outlined"
+            density="compact"
+            hide-details
+            @keyup.enter="saveChannelName"
+          />
+        </div>
+      </div>
+      
+      <div class="modal-actions">
+        <v-btn
+          variant="text"
+          @click="closeRenameChannelDialog"
+        >
+          취소
+        </v-btn>
+        <v-btn
+          color="primary"
+          :disabled="!newChannelNameForRename.trim()"
+          @click="saveChannelName"
+        >
+          저장
+        </v-btn>
+      </div>
+    </v-card>
+  </v-dialog>
+
   <!-- 화상회의 생성 모달 -->
   <v-dialog v-model="showCreateMeetingModal" max-width="400">
     <v-card class="create-meeting-modal">
@@ -524,6 +1256,136 @@ const getStatusColor = (status) => {
         >
           만들기
         </v-btn>
+      </div>
+    </v-card>
+  </v-dialog>
+
+  <!-- 채널 설정 모달 -->
+  <v-dialog v-model="showChannelSettingsModal" max-width="600" scrollable>
+    <v-card class="channel-settings-dialog">
+      <!-- 헤더 -->
+      <div class="dialog-header">
+        <div class="header-content">
+          <div class="header-left">
+            <v-icon class="header-icon">mdi-shield-account</v-icon>
+            <h2 class="dialog-title">권한 설정</h2>
+          </div>
+          <v-btn 
+            icon
+            variant="text" 
+            @click="closeChannelSettings"
+            class="close-btn"
+          >
+            <v-icon>mdi-close</v-icon>
+          </v-btn>
+        </div>
+      </div>
+
+      <v-divider />
+
+      <!-- 멤버 권한 관리 섹션 -->
+      <div class="permissions-section">
+        <div class="members-section">
+          <div class="members-header">
+            <span class="members-title">채널 멤버 권한</span>
+            <div class="permission-legend">
+              <div class="legend-item super">
+                <v-icon size="14">mdi-shield-crown</v-icon>
+                <span>소유자</span>
+              </div>
+              <div class="legend-item manager">
+                <v-icon size="14">mdi-account-star</v-icon>
+                <span>관리자</span>
+              </div>
+              <div class="legend-item participant">
+                <v-icon size="14">mdi-account</v-icon>
+                <span>참여자</span>
+              </div>
+            </div>
+          </div>
+          
+          <div class="members-list">
+            <!-- 멤버 목록이 없는 경우 -->
+            <div v-if="channelMembers.length === 0" class="empty-state">
+              <v-icon size="48" color="grey">mdi-account-group-outline</v-icon>
+              <span>멤버가 없습니다.</span>
+            </div>
+            
+            <!-- 멤버 목록 -->
+            <div 
+              v-else
+              v-for="member in channelMembers" 
+              :key="member.memberSeq"
+              class="member-item"
+            >
+              <div class="member-info">
+                <v-avatar size="32" color="primary">
+                  <v-img 
+                    v-if="member.memberProfileUrl" 
+                    :src="member.memberProfileUrl"
+                  />
+                  <span v-else class="text-white font-weight-bold">
+                    {{ member.memberName?.charAt(0) || '?' }}
+                  </span>
+                </v-avatar>
+                <div class="member-details">
+                  <div class="member-name">
+                    {{ member.memberName }}
+                    <v-chip 
+                      v-if="Number(member.memberSeq) === Number(authStore.memberSeq)"
+                      size="x-small"
+                      color="primary"
+                      variant="flat"
+                      class="ml-2"
+                    >
+                      본인
+                    </v-chip>
+                  </div>
+                </div>
+              </div>
+              
+              <div class="permission-toggle">
+                <!-- SUPER 권한자만 권한 변경 가능 -->
+                <v-btn-toggle
+                  v-if="isCurrentUserSuper"
+                  :model-value="channelPermissions[member.memberSeq]"
+                  @update:model-value="updateChannelPermission(member.memberSeq, $event)"
+                  :disabled="member.memberSeq == authStore.memberSeq && channelPermissions[member.memberSeq] === 'SUPER'"
+                  mandatory
+                  density="compact"
+                  class="permission-buttons"
+                >
+                  <v-btn value="SUPER" size="small" class="super-btn" disabled>
+                    <v-icon size="14">mdi-shield-crown</v-icon>
+                    <span>소유자</span>
+                  </v-btn>
+                  <v-btn value="MANAGER" size="small" class="manager-btn">
+                    <v-icon size="14">mdi-account-star</v-icon>
+                    <span>관리자</span>
+                  </v-btn>
+                  <v-btn value="PARTICIPANT" size="small" class="participant-btn">
+                    <v-icon size="14">mdi-account</v-icon>
+                    <span>참여</span>
+                  </v-btn>
+                </v-btn-toggle>
+                
+                <!-- SUPER 권한이 아닌 경우 현재 권한만 표시 -->
+                <v-chip 
+                  v-else
+                  :color="channelPermissions[member.memberSeq] === 'SUPER' ? '#f44336' : channelPermissions[member.memberSeq] === 'MANAGER' ? '#ffa726' : '#42a5f5'"
+                  size="small"
+                  variant="outlined"
+                >
+                  <v-icon 
+                    size="14" 
+                    :icon="channelPermissions[member.memberSeq] === 'SUPER' ? 'mdi-shield-crown' : channelPermissions[member.memberSeq] === 'MANAGER' ? 'mdi-account-star' : 'mdi-account'"
+                  ></v-icon>
+                  <span>{{ channelPermissions[member.memberSeq] === 'SUPER' ? '소유자' : channelPermissions[member.memberSeq] === 'MANAGER' ? '관리자' : '참여자' }}</span>
+                </v-chip>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     </v-card>
   </v-dialog>
@@ -978,5 +1840,331 @@ const getStatusColor = (status) => {
     width: 240px;
     margin-left: 60px;
   }
+}
+
+/* 채널 설정 버튼 스타일 */
+.channel-settings-btn,
+.subchannel-settings-btn,
+.subchannel-menu-btn {
+  opacity: 0;
+  transition: opacity 0.2s ease;
+  font-size: 16px;
+  color: rgb(var(--v-theme-on-surface));
+  cursor: pointer;
+}
+
+.channel-item:hover .channel-settings-btn,
+.subchannel-item:hover .subchannel-settings-btn,
+.subchannel-item:hover .subchannel-menu-btn {
+  opacity: 1;
+}
+
+.subchannel-menu-btn:hover {
+  color: rgb(var(--v-theme-primary));
+}
+
+/* 채널 컨텍스트 메뉴 스타일 */
+.channel-context-menu {
+  min-width: 150px !important;
+}
+
+.channel-context-menu .v-list-item {
+  min-height: 32px !important;
+  padding: 4px 12px !important;
+}
+
+.channel-context-menu .v-list-item-title {
+  font-size: 13px !important;
+}
+
+.channel-context-menu .v-list-item__prepend {
+  margin-right: 8px !important;
+}
+
+/* 접힌 상태 채팅 메뉴 스타일 */
+.collapsed-chat-menu {
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.collapsed-chat-menu .v-list {
+  padding: 4px 0;
+}
+
+.collapsed-chat-menu .v-list-subheader {
+  padding: 8px 16px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: rgb(var(--v-theme-on-surface));
+  opacity: 0.6;
+}
+
+.collapsed-chat-menu .v-list-item {
+  min-height: 36px;
+  padding: 4px 12px;
+  margin: 2px 4px;
+  border-radius: 6px;
+  transition: all 0.2s ease;
+}
+
+.collapsed-chat-menu .v-list-item:hover {
+  background: rgba(var(--v-theme-primary), 0.1);
+}
+
+.collapsed-chat-menu .v-list-item.v-list-item--active {
+  background: rgba(var(--v-theme-primary), 0.2);
+  color: rgb(var(--v-theme-primary));
+}
+
+.collapsed-chat-menu .v-list-item-title {
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.collapsed-chat-menu .v-list-item__prepend {
+  margin-right: 8px;
+}
+
+/* 채널 설정 모달 스타일 (AppHeader 스타일 적용) */
+.channel-settings-dialog {
+  background: rgb(var(--v-theme-surface));
+  border-radius: 16px;
+  overflow: hidden;
+}
+
+.dialog-header {
+  padding: 20px 24px;
+  background: linear-gradient(135deg, rgba(var(--v-theme-primary), 0.05) 0%, rgba(var(--v-theme-primary), 0.02) 100%);
+}
+
+.header-content {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.header-icon {
+  color: rgb(var(--v-theme-primary));
+  font-size: 24px;
+}
+
+.dialog-title {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 600;
+  color: rgb(var(--v-theme-on-surface));
+}
+
+.close-btn {
+  opacity: 0.7;
+  transition: opacity 0.2s ease;
+}
+
+.close-btn:hover {
+  opacity: 1;
+}
+
+.channel-name-section {
+  padding: 24px;
+}
+
+.permissions-section {
+  padding: 24px;
+}
+
+.section-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.section-icon {
+  color: rgb(var(--v-theme-primary));
+  font-size: 20px;
+}
+
+.section-title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: rgb(var(--v-theme-on-surface));
+}
+
+.members-section {
+  background: rgba(var(--v-theme-on-surface), 0.02);
+  border-radius: 12px;
+  padding: 16px;
+}
+
+.members-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.members-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: rgb(var(--v-theme-on-surface));
+  opacity: 0.8;
+}
+
+.permission-legend {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  padding: 4px 8px;
+  border-radius: 4px;
+  background: rgba(var(--v-theme-on-surface), 0.05);
+}
+
+.legend-item.super {
+  color: #f44336; /* 빨간색 */
+}
+
+.legend-item.manager {
+  color: #ffa726; /* 노란색 */
+}
+
+.legend-item.participant {
+  color: #42a5f5; /* 파란색 */
+}
+
+.members-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.member-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  background: rgb(var(--v-theme-surface));
+  border-radius: 8px;
+  border: 1px solid rgba(var(--v-theme-on-surface), 0.12);
+  transition: all 0.2s ease;
+}
+
+.member-item:hover {
+  border-color: rgba(var(--v-theme-primary), 0.3);
+  box-shadow: 0 2px 8px rgba(var(--v-theme-primary), 0.08);
+}
+
+.member-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.member-details {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.member-name {
+  font-size: 14px;
+  font-weight: 500;
+  color: rgb(var(--v-theme-on-surface));
+}
+
+.permission-toggle {
+  display: flex;
+  gap: 8px;
+}
+
+.permission-buttons {
+  background: rgba(var(--v-theme-on-surface), 0.04);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.permission-buttons .v-btn {
+  font-size: 12px;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.super-btn.v-btn--active {
+  background: rgba(244, 67, 54, 0.15) !important; /* 빨간색 */
+  color: #f44336 !important;
+}
+
+.manager-btn.v-btn--active {
+  background: rgba(255, 167, 38, 0.15) !important; /* 노란색 */
+  color: #ffa726 !important;
+}
+
+.participant-btn.v-btn--active {
+  background: rgba(66, 165, 245, 0.15) !important; /* 파란색 */
+  color: #42a5f5 !important;
+}
+
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 48px 24px;
+  color: rgb(var(--v-theme-on-surface));
+  opacity: 0.5;
+}
+
+.empty-state span {
+  font-size: 14px;
+}
+
+.dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  padding: 20px 24px;
+  background: rgba(var(--v-theme-on-surface), 0.02);
+  border-top: 1px solid rgba(var(--v-theme-on-surface), 0.08);
+}
+
+.cancel-btn,
+.save-btn {
+  text-transform: none;
+  font-weight: 500;
+  padding: 8px 24px;
+}
+
+/* 로딩 상태 스타일 */
+.loading-channels {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  color: rgb(var(--v-theme-on-surface));
+  opacity: 0.7;
+}
+
+.loading-text {
+  font-size: 14px;
 }
 </style>

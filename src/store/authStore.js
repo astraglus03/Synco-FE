@@ -16,6 +16,9 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
+  // 사용자 ID (memberSeq)
+  const memberSeq = ref(localStorage.getItem('memberSeq') || null)
+
   // 로그인 여부
   const isAuthenticated = computed(() => !!accessToken.value)
 
@@ -40,23 +43,35 @@ export const useAuthStore = defineStore('auth', () => {
     } else {
       localStorage.removeItem('user')
     }
-    
+  }
+
+  // 사용자 ID 설정
+  const setMemberSeq = (id) => {
+    memberSeq.value = id
+    if (id) {
+      localStorage.setItem('memberSeq', id)
+    } else {
+      localStorage.removeItem('memberSeq')
+    }
   }
 
   // 로그인 (RT는 Cookie로 관리되므로 제외)
-  const login = (tokens, userData) => {
+  const login = (tokens, userData, memberSeqValue) => {
     setAccessToken(tokens.accessToken)
     setUser(userData)
+    setMemberSeq(memberSeqValue)
   }
 
   // 로그아웃
   const logout = () => {
     setAccessToken(null)
     setUser(null)
+    setMemberSeq(null)
     
     // localStorage의 모든 인증 관련 데이터 삭제
     localStorage.removeItem('accessToken')
     localStorage.removeItem('user')
+    localStorage.removeItem('memberSeq')
     
     // RT는 서버에서 Cookie 삭제 처리
   }
@@ -65,7 +80,7 @@ export const useAuthStore = defineStore('auth', () => {
   const initializeAuth = () => {
     const storedAccessToken = localStorage.getItem('accessToken')
     const storedUser = localStorage.getItem('user')
-
+    const storedMemberSeq = localStorage.getItem('memberSeq')
 
     if (storedAccessToken) {
       accessToken.value = storedAccessToken
@@ -77,12 +92,16 @@ export const useAuthStore = defineStore('auth', () => {
         // 파싱 실패 시 무시
       }
     }
+    if (storedMemberSeq) {
+      memberSeq.value = storedMemberSeq
+    }
   }
 
   return {
     // State
     accessToken,
     user,
+    memberSeq,
     
     // Getters
     isAuthenticated,
@@ -90,6 +109,7 @@ export const useAuthStore = defineStore('auth', () => {
     // Actions
     setAccessToken,
     setUser,
+    setMemberSeq,
     login,
     logout,
     initializeAuth

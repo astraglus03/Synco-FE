@@ -1,5 +1,6 @@
 <script setup>
 import { computed, ref, onMounted, onUnmounted } from 'vue'
+import { useUIStore } from '@/store/uiStore'
 import PersonalDashboard from '@/components/workspace/PersonalDashboard.vue'
 import PersonalFriends from '@/components/workspace/PersonalFriends.vue'
 import PersonalDrive from '@/components/workspace/PersonalDrive.vue'
@@ -21,6 +22,14 @@ const props = defineProps({
 })
 
 const emit = defineEmits(['navigate-to-channel'])
+
+// UI Store
+const uiStore = useUIStore()
+
+// 멤버 사이드바 닫기
+const closeMemberSidebar = () => {
+  uiStore.memberSidebarVisible = false
+}
 
 // 선택된 일정 정보
 const selectedSchedule = ref('general-schedule')
@@ -111,6 +120,7 @@ const contentStyle = computed(() => {
     <MemberSidebar 
       v-if="workspaceType === 'project' && memberSidebarVisible"
       :visible="memberSidebarVisible"
+      @close="closeMemberSidebar"
     />
   </div>
 </template>
