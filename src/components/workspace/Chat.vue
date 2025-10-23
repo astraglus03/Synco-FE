@@ -1096,12 +1096,6 @@ onUnmounted(() => {
 
           <!-- 메시지 입력 필드 -->
           <div class="input-field" @click="focusTextarea">
-            <!-- 멘션 하이라이트 오버레이 -->
-            <div
-              v-if="newMessage && newMessage.includes('@')"
-              class="mention-overlay"
-              v-html="highlightedMessage"
-            ></div>
             <v-textarea
               v-model="newMessage"
               @input="handleMessageInput"
