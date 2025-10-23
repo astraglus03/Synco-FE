@@ -1112,6 +1112,8 @@ onUnmounted(() => {
               auto-grow
               hide-details
               class="message-textarea"
+              style="width: 100%;"
+              no-resize
               @keypress="handleKeyPress"
               @focus="handleInputFocus"
               @blur="handleInputBlur"
@@ -2113,4 +2115,50 @@ onUnmounted(() => {
 .message-item:hover {
   background: rgba(var(--v-theme-on-surface), 0.02);
 }
+
+.message-textarea :deep(.v-field) {
+  width: 100% !important;
+  max-width: 100% !important;
+}
+
+.message-textarea :deep(.v-field__input) {
+  width: 100% !important;
+  max-width: 100% !important;
+  display: block !important;
+  white-space: pre-wrap !important;
+  word-break: break-word !important;
+  box-sizing: border-box !important;
+}
+
+.message-textarea :deep(textarea) {
+  width: 100% !important;
+  max-width: 100% !important;
+  resize: none !important;
+  line-height: 1.4 !important;
+  overflow-x: hidden !important;
+  box-sizing: border-box !important;
+}
+
+.input-field {
+  flex: 1 1 auto !important;
+  min-width: 0 !important;
+}
+
+/* 🚨 Vuetify 내부 display 강제 덮어쓰기 */
+.message-textarea :deep(.v-input),
+.message-textarea :deep(.v-input__control),
+.message-textarea :deep(.v-field),
+.message-textarea :deep(.v-field__input),
+.message-textarea :deep(textarea) {
+  width: 100% !important;
+  max-width: 100% !important;
+  min-width: 100% !important;
+  flex: 1 1 auto !important;
+  display: block !important;
+  box-sizing: border-box !important;
+  white-space: pre-wrap !important;
+  word-break: break-word !important;
+  overflow-wrap: break-word !important;
+}
+
 </style>
