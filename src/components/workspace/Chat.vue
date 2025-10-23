@@ -81,6 +81,12 @@ const showMentionDropdown = ref(false);
 const mentionStartIndex = ref(-1);
 const mentionEndIndex = ref(-1);
 const filteredMentions = ref([]);
+const selectedMentionIndex = ref(0); // 키보드 네비게이션용 선택된 인덱스
+
+// 멘션 하이라이트된 메시지 텍스트
+const highlightedMessage = computed(() => {
+  return parseMentions(newMessage.value);
+});
 
 // ✅ WebSocket 연결
 const connectWebsocket = () => {
@@ -164,7 +170,8 @@ const connectWebsocket = () => {
                       .charAt(0),
               // profileImageUrl: parsed.senderProfileImageUrl || null,
               profileImageUrl:
-                parsed.senderProfileImageUrl && parsed.senderProfileImageUrl.trim() !== ""
+                parsed.senderProfileImageUrl &&
+                parsed.senderProfileImageUrl.trim() !== ""
                   ? parsed.senderProfileImageUrl
                   : null,
               senderSeq: parsed.senderSeq,
@@ -272,33 +279,6 @@ const uploadFilesToS3 = async () => {
   }
 };
 
-// // ✅ 파일 업로드 (S3 REST API 호출)
-// const uploadFilesToS3 = async () => {
-//   if (attachedFiles.value.length === 0) return [];
-
-//   const formData = new FormData();
-//   attachedFiles.value.forEach((file) => {
-//     formData.append("files", file);
-//   });
-
-//   const url = `${import.meta.env.VITE_API_URL}/chat-service/chat/files/upload/${channelSeq.value}`;
-
-//   try {
-//     const res = await axios.post(url, formData, {
-//       headers: {
-//         "Content-Type": "multipart/form-data",
-//         Authorization: `Bearer ${token.value}`,
-//       },
-//     });
-//     console.log("✅ 파일 업로드 성공:", res.data);
-//     // 서버가 ["https://s3...","https://s3..."] 형태로 반환함
-//     return res.data;
-//   } catch (err) {
-//     console.error("❌ 파일 업로드 실패:", err.response?.data || err);
-//     return [];
-//   }
-// };
-
 // ✅ 메시지 전송
 const sendMessage = async () => {
   console.log("============= 메시지 전송 ===============", memberSeq.value);
@@ -393,6 +373,27 @@ const sendMessage = async () => {
 
   scrollToBottom();
 };
+
+// ✅ 메시지 삭제 (하드 삭제)
+const deleteMessage = async (message) => {
+  try {
+    const url = `${import.meta.env.VITE_API_URL}/chat-service/chat/messages/${message.id}`;
+    const res = await axios.delete(url, {
+      headers: {
+        "X-Member-Seq": memberSeq.value,
+        Authorization: `Bearer ${token.value}`,
+      },
+    });
+
+    console.log("✅ 메시지 삭제 성공:", res.data);
+
+    // 로컬 메시지 목록에서도 제거
+    messages.value = messages.value.filter((m) => m.id !== message.id);
+    showContextMenu.value = false;
+  } catch (err) {
+    console.error("❌ 메시지 삭제 실패:", err.response?.data || err);
+  }
+}
 
 // 채널 생성
 const createChannel = () => {
@@ -649,6 +650,9 @@ const handleMessageInput = (event) => {
       filteredMentions.value = mentionList.value.filter((member) =>
         member.name.toLowerCase().includes(searchTerm)
       );
+
+      // 선택된 인덱스 초기화
+      selectedMentionIndex.value = 0;
     }
   } else {
     showMentionDropdown.value = false;
@@ -672,10 +676,38 @@ const selectMention = (member) => {
   }, 0);
 };
 
+// 멘션된 텍스트를 파싱하여 하이라이트된 HTML로 변환
+const parseMentions = (text) => {
+  if (!text) return "";
+
+  // @사용자명 패턴을 찾아서 하이라이트 처리 (더 포괄적인 패턴)
+  const mentionRegex = /@([^\s@]+)/g;
+  const result = text.replace(
+    mentionRegex,
+    '<span class="mention-highlight">@$1</span>'
+  );
+
+  return result;
+};
+
 const handleMentionKeydown = (event) => {
   if (showMentionDropdown.value) {
     if (event.key === "Escape") {
       showMentionDropdown.value = false;
+    } else if (event.key === "ArrowDown") {
+      event.preventDefault();
+      selectedMentionIndex.value = Math.min(
+        selectedMentionIndex.value + 1,
+        filteredMentions.value.length - 1
+      );
+    } else if (event.key === "ArrowUp") {
+      event.preventDefault();
+      selectedMentionIndex.value = Math.max(selectedMentionIndex.value - 1, 0);
+    } else if (event.key === "Enter") {
+      event.preventDefault();
+      if (filteredMentions.value.length > 0) {
+        selectMention(filteredMentions.value[selectedMentionIndex.value]);
+      }
     }
   }
 };
@@ -882,18 +914,23 @@ onUnmounted(() => {
                       }}
                     </span>
                   </div>
-                  <div class="reply-preview-text">
-                    {{
-                      getReplyToMessage(message.replyToSeq)?.content ||
-                      "삭제된 메시지입니다."
-                    }}
-                  </div>
+                  <div
+                    class="reply-preview-text"
+                    v-html="
+                      parseMentions(
+                        getReplyToMessage(message.replyToSeq)?.content ||
+                          '삭제된 메시지입니다.'
+                      )
+                    "
+                  ></div>
                 </div>
 
                 <div class="message-bubble">
-                  <div v-if="message.content" class="message-text">
-                    {{ message.content }}
-                  </div>
+                  <div
+                    v-if="message.content"
+                    class="message-text"
+                    v-html="parseMentions(message.content)"
+                  ></div>
 
                   <!-- 첨부된 파일들 표시 -->
                   <div
@@ -1000,17 +1037,21 @@ onUnmounted(() => {
           </div>
           <div class="reply-message">
             <span class="reply-user">{{ replyToMessage.user }}</span>
-            <span class="reply-text">{{ replyToMessage.content }}</span>
+            <span
+              class="reply-text"
+              v-html="parseMentions(replyToMessage.content)"
+            ></span>
           </div>
         </div>
 
         <!-- @ 언급 드롭다운 -->
         <div v-if="showMentionDropdown" class="mention-dropdown">
           <div
-            v-for="member in filteredMentions"
+            v-for="(member, index) in filteredMentions"
             :key="member.id"
             @click="selectMention(member)"
             class="mention-item"
+            :class="{ 'mention-item-selected': index === selectedMentionIndex }"
           >
             <v-avatar size="24">
               <v-img
@@ -1047,6 +1088,12 @@ onUnmounted(() => {
 
           <!-- 메시지 입력 필드 -->
           <div class="input-field">
+            <!-- 멘션 하이라이트 오버레이 -->
+            <div
+              v-if="newMessage && newMessage.includes('@')"
+              class="mention-overlay"
+              v-html="highlightedMessage"
+            ></div>
             <v-textarea
               v-model="newMessage"
               @input="handleMessageInput"
@@ -1106,6 +1153,10 @@ onUnmounted(() => {
       <div class="context-item" @click="copyMessage(selectedMessage)">
         <v-icon size="18">mdi-content-copy</v-icon>
         <span>복사</span>
+      </div>
+      <div class="context-item" @click="deleteMessage(selectedMessage)">
+        <v-icon size="18" color="error">mdi-delete</v-icon>
+        <span>삭제</span>
       </div>
     </div>
   </div>
@@ -1433,6 +1484,131 @@ onUnmounted(() => {
   position: relative;
 }
 
+/* 멘션 하이라이트 오버레이 */
+.mention-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  pointer-events: none;
+  z-index: 2;
+  padding: 16px;
+  font-size: 14px;
+  line-height: 1.2;
+  color: transparent;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  overflow: hidden;
+  box-sizing: border-box;
+}
+
+:deep(.mention-overlay .mention-highlight) {
+  color: #6366f1 !important;
+  background: rgba(99, 102, 241, 0.1) !important;
+  padding: 1px 4px !important;
+  border-radius: 6px !important;
+  font-weight: 500 !important;
+  display: inline !important;
+  border: none !important;
+  font-size: 0.95em !important;
+}
+
+/* 오버레이에서 멘션이 아닌 텍스트는 완전히 투명하게 */
+.mention-overlay {
+  color: transparent !important;
+}
+
+.mention-overlay * {
+  color: transparent !important;
+}
+
+.mention-overlay .mention-highlight {
+  color: #6366f1 !important;
+}
+
+:deep(.mention-highlight) {
+  background: rgba(99, 102, 241, 0.1) !important;
+  color: #6366f1 !important;
+  padding: 1px 4px !important;
+  border-radius: 6px !important;
+  font-weight: 500 !important;
+  display: inline !important;
+  border: none !important;
+  font-size: 0.95em !important;
+}
+
+/* 전역 멘션 하이라이트 스타일 */
+.mention-highlight {
+  background: rgba(99, 102, 241, 0.1) !important;
+  color: #6366f1 !important;
+  padding: 1px 4px !important;
+  border-radius: 6px !important;
+  font-weight: 500 !important;
+  display: inline !important;
+  border: none !important;
+  font-size: 0.95em !important;
+}
+
+/* 메시지 내 멘션 하이라이트 */
+:deep(.message-text .mention-highlight) {
+  background: #e0e7ff !important;
+  color: #4f46e5 !important;
+  padding: 1px 4px !important;
+  border-radius: 6px !important;
+  font-weight: 500 !important;
+  font-size: inherit !important;
+  display: inline !important;
+  border: none !important;
+}
+
+/* 더 강력한 선택자 */
+.team-chat .mention-highlight {
+  background: rgba(99, 102, 241, 0.1) !important;
+  color: #6366f1 !important;
+  padding: 1px 4px !important;
+  border-radius: 6px !important;
+  font-weight: 500 !important;
+  display: inline !important;
+  border: none !important;
+  font-size: 0.95em !important;
+}
+
+.team-chat .message-text .mention-highlight {
+  background: #e0e7ff !important;
+  color: #4f46e5 !important;
+  padding: 1px 4px !important;
+  border-radius: 6px !important;
+  font-weight: 500 !important;
+  display: inline !important;
+  border: none !important;
+  font-size: inherit !important;
+}
+
+.team-chat .mention-overlay .mention-highlight {
+  background: rgba(99, 102, 241, 0.1) !important;
+  color: #6366f1 !important;
+  padding: 1px 4px !important;
+  border-radius: 6px !important;
+  font-weight: 500 !important;
+  display: inline !important;
+  border: none !important;
+  font-size: 0.95em !important;
+}
+
+/* 답장 미리보기 내 멘션 하이라이트 */
+:deep(.reply-text .mention-highlight),
+:deep(.reply-preview-text .mention-highlight) {
+  background: rgba(99, 102, 241, 0.08) !important;
+  color: #6366f1 !important;
+  padding: 1px 3px !important;
+  border-radius: 4px !important;
+  font-weight: 500 !important;
+  font-size: inherit !important;
+  display: inline !important;
+  border: none !important;
+}
+
 .message-textarea {
   background: rgba(var(--v-theme-on-surface), 0.05);
   border: 1px solid rgba(var(--v-theme-on-surface), 0.1);
@@ -1449,6 +1625,27 @@ onUnmounted(() => {
   align-items: center;
   overflow: hidden;
 }
+
+/* Vuetify textarea의 기본 하이라이트 비활성화 */
+.message-textarea :deep(.v-field__input) {
+  background: transparent !important;
+  color: rgb(var(--v-theme-on-surface)) !important;
+  caret-color: rgb(var(--v-theme-on-surface)) !important;
+  position: relative;
+  z-index: 1;
+}
+
+.message-textarea :deep(.v-field__input::selection) {
+  background: rgba(var(--v-theme-primary), 0.2) !important;
+  color: rgb(var(--v-theme-on-surface)) !important;
+}
+
+.message-textarea :deep(.v-field__input::-moz-selection) {
+  background: rgba(var(--v-theme-primary), 0.2) !important;
+  color: rgb(var(--v-theme-on-surface)) !important;
+}
+
+/* 멘션 부분만 textarea에서 숨기기 - 정규식으로 멘션 부분을 공백으로 대체 */
 
 .message-textarea:focus {
   background: white;
@@ -1874,6 +2071,10 @@ onUnmounted(() => {
 
 .mention-item:hover {
   background: rgba(var(--v-theme-primary), 0.1);
+}
+
+.mention-item-selected {
+  background: rgba(var(--v-theme-primary), 0.15) !important;
 }
 
 .mention-info {
