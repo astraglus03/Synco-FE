@@ -74,13 +74,18 @@ const memberSeq = ref(0);
 
 // 채널 목록 (Store에서 가져오기)
 const channels = computed(() => {
-  return workspaceMemberStore.chatChannels?.map(channel => ({
+  const channelList = workspaceMemberStore.chatChannels?.map(channel => ({
     id: channel.channelSeq.toString(),
     name: channel.channelName,
     type: "text",
     unread: 0,
     channelData: channel
-  })) || []
+  })) || [];
+  
+  console.log("📋 Store에서 가져온 채널 데이터:", workspaceMemberStore.chatChannels);
+  console.log("📋 변환된 채널 목록:", channelList);
+  
+  return channelList;
 });
 
 // 현재 채널
@@ -99,11 +104,19 @@ const messageInputFocused = ref(false);
 const otherTyping = ref(false);
 
 // 모달 관련
-const showPollModal = ref(false);
-const showFileModal = ref(false);
-
-// 첨부된 파일들
-const attachedFiles = ref([]);
+  const showPollModal = ref(false);
+  const showFileModal = ref(false);
+  const showFileLimitModal = ref(false);
+  const fileLimitMessage = ref("");
+  
+  // 첨부된 파일들
+  const attachedFiles = ref([]);
+  
+  // 파일 첨부 제한 설정
+  const MAX_FILES = 20;
+  const attachedFilesCount = computed(() => attachedFiles.value.length);
+  const canAttachMore = computed(() => attachedFilesCount.value < MAX_FILES);
+  const remainingSlots = computed(() => MAX_FILES - attachedFilesCount.value);
 
 // 답장 관련 상태
 const replyToMessage = ref(null);
@@ -142,6 +155,8 @@ const connectWebsocket = () => {
     { Authorization: `Bearer ${token.value}` },
     () => {
       console.log("✅ WebSocket 연결 성공!");
+      console.log("🔍 구독할 채널 Seq:", channelSeq.value);
+      console.log("🔍 구독 경로:", `/topic/${channelSeq.value}`);
 
       subscription.value = stompClient.value.subscribe(
         `/topic/${channelSeq.value}`,
@@ -394,6 +409,11 @@ const sendMessage = async () => {
   console.log("📤 보내는 메시지:", message);
 
   // 3️⃣ WebSocket 전송
+  console.log("📤 메시지 전송 시도...");
+  console.log("🔍 전송할 채널 Seq:", channelSeq.value);
+  console.log("🔍 전송 경로:", `/publish/${channelSeq.value}`);
+  console.log("🔍 메시지 내용:", message);
+  
   stompClient.value.send(
     `/publish/${channelSeq.value}`,
     JSON.stringify(message),
@@ -458,13 +478,19 @@ const createChannel = () => {
 const changeChannel = (channelId) => {
   if (currentChannel.value === channelId) return;
 
+  console.log("🔄 채널 변경:", currentChannel.value, "→", channelId);
+  console.log("🔍 새로운 채널 Seq:", channelId);
+
   // 기존 연결 해제
   disconnectWebsocket();
 
   // 새 채널로 변경
   currentChannel.value = channelId;
-  channelSeq.value = channelId;
+  channelSeq.value = parseInt(channelId); // 문자열을 숫자로 변환
   messages.value = [];
+
+  console.log("✅ 채널 변경 완료 - 현재 채널 Seq:", channelSeq.value);
+  console.log("🔍 channelSeq 타입:", typeof channelSeq.value);
 
   // 새 채널로 연결
   connectWebsocket();
@@ -556,8 +582,28 @@ const handleCreatePoll = (pollData) => {
 };
 
 const handleAttachFiles = (files) => {
-  // 첨부된 파일들을 attachedFiles에 추가
-  attachedFiles.value.push(...files);
+  const currentCount = attachedFiles.value.length;
+  const newFilesCount = files.length;
+  
+  // 20개 제한 체크
+  if (currentCount + newFilesCount > MAX_FILES) {
+    const availableSlots = MAX_FILES - currentCount;
+    if (availableSlots <= 0) {
+      showFileLimitAlert();
+      return;
+    } else {
+      const message = `최대 ${MAX_FILES}개까지만 첨부할 수 있습니다.\n\n선택한 파일 중 ${availableSlots}개만 첨부됩니다.`;
+      showFileLimitAlert(message);
+      // 가능한 만큼만 추가
+      const limitedFiles = files.slice(0, availableSlots);
+      attachedFiles.value.push(...limitedFiles);
+    }
+  } else {
+    // 제한 내에서 추가
+    attachedFiles.value.push(...files);
+    showToastNotification(`${files.length}개 파일이 첨부되었습니다.`);
+  }
+  
   showAttachmentMenu.value = false;
 };
 
@@ -784,6 +830,38 @@ const removeAttachedFile = (index) => {
   attachedFiles.value.splice(index, 1);
 };
 
+// 파일 제한 알림 함수 (세련된 모달)
+const showFileLimitAlert = (message = null) => {
+  if (message) {
+    fileLimitMessage.value = message;
+  } else {
+    fileLimitMessage.value = `파일 첨부 한도를 초과했습니다.\n\n최대 ${MAX_FILES}개까지만 첨부할 수 있습니다.`;
+  }
+  showFileLimitModal.value = true;
+};
+
+// 토스트 알림 관련
+const showToast = ref(false);
+const toastMessage = ref("");
+const toastType = ref("success");
+
+// 토스트 알림 함수
+const showToastNotification = (message, type = "success") => {
+  toastMessage.value = message;
+  toastType.value = type;
+  showToast.value = true;
+  
+  // 3초 후 자동으로 사라짐
+  setTimeout(() => {
+    showToast.value = false;
+  }, 3000);
+};
+
+// 파일 제한 모달 닫기
+const closeFileLimitModal = () => {
+  showFileLimitModal.value = false;
+};
+
 // 메시지 입력 포커스 처리
 const handleInputFocus = () => {
   messageInputFocused.value = true;
@@ -830,7 +908,11 @@ onMounted(async () => {
   // ✅ 첫 번째 채널을 기본으로 선택
   if (channels.value.length > 0) {
     currentChannel.value = channels.value[0].id;
-    channelSeq.value = channels.value[0].id;
+    channelSeq.value = parseInt(channels.value[0].id); // 문자열을 숫자로 변환
+    console.log("🔍 현재 채널 Seq:", channelSeq.value);
+    console.log("🔍 현재 채널 ID:", currentChannel.value);
+    console.log("🔍 채널 목록:", channels.value);
+    console.log("🔍 첫 번째 채널 데이터:", channels.value[0]);
   } else {
     console.warn("⚠️ 채널 목록이 비어있습니다.");
     return;
@@ -1053,21 +1135,35 @@ onUnmounted(() => {
               <div class="attachment-desc">팀원들의 의견을 수집해보세요</div>
             </div>
           </div>
-          <div class="attachment-item" @click="openFileModal">
+           <div 
+             class="attachment-item" 
+             :class="{ disabled: !canAttachMore }"
+             @click="canAttachMore ? openFileModal() : showFileLimitAlert()"
+           >
             <div class="attachment-icon file-icon">
               <v-icon>mdi-attachment</v-icon>
             </div>
             <div class="attachment-text">
               <div class="attachment-title">파일 첨부</div>
               <div class="attachment-desc">
-                문서, 이미지, 동영상을 공유하세요
+                문서, 이미지, 동영상을 공유하세요 ({{ attachedFilesCount }}/{{ MAX_FILES }})
               </div>
             </div>
           </div>
         </div>
 
-        <!-- 첨부된 파일들 표시 -->
-        <div v-if="attachedFiles.length > 0" class="attached-files">
+          <!-- 첨부된 파일들 표시 -->
+          <div v-if="attachedFiles.length > 0" class="attached-files">
+            <div class="attached-files-header">
+              <span class="files-count">첨부된 파일 ({{ attachedFilesCount }}/{{ MAX_FILES }})</span>
+              <v-chip 
+                v-if="attachedFilesCount >= MAX_FILES * 0.8" 
+                color="warning" 
+                size="small"
+              >
+                거의 가득참
+              </v-chip>
+            </div>
           <div
             v-for="(file, index) in attachedFiles"
             :key="index"
@@ -1190,6 +1286,65 @@ onUnmounted(() => {
       v-model="showFileModal"
       @attach-files="handleAttachFiles"
     />
+
+    <!-- 파일 제한 알림 모달 -->
+    <v-dialog v-model="showFileLimitModal" max-width="340px" persistent>
+      <v-card class="elegant-modal">
+        <div class="modal-content">
+          <div class="icon-wrapper">
+            <div class="icon-circle">
+              <div class="icon-glow"></div>
+              <v-icon color="white" size="26">mdi-file-multiple</v-icon>
+            </div>
+          </div>
+          
+          <div class="content-section">
+            <h2 class="title">파일 첨부 제한</h2>
+            <p class="description">{{ fileLimitMessage }}</p>
+            
+            <div class="file-indicator">
+              <div class="indicator-wrapper">
+                <span class="current">{{ attachedFilesCount }}</span>
+                <span class="separator">of</span>
+                <span class="total">{{ MAX_FILES }}</span>
+              </div>
+            </div>
+          </div>
+          
+          <div class="action-section">
+            <v-btn 
+              color="primary" 
+              variant="flat"
+              block
+              @click="closeFileLimitModal"
+              class="elegant-button"
+            >
+              <span class="button-text">확인</span>
+              <div class="button-shine"></div>
+            </v-btn>
+          </div>
+        </div>
+      </v-card>
+    </v-dialog>
+
+    <!-- 토스트 알림 -->
+    <v-snackbar
+      v-model="showToast"
+      :color="toastType === 'success' ? 'success' : 'warning'"
+      timeout="3000"
+      location="top right"
+      class="toast-notification"
+    >
+      <div class="toast-content">
+        <v-icon 
+          :color="toastType === 'success' ? 'white' : 'white'" 
+          class="mr-2"
+        >
+          {{ toastType === 'success' ? 'mdi-check-circle' : 'mdi-alert-circle' }}
+        </v-icon>
+        <span>{{ toastMessage }}</span>
+      </div>
+    </v-snackbar>
 
     <!-- 컨텍스트 메뉴 -->
     <div
@@ -1817,6 +1972,309 @@ onUnmounted(() => {
 
 .attached-file-item:last-child {
   margin-bottom: 0;
+}
+
+.file-name {
+  flex: 1;
+  margin-right: 8px;
+  font-size: 14px;
+  color: rgba(var(--v-theme-on-surface), 0.9);
+}
+
+.file-size {
+  font-size: 12px;
+  color: rgba(var(--v-theme-on-surface), 0.6);
+  margin-right: 8px;
+}
+
+.remove-file-btn {
+  opacity: 0.7;
+  transition: opacity 0.2s;
+}
+
+.remove-file-btn:hover {
+  opacity: 1;
+}
+
+.attached-files-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid rgba(var(--v-theme-primary), 0.1);
+}
+
+.files-count {
+  font-size: 12px;
+  font-weight: 500;
+  color: rgba(var(--v-theme-on-surface), 0.7);
+}
+
+/* 파일 첨부 버튼 비활성화 */
+.attachment-item.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.attachment-item.disabled:hover {
+  background: rgba(var(--v-theme-primary), 0.05);
+}
+
+/* 아름다운 파일 제한 모달 */
+.elegant-modal {
+  border-radius: 20px;
+  overflow: hidden;
+  box-shadow: 0 12px 48px rgba(0, 0, 0, 0.15);
+  background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
+  backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+.modal-content {
+  padding: 32px 28px 28px;
+  text-align: center;
+  position: relative;
+}
+
+.icon-wrapper {
+  margin-bottom: 28px;
+  position: relative;
+}
+
+.icon-circle {
+  width: 72px;
+  height: 72px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto;
+  position: relative;
+  box-shadow: 0 8px 24px rgba(102, 126, 234, 0.4);
+  animation: iconFloat 3s ease-in-out infinite;
+}
+
+.icon-glow {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  opacity: 0.3;
+  animation: iconPulse 2s ease-in-out infinite;
+}
+
+.icon-circle .v-icon {
+  color: white !important;
+  z-index: 1;
+}
+
+.content-section {
+  margin-bottom: 32px;
+}
+
+.title {
+  font-size: 24px;
+  font-weight: 700;
+  color: #1a202c;
+  margin: 0 0 12px 0;
+  letter-spacing: -0.5px;
+  line-height: 1.2;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.description {
+  font-size: 16px;
+  color: #4a5568;
+  line-height: 1.5;
+  margin: 0 0 24px 0;
+  white-space: pre-line;
+  font-weight: 400;
+}
+
+.file-indicator {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+}
+
+.indicator-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.current {
+  color: #667eea;
+  font-weight: 700;
+  font-size: 20px;
+}
+
+.separator {
+  color: #a0aec0;
+  font-weight: 400;
+}
+
+.total {
+  color: #2d3748;
+  font-weight: 600;
+}
+
+.progress-ring {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  background: conic-gradient(#667eea 0deg, #667eea var(--progress, 0deg), #e2e8f0 var(--progress, 0deg), #e2e8f0 360deg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  animation: progressRotate 2s ease-in-out infinite;
+}
+
+.progress-ring::before {
+  content: '';
+  position: absolute;
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  background: white;
+  box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.action-section {
+  padding-top: 8px;
+}
+
+.elegant-button {
+  border-radius: 14px;
+  font-weight: 600;
+  text-transform: none;
+  height: 52px;
+  font-size: 16px;
+  letter-spacing: -0.2px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
+  color: white !important;
+  box-shadow: 0 4px 16px rgba(102, 126, 234, 0.3);
+  transition: all 0.3s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.button-text {
+  position: relative;
+  z-index: 2;
+}
+
+.button-shine {
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent);
+  transition: left 0.6s ease;
+}
+
+.elegant-button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(102, 126, 234, 0.4);
+}
+
+.elegant-button:hover .button-shine {
+  left: 100%;
+}
+
+.elegant-button:active {
+  transform: translateY(0);
+  box-shadow: 0 4px 16px rgba(102, 126, 234, 0.3);
+}
+
+/* 아름다운 애니메이션 */
+@keyframes iconFloat {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-8px);
+  }
+}
+
+@keyframes iconPulse {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 0.3;
+  }
+  50% {
+    transform: scale(1.1);
+    opacity: 0.1;
+  }
+}
+
+@keyframes progressRotate {
+  0%, 100% {
+    transform: rotate(0deg);
+  }
+  50% {
+    transform: rotate(5deg);
+  }
+}
+
+.elegant-modal .v-card {
+  animation: modalElegantAppear 0.5s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+}
+
+@keyframes modalElegantAppear {
+  from {
+    transform: scale(0.9) translateY(30px);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1) translateY(0);
+    opacity: 1;
+  }
+}
+
+/* 아름다운 토스트 알림 */
+.toast-notification {
+  border-radius: 16px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
+  backdrop-filter: blur(20px);
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.95) 0%, rgba(248, 250, 252, 0.95) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+.toast-content {
+  display: flex;
+  align-items: center;
+  font-weight: 600;
+  font-size: 15px;
+  letter-spacing: -0.2px;
+  color: #2d3748;
+}
+
+/* 토스트 애니메이션 */
+.toast-notification .v-snackbar__wrapper {
+  animation: elegantToastSlide 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+}
+
+@keyframes elegantToastSlide {
+  from {
+    transform: translateX(100%) scale(0.9);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0) scale(1);
+    opacity: 1;
+  }
 }
 
 .file-name {
