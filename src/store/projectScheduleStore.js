@@ -1,10 +1,13 @@
 import { defineStore } from 'pinia'
+import { getProjectTasks, updateTaskStatus, createTask, updateTask, deleteTask } from '../api/schedule/scheduleApi.js'
+import { useWorkspaceStore } from './workspaceStore.js'
+import { useWorkspaceMemberStore } from './workspaceMemberStore.js'
 
 export const useProjectScheduleStore = defineStore('projectSchedule', {
   state: () => ({
     // 1. 프로젝트 기본 정보
     currentProject: {
-      id: 'startup-platform-dev',
+      id: null, // 동적으로 설정됨 (현재 워크스페이스의 workSpaceSeq)
       name: '스타트업 플랫폼 개발',
       description: '신입 팀원을 위한 프로젝트 개요',
       startDate: '2025-09-01',
@@ -13,12 +16,19 @@ export const useProjectScheduleStore = defineStore('projectSchedule', {
       progress: 65
     },
 
-    // 2. 보드 정보 (칸반 스타일)
+    // API 응답 데이터
+    taskData: [],
+    isLoading: false,
+    error: null,
+    
+    // 필터링 관련 상태
+    selectedFilterMember: null, // 선택된 멤버 필터
+
+    // 2. 보드 정보 (칸반 스타일) - API 응답에 맞게 수정
     boards: [
-      { id: 1, name: '할 일', color: '#6366f1' },
-      { id: 2, name: '진행중', color: '#f59e0b' },
-      { id: 3, name: '완료', color: '#22c55e' },
-      { id: 4, name: '검토', color: '#3b82f6' }
+      { id: 1, name: '할 일', color: '#e3f2fd', status: 'TODO' },
+      { id: 2, name: '진행중', color: '#fff3e0', status: 'IN_PROGRESS' },
+      { id: 3, name: '완료', color: '#e8f5e8', status: 'COMPLETED' }
     ],
 
     // 3. 팀 멤버 정보
@@ -358,6 +368,164 @@ export const useProjectScheduleStore = defineStore('projectSchedule', {
         }
       ]
       this.recentActivities.push(...moreActivities)
+    },
+
+    // API 연동 Actions
+    async loadProjectTasks(assigneeMemberSeq = null) {
+      this.isLoading = true
+      this.error = null
+      try {
+        // workspaceStore에서 현재 워크스페이스 정보 가져오기
+        const workspaceStore = useWorkspaceStore()
+        const currentWorkspace = workspaceStore.currentWorkspaceInfo
+        
+        if (!currentWorkspace || !currentWorkspace.workSpaceSeq) {
+          throw new Error('현재 워크스페이스 정보를 찾을 수 없습니다.')
+        }
+        
+        // 현재 워크스페이스의 workSpaceSeq를 projectId로 사용
+        const projectId = currentWorkspace.workSpaceSeq
+        this.currentProject.id = projectId
+        
+        const response = await getProjectTasks(projectId, assigneeMemberSeq)
+        this.taskData = response.data
+        this.isLoading = false
+        return response
+      } catch (error) {
+        this.error = error.message
+        this.isLoading = false
+        throw error
+      }
+    },
+
+    // API 데이터를 칸반보드 형태로 변환하는 getter
+    getKanbanTasks() {
+      if (!this.taskData || this.taskData.length === 0) {
+        return {
+          'TODO': [],
+          'IN_PROGRESS': [],
+          'COMPLETED': []
+        }
+      }
+
+      const kanbanTasks = {
+        'TODO': [],
+        'IN_PROGRESS': [],
+        'COMPLETED': []
+      }
+
+      this.taskData.forEach(statusGroup => {
+        const status = statusGroup.taskStatusDescription
+        const tasks = statusGroup.taskResDtoList || []
+        
+        tasks.forEach(task => {
+          // picMemberSeq로 멤버 정보 조회
+          const memberInfo = this.getMemberInfo(task.picMemberSeq)
+          
+          const kanbanTask = {
+            id: task.taskSeq,
+            title: task.taskTitle,
+            description: task.taskContent,
+            assignee: memberInfo.name || '미지정',
+            startDate: task.startDate,
+            endDate: task.endDate,
+            status: task.taskStatus,
+            picMemberSeq: task.picMemberSeq,
+            picMemberProfileImageUrl: memberInfo.profileImageUrl || ''
+          }
+
+          // 상태에 따라 분류
+          if (task.taskStatus === 'TODO') {
+            kanbanTasks.TODO.push(kanbanTask)
+          } else if (task.taskStatus === 'IN_PROGRESS') {
+            kanbanTasks.IN_PROGRESS.push(kanbanTask)
+          } else if (task.taskStatus === 'COMPLETED') {
+            kanbanTasks.COMPLETED.push(kanbanTask)
+          }
+        })
+      })
+
+        return kanbanTasks
+      },
+
+      // 멤버 정보 조회 함수
+      getMemberInfo(memberSeq) {
+        if (!memberSeq) return { name: '미지정', profileImageUrl: '' }
+        
+        const workspaceMemberStore = useWorkspaceMemberStore()
+        const member = workspaceMemberStore.members?.find(m => m.memberSeq === memberSeq)
+        
+        if (member) {
+          return {
+            name: member.name,
+            profileImageUrl: member.profileImageUrl || ''
+          }
+        }
+        
+        return { name: '미지정', profileImageUrl: '' }
+      },
+
+      async updateTaskStatus(taskSeq, newStatus) {
+      try {
+        await updateTaskStatus(taskSeq, newStatus)
+        // 로컬 상태 업데이트
+        await this.loadProjectTasks()
+      } catch (error) {
+        this.error = error.message
+        throw error
+      }
+    },
+
+    async createNewTask(taskData) {
+      try {
+        await createTask(taskData)
+        await this.loadProjectTasks()
+      } catch (error) {
+        this.error = error.message
+        throw error
+      }
+    },
+
+    async updateExistingTask(taskSeq, taskData) {
+      try {
+        await updateTask(taskSeq, taskData)
+        await this.loadProjectTasks()
+      } catch (error) {
+        this.error = error.message
+        throw error
+      }
+    },
+
+    async removeTask(taskSeq) {
+      try {
+        await deleteTask(taskSeq)
+        await this.loadProjectTasks()
+      } catch (error) {
+        this.error = error.message
+        throw error
+      }
+    },
+
+    // 멤버별 필터링
+    async filterTasksByMember(memberSeq) {
+      try {
+        this.selectedFilterMember = memberSeq
+        await this.loadProjectTasks(memberSeq)
+      } catch (error) {
+        this.error = error.message
+        throw error
+      }
+    },
+
+    // 필터 초기화 (전체 태스크 보기)
+    async clearFilter() {
+      try {
+        this.selectedFilterMember = null
+        await this.loadProjectTasks()
+      } catch (error) {
+        this.error = error.message
+        throw error
+      }
     }
   }
 })

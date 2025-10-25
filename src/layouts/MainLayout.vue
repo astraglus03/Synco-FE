@@ -103,6 +103,13 @@ const selectSubChannel = (parentId, subChannelId) => {
   if (currentWorkspace) {
     // 하위 채널의 경우 URL에 subChannel 정보 포함
     router.push(`/workspace/${currentWorkspace.id}/${parentId}/${subChannelId}`)
+    
+    // MainContent에 하위 채널 선택 이벤트 전달
+    if (parentId === 'schedule') {
+      window.dispatchEvent(new CustomEvent('select-schedule-channel', { 
+        detail: { subChannelId } 
+      }))
+    }
   }
 }
 
