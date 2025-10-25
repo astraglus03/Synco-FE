@@ -11,7 +11,7 @@ import Dashboard from '@/components/workspace/Dashboard.vue'
 import Chat from '@/components/workspace/Chat.vue'
 import Schedule from '@/components/workspace/Schedule.vue'
 import ProjectDrive from '@/components/workspace/ProjectDrive.vue'
-import Meeting from '@/components/workspace/Meeting.vue'
+import TeamMeeting from '@/components/workspace/TeamMeeting.vue'
 import MemberSidebar from './MemberSidebar.vue'
 
 const props = defineProps({
@@ -82,7 +82,7 @@ const currentComponent = computed(() => {
       case 'chat': return Chat
       case 'schedule': return Schedule
       case 'drive': return ProjectDrive
-      case 'meeting': return Meeting
+      case 'meeting': return TeamMeeting
       default: return Dashboard
     }
   }
