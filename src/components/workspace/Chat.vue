@@ -1,6 +1,8 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from "vue";
 import { usePermissions, PERMISSIONS } from "@/composables/usePermissions";
+import { useWorkspaceStore } from "@/store/workspaceStore";
+import { useWorkspaceMemberStore } from "@/store/workspaceMemberStore";
 import PollModal from "./PollModal.vue";
 import FileAttachmentModal from "./FileAttachmentModal.vue";
 import SockJS from "sockjs-client";
@@ -45,6 +47,24 @@ const props = defineProps({
 
 const { hasPermission, isManager, isSuper } = usePermissions();
 
+// Store 사용
+const workspaceStore = useWorkspaceStore();
+const workspaceMemberStore = useWorkspaceMemberStore();
+
+// Store 초기화 대기 함수
+const waitForStore = () => {
+  return new Promise((resolve) => {
+    const checkStore = () => {
+      if (workspaceStore.currentWorkspaceInfo && workspaceMemberStore.chatChannels?.length > 0) {
+        resolve();
+      } else {
+        setTimeout(checkStore, 100);
+      }
+    };
+    checkStore();
+  });
+};
+
 // WebSocket 관련 상태
 const stompClient = ref(null);
 const subscription = ref(null);
@@ -52,12 +72,16 @@ const token = ref("");
 const channelSeq = ref(null);
 const memberSeq = ref(0);
 
-// 채널 목록
-const channels = ref([
-  { id: "general", name: "일반", type: "text", unread: 3 },
-  { id: "marketing", name: "마케팅", type: "text", unread: 0 },
-  { id: "development", name: "개발", type: "text", unread: 1 },
-]);
+// 채널 목록 (Store에서 가져오기)
+const channels = computed(() => {
+  return workspaceMemberStore.chatChannels?.map(channel => ({
+    id: channel.channelSeq.toString(),
+    name: channel.channelName,
+    type: "text",
+    unread: 0,
+    channelData: channel
+  })) || []
+});
 
 // 현재 채널
 const currentChannel = ref("general");
@@ -776,12 +800,9 @@ const handleInputChange = () => {
 };
 
 // 이벤트 리스너 등록/해제
-onMounted(() => {
+onMounted(async () => {
   window.addEventListener("select-chat-channel", handleSubChannelSelect);
   window.addEventListener("click", closeContextMenu);
-
-  const workspaceSeq = 4;
-  channelSeq.value = 1;
 
   const accessToken = localStorage.getItem("accessToken");
   if (!accessToken) {
@@ -800,17 +821,28 @@ onMounted(() => {
   }
 
   console.log("🟢 Chat 시작");
-  console.log("- channelSeq:", channelSeq.value);
   console.log("- memberSeq:", memberSeq.value);
   console.log("- JWT payload:", payload);
+
+  // ✅ Store 초기화 대기
+  await waitForStore();
+
+  // ✅ 첫 번째 채널을 기본으로 선택
+  if (channels.value.length > 0) {
+    currentChannel.value = channels.value[0].id;
+    channelSeq.value = channels.value[0].id;
+  } else {
+    console.warn("⚠️ 채널 목록이 비어있습니다.");
+    return;
+  }
 
   // ✅ 채널 참여 멤버 목록 초기화
   getChannelMembers().then(() => {
     // ✅ memberSeq가 유효할 때만 WebSocket 연결
-    if (memberSeq.value > 0) {
+    if (memberSeq.value > 0 && currentChannel.value) {
       connectWebsocket();
     } else {
-      console.error("❌ memberSeq가 유효하지 않습니다.");
+      console.error("❌ memberSeq 또는 채널이 유효하지 않습니다.");
     }
   });
 });
