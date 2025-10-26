@@ -1,7 +1,7 @@
 <script setup>
 import { ref, computed, watch, onMounted } from 'vue'
 import { useWorkspaceStore } from '@/store/workspaceStore'
-import { getWorkspaceMembers } from '@/services/WorkspaceService'
+import { getWorkspaceMembers } from '@/api/workspace/workSpaceApi'
 
 const props = defineProps({
   visible: Boolean

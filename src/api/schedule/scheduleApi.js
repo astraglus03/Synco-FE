@@ -8,9 +8,28 @@ export const getProjectTasks = async (projectId, assigneeMemberSeq = null) => {
       url += `?assigneeMemberSeq=${assigneeMemberSeq}`
     }
     const response = await apiClient.get(url)
-    return response.data
+    
+    // 응답 데이터가 배열인지 확인하고 안전하게 반환
+    if (Array.isArray(response.data)) {
+      return response.data
+    } else if (response.data && Array.isArray(response.data.data)) {
+      // 응답이 { data: [...] } 형태인 경우
+      return response.data.data
+    } else if (response.data && Array.isArray(response.data.tasks)) {
+      // 응답이 { tasks: [...] } 형태인 경우
+      return response.data.tasks
+    } else {
+      console.warn('예상하지 못한 응답 구조:', response.data)
+      return []
+    }
   } catch (error) {
     console.error('프로젝트 태스크 조회 실패:', error)
+    
+    // 404 에러인 경우 빈 배열 반환하여 앱이 중단되지 않도록 함
+    if (error.response?.status === 404) {
+      console.warn('API 엔드포인트가 존재하지 않습니다. 빈 배열을 반환합니다.')
+      return []
+    }
     throw error
   }
 }

@@ -4,7 +4,7 @@ import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/store/authStore'
 import { useWorkspaceStore } from '@/store/workspaceStore'
 import { Authority } from '@/models/workspace/WorkspaceModels'
-import { getWorkspaceMembers, updateWorkspace, delegateSuperAuthority } from '@/services/WorkspaceService'
+import { getWorkspaceMembers, updateWorkspace, delegateSuperAuthority } from '@/api/workspace/workSpaceApi'
 import * as authApi from '@/api/member/auth'
 
 const props = defineProps({

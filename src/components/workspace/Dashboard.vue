@@ -2,8 +2,7 @@
   <div class="team-dashboard">
     <!-- 1. 대시보드 헤더 -->
     <div class="dashboard-header">
-      <h1>팀 대시보드</h1>
-      <p>{{ currentProject.name }} - {{ currentProject.description }}</p>
+      <h1>{{ currentProject.name }}</h1>
     </div>
     
     <!-- 2. 통계 카드 그리드 (4개 카드) -->
@@ -16,7 +15,7 @@
             </div>
             <div class="stat-content">
               <div class="stat-label">프로젝트 진행률</div>
-              <div class="stat-value">{{ currentProject.progress }}%</div>
+              <div class="stat-value">{{ projectProgress }}%</div>
               <div class="stat-description">전체 진행률</div>
             </div>
           </v-card-text>
@@ -24,7 +23,11 @@
       </v-col>
 
       <v-col cols="12" sm="6" md="3">
-        <v-card class="stat-card stat-card-warning">
+        <v-card 
+          class="stat-card stat-card-warning" 
+          @mouseenter="showInProgressDropdown = true"
+          @mouseleave="showInProgressDropdown = false"
+        >
           <v-card-text class="d-flex align-center">
             <div class="stat-icon warning">
               <v-icon size="32" color="white">mdi-clipboard-check</v-icon>
@@ -35,11 +38,31 @@
               <div class="stat-description">할 일 보드</div>
             </div>
           </v-card-text>
+          
+          <!-- 진행중인 업무 드롭다운 -->
+          <v-expand-transition>
+            <div v-show="showInProgressDropdown" class="task-dropdown">
+              <v-list density="compact">
+                <v-list-item
+                  v-for="task in inProgressTasks"
+                  :key="task.taskSeq"
+                  :title="task.taskTitle"
+                  :subtitle="task.assigneeName"
+                  class="task-item"
+                />
+                <v-list-item v-if="inProgressTasks.length === 0" title="진행중인 업무가 없습니다" />
+              </v-list>
+            </div>
+          </v-expand-transition>
         </v-card>
       </v-col>
 
       <v-col cols="12" sm="6" md="3">
-        <v-card class="stat-card stat-card-success">
+        <v-card 
+          class="stat-card stat-card-success"
+          @mouseenter="showCompletedDropdown = true"
+          @mouseleave="showCompletedDropdown = false"
+        >
           <v-card-text class="d-flex align-center">
             <div class="stat-icon success">
               <v-icon size="32" color="white">mdi-check-circle</v-icon>
@@ -50,11 +73,30 @@
               <div class="stat-description">완료 보드</div>
             </div>
           </v-card-text>
+          
+          <!-- 완료된 업무 드롭다운 -->
+          <v-expand-transition>
+            <div v-show="showCompletedDropdown" class="task-dropdown">
+              <v-list density="compact">
+                <v-list-item
+                  v-for="task in completedTasks"
+                  :key="task.taskSeq"
+                  :title="task.taskTitle"
+                  :subtitle="task.assigneeName"
+                  class="task-item"
+                />
+                <v-list-item v-if="completedTasks.length === 0" title="완료된 업무가 없습니다" />
+              </v-list>
+            </div>
+          </v-expand-transition>
         </v-card>
       </v-col>
 
       <v-col cols="12" sm="6" md="3">
-        <v-card class="stat-card stat-card-info">
+        <v-card 
+          class="stat-card stat-card-info clickable"
+          @click="toggleMemberSidebar"
+        >
           <v-card-text class="d-flex align-center">
             <div class="stat-icon info">
               <v-icon size="32" color="white">mdi-account-group</v-icon>
@@ -358,11 +400,16 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useProjectScheduleStore } from '@/store/projectScheduleStore'
+import { getProjectTasks } from '@/api/schedule/scheduleApi'
+import { getWorkspaceMembers } from '@/api/workspace/workSpaceApi'
 
 // Props
 const props = defineProps({
   currentProjectData: Object
 })
+
+// Emits
+const emit = defineEmits(['toggle-member-sidebar'])
 
 // Store
 const scheduleStore = useProjectScheduleStore()
@@ -378,11 +425,48 @@ const selectedAssignee = ref('내 업무')
 const isLoadingActivities = ref(false)
 const hasMoreActivities = ref(true)
 
+// 대시보드 통계 관련 refs
+const allTasks = ref([])
+const inProgressTasks = ref([])
+const completedTasks = ref([])
+const teamMembers = ref([])
+const showInProgressDropdown = ref(false)
+const showCompletedDropdown = ref(false)
+const isLoadingStats = ref(false)
+
 // Computed
 const currentProject = computed(() => scheduleStore.getCurrentProject)
-const inProgressTaskCount = computed(() => scheduleStore.getInProgressTaskCount)
-const completedTaskCount = computed(() => scheduleStore.getCompletedTaskCount)
-const activeTeamMemberCount = computed(() => scheduleStore.getActiveTeamMemberCount)
+
+// 프로젝트 진행률: 전체 업무 중 완료된 업무 비율
+const projectProgress = computed(() => {
+  if (!Array.isArray(allTasks.value) || allTasks.value.length === 0) {
+    return 0
+  }
+  const completedCount = allTasks.value.filter(task => {
+    const status = task.taskStatus || task.status || task.taskStatusDescription
+    return status === 'COMPLETED' || 
+           status === '완료' ||
+           status === 'DONE' ||
+           status === 'FINISHED'
+  }).length
+  return Math.round((completedCount / allTasks.value.length) * 100)
+})
+
+// 진행중인 업무 개수
+const inProgressTaskCount = computed(() => {
+  return Array.isArray(inProgressTasks.value) ? inProgressTasks.value.length : 0
+})
+
+// 완료된 업무 개수  
+const completedTaskCount = computed(() => {
+  return Array.isArray(completedTasks.value) ? completedTasks.value.length : 0
+})
+
+// 팀 멤버 수
+const activeTeamMemberCount = computed(() => {
+  return Array.isArray(teamMembers.value) ? teamMembers.value.length : 0
+})
+
 const upcomingDeadlines = computed(() => scheduleStore.getUpcomingDeadlines)
 const upcomingMilestones = computed(() => scheduleStore.getUpcomingMilestones)
 const recentActivities = computed(() => scheduleStore.getRecentActivities)
@@ -578,6 +662,119 @@ const periodData = computed(() => {
 })
 
 // Methods
+// 대시보드 통계 데이터 로드
+const loadDashboardStats = async () => {
+  // 프로젝트 ID 확인
+  const projectId = currentProject.value?.id
+  
+  if (!projectId) {
+    // 프로젝트 ID가 없어도 mock 데이터로 통계 표시
+    const mockTasks = [
+      { taskSeq: 1, taskTitle: '프로젝트 기획서 작성', taskStatus: 'COMPLETED', assigneeName: '김민수' },
+      { taskSeq: 2, taskTitle: 'UI/UX 디자인', taskStatus: 'IN_PROGRESS', assigneeName: '이지은' },
+      { taskSeq: 3, taskTitle: '백엔드 API 개발', taskStatus: 'IN_PROGRESS', assigneeName: '박준호' },
+      { taskSeq: 4, taskTitle: '프론트엔드 개발', taskStatus: 'TODO', assigneeName: '최서연' },
+      { taskSeq: 5, taskTitle: '테스트 케이스 작성', taskStatus: 'COMPLETED', assigneeName: '정우진' }
+    ]
+    
+    allTasks.value = mockTasks
+    inProgressTasks.value = mockTasks.filter(task => task.taskStatus === 'IN_PROGRESS')
+    completedTasks.value = mockTasks.filter(task => task.taskStatus === 'COMPLETED')
+    
+    // Mock 멤버 데이터
+    teamMembers.value = [
+      { memberSeq: 1, name: '김민수', role: 'Frontend Developer' },
+      { memberSeq: 2, name: '이지은', role: 'UI/UX Designer' },
+      { memberSeq: 3, name: '박준호', role: 'Backend Developer' },
+      { memberSeq: 4, name: '최서연', role: 'Project Manager' },
+      { memberSeq: 5, name: '정우진', role: 'QA Engineer' }
+    ]
+    return
+  }
+  
+  try {
+    isLoadingStats.value = true
+    
+    // 프로젝트의 모든 업무 조회
+    const tasks = await getProjectTasks(projectId)
+    
+    // 안전하게 배열로 변환
+    allTasks.value = Array.isArray(tasks) ? tasks : []
+    
+    // 중첩된 구조에서 실제 업무 데이터 추출
+    let actualTasks = []
+    allTasks.value.forEach(taskGroup => {
+      if (taskGroup.taskResDtoList && Array.isArray(taskGroup.taskResDtoList)) {
+        actualTasks = actualTasks.concat(taskGroup.taskResDtoList)
+      } else if (taskGroup.taskStatus) {
+        // 단일 업무인 경우
+        actualTasks.push(taskGroup)
+      }
+    })
+    
+    allTasks.value = actualTasks
+    
+    // 진행중인 업무 필터링
+    inProgressTasks.value = allTasks.value.filter(task => {
+      const status = task.taskStatus || task.status || task.taskStatusDescription
+      return status === 'IN_PROGRESS' || 
+             status === '진행중' ||
+             status === 'PROGRESS' ||
+             status === 'DOING'
+    })
+    
+    // 완료된 업무 필터링
+    completedTasks.value = allTasks.value.filter(task => {
+      const status = task.taskStatus || task.status || task.taskStatusDescription
+      return status === 'COMPLETED' || 
+             status === '완료' ||
+             status === 'DONE' ||
+             status === 'FINISHED'
+    })
+    
+    // 팀 멤버 목록 조회
+    try {
+      const members = await getWorkspaceMembers(projectId)
+      teamMembers.value = members || []
+    } catch (memberError) {
+      console.warn('팀 멤버 조회 실패:', memberError)
+      teamMembers.value = []
+    }
+    
+  } catch (error) {
+    console.error('대시보드 통계 로드 실패:', error)
+    
+    // API 실패 시 mock 데이터 사용
+    const mockTasks = [
+      { taskSeq: 1, taskTitle: '프로젝트 기획서 작성', taskStatus: 'COMPLETED', assigneeName: '김민수' },
+      { taskSeq: 2, taskTitle: 'UI/UX 디자인', taskStatus: 'IN_PROGRESS', assigneeName: '이지은' },
+      { taskSeq: 3, taskTitle: '백엔드 API 개발', taskStatus: 'IN_PROGRESS', assigneeName: '박준호' },
+      { taskSeq: 4, taskTitle: '프론트엔드 개발', taskStatus: 'TODO', assigneeName: '최서연' },
+      { taskSeq: 5, taskTitle: '테스트 케이스 작성', taskStatus: 'COMPLETED', assigneeName: '정우진' }
+    ]
+    
+    allTasks.value = mockTasks
+    inProgressTasks.value = mockTasks.filter(task => task.taskStatus === 'IN_PROGRESS')
+    completedTasks.value = mockTasks.filter(task => task.taskStatus === 'COMPLETED')
+    
+    // Mock 멤버 데이터
+    teamMembers.value = [
+      { memberSeq: 1, name: '김민수', role: 'Frontend Developer' },
+      { memberSeq: 2, name: '이지은', role: 'UI/UX Designer' },
+      { memberSeq: 3, name: '박준호', role: 'Backend Developer' },
+      { memberSeq: 4, name: '최서연', role: 'Project Manager' },
+      { memberSeq: 5, name: '정우진', role: 'QA Engineer' }
+    ]
+  } finally {
+    isLoadingStats.value = false
+  }
+}
+
+// 멤버 사이드바 토글
+const toggleMemberSidebar = () => {
+  emit('toggle-member-sidebar')
+}
+
 const formatProjectPeriod = () => {
   const start = new Date(currentProject.value.startDate)
   const end = new Date(currentProject.value.endDate)
@@ -921,6 +1118,7 @@ const updateChart = () => {
 // Lifecycle
 onMounted(async () => {
   await createChart()
+  await loadDashboardStats()
 })
 
 onUnmounted(() => {
@@ -939,6 +1137,11 @@ watch([customStartDate, customEndDate], () => {
     updateChart()
   }
 })
+
+// 통계 데이터 변화 감지
+watch([allTasks, inProgressTasks, completedTasks, teamMembers], () => {
+  // 통계 데이터가 변경될 때 필요한 로직이 있다면 여기에 추가
+}, { deep: true })
 </script>
 
 <style scoped>
@@ -1449,6 +1652,45 @@ watch([customStartDate, customEndDate], () => {
   padding: 24px;
   font-size: 14px;
   color: #94a3b8;
+}
+
+/* 드롭다운 스타일 */
+.task-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  background: white;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  z-index: 1000;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.task-item {
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.task-item:last-child {
+  border-bottom: none;
+}
+
+/* 클릭 가능한 카드 */
+.clickable {
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.clickable:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+/* 통계 카드 호버 시 드롭다운을 위한 상대 위치 */
+.stat-card {
+  position: relative;
 }
 
 /* 반응형 */

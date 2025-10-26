@@ -290,8 +290,17 @@ export const useProjectScheduleStore = defineStore('projectSchedule', {
   }),
 
   getters: {
-    // 현재 프로젝트 정보 반환
-    getCurrentProject: (state) => state.currentProject,
+    // 현재 프로젝트 정보 반환 (워크스페이스 이름 동적 설정)
+    getCurrentProject: (state) => {
+      const workspaceStore = useWorkspaceStore()
+      const currentWorkspaceInfo = workspaceStore.currentWorkspaceInfo
+      
+      return {
+        ...state.currentProject,
+        id: currentWorkspaceInfo?.workSpaceSeq || currentWorkspaceInfo?.id || state.currentProject.id,
+        name: currentWorkspaceInfo?.name || state.currentProject.name
+      }
+    },
 
     // 보드별 업무 개수
     getTaskCountByBoard: (state) => (boardId) => {

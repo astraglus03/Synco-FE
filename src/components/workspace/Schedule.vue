@@ -267,7 +267,7 @@ import { useProjectScheduleStore } from '../../store/projectScheduleStore.js'
 import { useWorkspaceStore } from '../../store/workspaceStore.js'
 import { useWorkspaceMemberStore } from '../../store/workspaceMemberStore.js'
 import { useAuthStore } from '../../store/authStore.js'
-import { getWorkspaceMembers } from '../../services/WorkspaceService.js'
+import { getWorkspaceMembers } from '@/api/workspace/workSpaceApi'
 import { getProjectTasks } from '../../api/schedule/scheduleApi.js'
 import TaskCreateModal from './TaskCreateModal.vue'
 

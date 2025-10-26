@@ -8,7 +8,7 @@ import {
   changeChatChannelAuthority,
   changeScheduleChannelAuthority,
   changeMeetingChannelAuthority
-} from '@/services/WorkspaceService'
+} from '@/api/workspace/workSpaceApi'
 import { Authority } from '@/models/workspace/WorkspaceModels'
 
 export const useWorkspaceMemberStore = defineStore('workspaceMember', () => {

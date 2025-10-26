@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import { getMyWorkspaces } from '@/services/WorkspaceService'
+import { getMyWorkspaces } from '@/api/workspace/workSpaceApi'
 import { Authority } from '@/models/workspace/WorkspaceModels'
 
 export const useWorkspaceStore = defineStore('workspace', () => {

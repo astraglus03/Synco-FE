@@ -11,7 +11,7 @@ import {
   renameMeetingChannel,
   createChatChannel,
   deleteChatChannel
-} from '@/services/WorkspaceService'
+} from '@/api/workspace/workSpaceApi'
 import { useAuthStore } from '@/store/authStore'
 import { useWorkspaceStore } from '@/store/workspaceStore'
 import { useWorkspaceMemberStore } from '@/store/workspaceMemberStore'

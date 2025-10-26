@@ -1,7 +1,7 @@
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue'
 import { useWorkspaceStore } from '@/store/workspaceStore'
-import { createWorkspace, getFriendList, searchMembers } from '@/services/WorkspaceService'
+import { createWorkspace, getFriendList, searchMembers } from '@/api/workspace/workSpaceApi'
 
 const props = defineProps({
   workspaces: Array,

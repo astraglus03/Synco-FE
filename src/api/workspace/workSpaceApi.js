@@ -154,4 +154,3 @@ export const deleteChatChannel = async (channelSeq) => {
 // 친구 목록, 회원 검색 API는 friend.js에서 import하여 사용
 // ----------------------
 export { getFriendList, searchMembers } from '@/api/friend/friend'
-
