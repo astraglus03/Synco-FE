@@ -341,8 +341,9 @@
 
           <v-card-text>
             <!-- 마감일 임박 업무 -->
-            <div v-if="upcomingDeadlines.length > 0" class="deadlines-section">
-              <h5>마감일 임박 업무</h5>
+            <div class="deadlines-section">
+              <h5>마감일 임박 업무 (5일 이내)</h5>
+              <div v-if="upcomingDeadlines.length > 0" class="scrollable-list">
               <div
                 v-for="task in upcomingDeadlines"
                 :key="task.id"
@@ -352,6 +353,7 @@
                 <div class="deadline-content">
                   <div class="deadline-header">
                     <span class="deadline-title">{{ task.title }}</span>
+                      <div class="deadline-chips">
                     <v-chip
                       :color="getPriorityColor(task.priority)"
                       size="x-small"
@@ -359,13 +361,31 @@
                     >
                       {{ getPriorityText(task.priority) }}
                     </v-chip>
+                        <v-chip
+                          :color="getMilestoneColor(task.status)"
+                          size="x-small"
+                          class="status-chip"
+                        >
+                          {{ getMilestoneStatusText(task.status) }}
+                    </v-chip>
+                      </div>
                   </div>
                   <div class="deadline-meta">
-                    <span class="assignee">{{ task.assignee }}</span>
-                    <span class="remaining-time">{{ formatRemainingTime(task.endDate) }}</span>
+                      <span class="assignee">
+                        <v-icon size="small">mdi-account</v-icon>
+                        {{ task.assignee }}
+                      </span>
+                      <span class="remaining-time">
+                        <v-icon size="small">mdi-clock-outline</v-icon>
+                        {{ formatRemainingTime(task.endDate) }}
+                      </span>
                   </div>
-                  <div class="board-label">{{ getBoardName(task.boardId) }}</div>
                 </div>
+                </div>
+              </div>
+              <div v-else class="empty-state">
+                <v-icon size="large" color="grey-lighten-1">mdi-calendar-check</v-icon>
+                <span class="empty-text">5일 이내 마감 업무가 없습니다</span>
               </div>
             </div>
 
@@ -374,25 +394,49 @@
             <!-- 다가오는 마일스톤 -->
             <div class="milestones-section">
               <h5>다가오는 마일스톤</h5>
+              <div v-if="upcomingMilestones.length > 0" class="scrollable-list">
               <div
                 v-for="milestone in upcomingMilestones"
                 :key="milestone.id"
                 class="milestone-item"
               >
+                  <div class="milestone-marker" :style="{ backgroundColor: getPriorityColor(milestone.priority) }"></div>
                 <div class="milestone-content">
+                    <div class="milestone-header">
                   <div class="milestone-title">{{ milestone.title }}</div>
-                  <div class="milestone-description">{{ milestone.description }}</div>
-                  <div class="milestone-footer">
-                    <span class="milestone-date">{{ formatRemainingTime(milestone.date) }}</span>
+                      <div class="milestone-chips">
+                        <v-chip
+                          :color="getPriorityColor(milestone.priority)"
+                          size="x-small"
+                          class="priority-chip"
+                        >
+                          {{ getPriorityText(milestone.priority) }}
+                        </v-chip>
                     <v-chip
                       :color="getMilestoneColor(milestone.status)"
-                      size="small"
-                      class="milestone-status"
+                          size="x-small"
+                          class="status-chip"
                     >
                       {{ getMilestoneStatusText(milestone.status) }}
                     </v-chip>
                   </div>
                 </div>
+                    <div class="milestone-footer">
+                      <span class="milestone-assignee">
+                        <v-icon size="small">mdi-account</v-icon>
+                        {{ milestone.assignee }}
+                      </span>
+                      <span class="milestone-date">
+                        <v-icon size="small">mdi-calendar</v-icon>
+                        {{ milestone.date }}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div v-else class="empty-state">
+                <v-icon size="large" color="grey-lighten-1">mdi-flag-outline</v-icon>
+                <span class="empty-text">예정된 마일스톤이 없습니다</span>
               </div>
             </div>
           </v-card-text>
@@ -613,8 +657,89 @@ const showPagination = computed(() => {
   return false
 })
 
-const upcomingDeadlines = computed(() => scheduleStore.getUpcomingDeadlines)
-const upcomingMilestones = computed(() => scheduleStore.getUpcomingMilestones)
+// 마감일 임박 업무 (5일 이내)
+const upcomingDeadlines = computed(() => {
+  if (!allTasks.value || allTasks.value.length === 0) return []
+  
+  const now = new Date()
+  now.setHours(0, 0, 0, 0)
+  
+  return allTasks.value
+    .filter(task => {
+      if (!task.endDate) return false
+      const endDate = new Date(task.endDate)
+      endDate.setHours(0, 0, 0, 0)
+      const daysRemaining = Math.ceil((endDate - now) / (24 * 60 * 60 * 1000))
+      return daysRemaining >= 0 && daysRemaining <= 5 // 오늘부터 5일 이내
+    })
+    .sort((a, b) => new Date(a.endDate) - new Date(b.endDate))
+    .slice(0, 10) // 최대 10개
+    .map(task => {
+      const endDate = new Date(task.endDate)
+      endDate.setHours(0, 0, 0, 0)
+      const daysRemaining = Math.ceil((endDate - now) / (24 * 60 * 60 * 1000))
+      
+      // 남은 일수에 따라 우선순위 자동 설정
+      let priority = 'high' // 기본값: 5일 이내
+      if (daysRemaining >= 14) {
+        priority = 'low' // 14일 이상
+      } else if (daysRemaining >= 10) {
+        priority = 'medium' // 10일 이상
+      }
+      
+      return {
+        id: task.taskSeq,
+        title: task.taskTitle,
+        endDate: task.endDate,
+        assignee: getMemberName(task.picMemberSeq) || task.assigneeName || '미지정',
+        priority: priority,
+        daysRemaining: daysRemaining,
+        boardId: task.boardId,
+        status: task.taskStatus || task.status
+      }
+    })
+})
+
+// 다가오는 마일스톤 (오늘 기준 end_date가 있는 모든 업무)
+const upcomingMilestones = computed(() => {
+  if (!allTasks.value || allTasks.value.length === 0) return []
+  
+  const now = new Date()
+  now.setHours(0, 0, 0, 0)
+  
+  return allTasks.value
+    .filter(task => {
+      if (!task.endDate) return false
+      const endDate = new Date(task.endDate)
+      endDate.setHours(0, 0, 0, 0)
+      return endDate >= now // 오늘 포함 이후
+    })
+    .sort((a, b) => new Date(a.endDate) - new Date(b.endDate)) // end_date 빠른 순
+    .map(task => {
+      const endDate = new Date(task.endDate)
+      endDate.setHours(0, 0, 0, 0)
+      const daysRemaining = Math.ceil((endDate - now) / (24 * 60 * 60 * 1000))
+      
+      // 남은 일수에 따라 우선순위 자동 설정
+      let priority = 'high' // 기본값: 5일 미만
+      if (daysRemaining >= 14) {
+        priority = 'low' // 14일 이상
+      } else if (daysRemaining >= 10) {
+        priority = 'medium' // 10일 이상
+      }
+      
+      return {
+        id: task.taskSeq,
+        title: task.taskTitle,
+        date: task.endDate,
+        assignee: getMemberName(task.picMemberSeq) || task.assigneeName || '미지정',
+        status: task.taskStatus || task.status,
+        priority: priority,
+        daysRemaining: daysRemaining
+      }
+    })
+})
+
 const recentActivities = computed(() => scheduleStore.getRecentActivities)
 
 const assigneeOptions = computed(() => {
@@ -1338,9 +1463,9 @@ const getPeriodColor = (status) => {
 
 const getPriorityColor = (priority) => {
   const colors = {
-    high: '#ef4444',
-    medium: '#f59e0b',
-    low: '#3b82f6'
+    high: '#ef4444',      // 빨간색 (5일 미만)
+    medium: '#f4b64c',    // 노란색 (10일 이상)
+    low: '#4dc9a2'        // 초록색 (14일 이상)
   }
   return colors[priority] || '#6b7280'
 }
@@ -1378,24 +1503,31 @@ const getBoardColor = (boardId) => {
 
 const getMilestoneColor = (status) => {
   const colors = {
-    completed: 'success',
+    'COMPLETED': 'success',
+    'IN_PROGRESS': 'warning',
+    'TODO': 'info',
+    'completed': 'success',
     'in-progress': 'warning',
-    pending: 'info'
+    'pending': 'info'
   }
   return colors[status] || 'grey'
 }
 
 const getMilestoneStatusText = (status) => {
   const texts = {
-    completed: '완료',
+    'COMPLETED': '완료',
+    'IN_PROGRESS': '진행중',
+    'TODO': '대기',
+    'completed': '완료',
     'in-progress': '진행중',
-    pending: '대기'
+    'pending': '대기'
   }
   return texts[status] || status
 }
 
 const formatRemainingTime = (dateString) => {
   const date = new Date(dateString)
+  date.setHours(0, 0, 0, 0) // 날짜의 시간도 0으로 설정
   const today = new Date()
   today.setHours(0, 0, 0, 0)
   const diffTime = date - today
@@ -2014,6 +2146,30 @@ watch([allTasks, inProgressTasks, completedTasks, teamMembers], () => {
   margin-bottom: 12px;
 }
 
+.scrollable-list {
+  max-height: 300px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.scrollable-list::-webkit-scrollbar {
+  width: 6px;
+}
+
+.scrollable-list::-webkit-scrollbar-track {
+  background: #f1f5f9;
+  border-radius: 3px;
+}
+
+.scrollable-list::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 3px;
+}
+
+.scrollable-list::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
 .deadline-item {
   display: flex;
   gap: 12px;
@@ -2046,9 +2202,17 @@ watch([allTasks, inProgressTasks, completedTasks, teamMembers], () => {
   margin-bottom: 8px;
 }
 
+.deadline-chips {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
 .deadline-title {
   font-size: 14px;
   font-weight: 600;
+  flex: 1;
   color: #1e293b;
 }
 
@@ -2072,7 +2236,9 @@ watch([allTasks, inProgressTasks, completedTasks, teamMembers], () => {
 }
 
 .milestone-item {
-  padding: 16px;
+  display: flex;
+  gap: 12px;
+  padding: 12px;
   border-radius: 8px;
   background-color: #f8f9fa;
   margin-bottom: 12px;
@@ -2083,11 +2249,36 @@ watch([allTasks, inProgressTasks, completedTasks, teamMembers], () => {
   background-color: #f1f3f5;
 }
 
+.milestone-marker {
+  width: 4px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
+.milestone-content {
+  flex: 1;
+}
+
+.milestone-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.milestone-chips {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
 .milestone-title {
   font-size: 14px;
   font-weight: 600;
   color: #1e293b;
-  margin-bottom: 6px;
+  flex: 1;
 }
 
 .milestone-description {
@@ -2103,7 +2294,18 @@ watch([allTasks, inProgressTasks, completedTasks, teamMembers], () => {
   justify-content: space-between;
 }
 
+.milestone-assignee {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: #64748b;
+}
+
 .milestone-date {
+  display: flex;
+  align-items: center;
+  gap: 4px;
   font-size: 12px;
   color: #64748b;
 }
