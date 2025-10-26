@@ -238,10 +238,18 @@
               sm="6"
               md="3"
             >
-              <v-card class="period-card">
+              <div 
+                class="period-card-wrapper"
+                @mouseenter="hoveredPeriodId = period.id"
+                @mouseleave="hoveredPeriodId = null"
+              >
+                <v-card class="period-card period-card-with-dropdown">
                 <v-card-text>
                   <div class="period-name">{{ period.name }}</div>
                   <div class="period-phase">{{ period.phase }}</div>
+                  
+                  <!-- 업무가 있을 때 -->
+                  <div v-if="period.totalTasks > 0" class="period-content">
                   <v-progress-linear
                     :model-value="period.progress"
                     :color="getPeriodColor(period.status)"
@@ -262,9 +270,59 @@
                   <div class="period-tasks">
                     <span>{{ period.totalTasks }}개 업무</span>
                     <span class="completed-tasks">✔ {{ period.completedTasks }}개 완료</span>
+                    </div>
+                  </div>
+                  
+                  <!-- 업무가 없을 때 -->
+                  <div v-else class="no-tasks-card">
+                    <v-icon size="40" color="grey-lighten-2">mdi-clipboard-text-off-outline</v-icon>
+                    <span class="no-tasks-text">업무 없음</span>
                   </div>
                 </v-card-text>
               </v-card>
+                
+                <!-- 기간별 업무 드롭다운 -->
+                <div v-if="hoveredPeriodId === period.id" class="period-task-dropdown">
+                  <div class="dropdown-header">
+                    <strong>{{ period.name }} 업무 목록</strong>
+                    <span class="task-count">{{ period.tasks?.length || 0 }}개</span>
+                  </div>
+                  <div v-if="period.tasks && period.tasks.length > 0" class="task-list">
+                    <div
+                      v-for="task in period.tasks"
+                      :key="task.taskSeq"
+                      class="period-task-item"
+                    >
+                      <div class="task-item-content">
+                        <div class="task-item-header">
+                          <span class="task-title">{{ task.taskTitle }}</span>
+                          <v-chip
+                            :color="getTaskStatusColor(task.taskStatus || task.status)"
+                            size="x-small"
+                            class="status-chip"
+                          >
+                            {{ getTaskStatusText(task.taskStatus || task.status) }}
+                          </v-chip>
+                        </div>
+                        <div class="task-item-meta">
+                          <span class="task-assignee">
+                            <v-icon size="small">mdi-account</v-icon>
+                            {{ getMemberName(task.picMemberSeq) || task.assigneeName || '미지정' }}
+                          </span>
+                          <span class="task-date">
+                            <v-icon size="small">mdi-calendar</v-icon>
+                            {{ task.endDate || '날짜 미정' }}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  <div v-else class="empty-state">
+                    <v-icon size="large" color="grey-lighten-1">mdi-clipboard-text-off-outline</v-icon>
+                    <span class="empty-text">업무가 없습니다</span>
+                  </div>
+                </div>
+              </div>
             </v-col>
           </v-row>
         </div>
@@ -492,6 +550,7 @@ const teamMembers = ref([])
 const showInProgressDropdown = ref(false)
 const showCompletedDropdown = ref(false)
 const isLoadingStats = ref(false)
+const hoveredPeriodId = ref(null)
 
 // 프로젝트 기간 관련
 const projectStartDate = ref(null)
@@ -589,8 +648,10 @@ const periodData = computed(() => {
       const periodStart = new Date(startDate)
       periodStart.setMonth(periodStart.getMonth() + monthIndex)
       periodStart.setDate(1)
+      periodStart.setHours(0, 0, 0, 0)
       
       const periodEnd = new Date(periodStart.getFullYear(), periodStart.getMonth() + 1, 0)
+      periodEnd.setHours(23, 59, 59, 999)
       
       const taskInfo = getPeriodTaskInfo(periodStart, periodEnd)
       
@@ -602,7 +663,8 @@ const periodData = computed(() => {
         status: taskInfo.status,
         statusText: getStatusText(taskInfo.status),
         totalTasks: taskInfo.totalTasks,
-        completedTasks: taskInfo.completedTasks
+        completedTasks: taskInfo.completedTasks,
+        tasks: taskInfo.tasks
       })
     }
     return result
@@ -618,7 +680,10 @@ const periodData = computed(() => {
       
       const weekDate = new Date(currentWeekStart)
       weekDate.setDate(weekDate.getDate() + (weekIndex * 7))
+      weekDate.setHours(0, 0, 0, 0)
+      
       const weekEnd = getWeekEnd(weekDate)
+      weekEnd.setHours(23, 59, 59, 999)
       
       const taskInfo = getPeriodTaskInfo(weekDate, weekEnd)
       
@@ -630,7 +695,8 @@ const periodData = computed(() => {
         status: taskInfo.status,
         statusText: getStatusText(taskInfo.status),
         totalTasks: taskInfo.totalTasks,
-        completedTasks: taskInfo.completedTasks
+        completedTasks: taskInfo.completedTasks,
+        tasks: taskInfo.tasks
       })
     }
     return result
@@ -656,7 +722,8 @@ const periodData = computed(() => {
         status: taskInfo.status,
         statusText: getStatusText(taskInfo.status),
         totalTasks: taskInfo.totalTasks,
-        completedTasks: taskInfo.completedTasks
+        completedTasks: taskInfo.completedTasks,
+        tasks: taskInfo.tasks
       })
     }
     return result
@@ -685,7 +752,8 @@ const periodData = computed(() => {
         status: taskInfo.status,
         statusText: getStatusText(taskInfo.status),
         totalTasks: taskInfo.totalTasks,
-        completedTasks: taskInfo.completedTasks
+        completedTasks: taskInfo.completedTasks,
+        tasks: taskInfo.tasks
       })
     }
     return result
@@ -710,6 +778,37 @@ const getPhaseText = (status) => {
     'pending': '예정'
   }
   return phaseMap[status] || '예정'
+}
+
+// 업무 상태 색상 반환
+const getTaskStatusColor = (status) => {
+  const statusColorMap = {
+    'COMPLETED': 'success',
+    '완료': 'success',
+    'DONE': 'success',
+    'FINISHED': 'success',
+    'IN_PROGRESS': 'warning',
+    '진행중': 'warning',
+    'PROGRESS': 'warning',
+    'TODO': 'info',
+    '대기': 'info',
+    'PENDING': 'info'
+  }
+  return statusColorMap[status] || 'grey'
+}
+
+// 업무 상태 텍스트 반환
+const getTaskStatusText = (status) => {
+  const statusTextMap = {
+    'COMPLETED': '완료',
+    'DONE': '완료',
+    'FINISHED': '완료',
+    'IN_PROGRESS': '진행중',
+    'PROGRESS': '진행중',
+    'TODO': '대기',
+    'PENDING': '대기'
+  }
+  return statusTextMap[status] || status || '대기'
 }
 
 // Methods
@@ -960,14 +1059,19 @@ const getPlannedProgressByDate = (targetDate) => {
 // 특정 기간의 업무 정보 계산
 const getPeriodTaskInfo = (startDate, endDate) => {
   if (!allTasks.value || allTasks.value.length === 0) {
-    return { totalTasks: 0, completedTasks: 0, progress: 0, status: 'pending' }
+    return { totalTasks: 0, completedTasks: 0, progress: 0, status: 'pending', tasks: [] }
   }
   
   // 해당 기간에 마감인 업무들
   const periodTasks = allTasks.value.filter(task => {
     if (!task.endDate) return false
     const taskEnd = new Date(task.endDate)
-    return taskEnd >= startDate && taskEnd <= endDate
+    // 날짜만 비교 (시간 부분 제거)
+    const taskEndDate = new Date(taskEnd.getFullYear(), taskEnd.getMonth(), taskEnd.getDate())
+    const startDateOnly = new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate())
+    const endDateOnly = new Date(endDate.getFullYear(), endDate.getMonth(), endDate.getDate())
+    
+    return taskEndDate >= startDateOnly && taskEndDate <= endDateOnly
   })
   
   const totalTasks = periodTasks.length
@@ -985,7 +1089,7 @@ const getPeriodTaskInfo = (startDate, endDate) => {
     status = 'in-progress'
   }
   
-  return { totalTasks, completedTasks, progress, status }
+  return { totalTasks, completedTasks, progress, status, tasks: periodTasks }
 }
 
 // 특정 날짜까지의 실제 진행률 계산 (완료된 업무 기준)
@@ -1609,6 +1713,11 @@ watch([allTasks, inProgressTasks, completedTasks, teamMembers], () => {
   margin-bottom: 24px;
   position: relative;
   z-index: 1;
+  overflow: visible;
+}
+
+.progress-flow-card .v-card-text {
+  overflow: visible;
 }
 
 .flow-header {
@@ -1710,6 +1819,11 @@ watch([allTasks, inProgressTasks, completedTasks, teamMembers], () => {
   text-align: center;
 }
 
+.period-progress-section {
+  position: relative;
+  overflow: visible;
+}
+
 .period-progress-section h4 {
   font-size: 16px;
   font-weight: 600;
@@ -1719,16 +1833,100 @@ watch([allTasks, inProgressTasks, completedTasks, teamMembers], () => {
 
 .period-cards {
   margin-top: 16px;
+  position: relative;
+  z-index: 200;
+}
+
+.period-card-wrapper {
+  position: relative;
+  width: 100%;
 }
 
 .period-card {
   border-radius: 8px;
   transition: all 0.2s ease;
+  position: relative;
+  overflow: visible;
+}
+
+.period-card .v-card-text {
+  display: flex;
+  flex-direction: column;
+  min-height: 160px;
+}
+
+.period-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+.period-card-with-dropdown {
+  overflow: visible !important;
 }
 
 .period-card:hover {
   transform: translateY(-2px);
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+
+.period-task-dropdown {
+  position: absolute;
+  top: calc(100% - 8px);
+  left: 0;
+  right: 0;
+  background: white;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+  z-index: 20000;
+  max-height: 350px;
+  overflow-y: auto;
+  padding-top: 8px;
+  animation: fadeInDown 0.2s ease-out;
+}
+
+.dropdown-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  border-bottom: 1px solid #e0e0e0;
+  background: #f8fafc;
+  border-radius: 8px 8px 0 0;
+  margin-top: -8px;
+}
+
+.dropdown-header strong {
+  font-size: 14px;
+  color: #1e293b;
+}
+
+.task-count {
+  font-size: 12px;
+  color: #64748b;
+  background: white;
+  padding: 2px 8px;
+  border-radius: 12px;
+}
+
+.task-list {
+  padding: 8px;
+}
+
+.period-task-item {
+  padding: 12px;
+  border-bottom: 1px solid #f1f5f9;
+  transition: background-color 0.2s;
+}
+
+.period-task-item:last-child {
+  border-bottom: none;
+}
+
+.period-task-item:hover {
+  background-color: #f8fafc;
 }
 
 .period-name {
@@ -1770,6 +1968,21 @@ watch([allTasks, inProgressTasks, completedTasks, teamMembers], () => {
 
 .completed-tasks {
   color: #22c55e;
+}
+
+.no-tasks-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  flex: 1;
+}
+
+.no-tasks-text {
+  font-size: 13px;
+  color: #94a3b8;
+  font-weight: 500;
 }
 
 /* 4. 하단 섹션 */
@@ -2128,13 +2341,18 @@ watch([allTasks, inProgressTasks, completedTasks, teamMembers], () => {
 }
 
 .empty-state {
-  padding: 16px !important;
+  padding: 24px 16px !important;
   text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
 }
 
 .empty-text {
   color: #94a3b8;
   font-size: 13px;
+  display: block;
 }
 
 /* 클릭 가능한 카드 */
