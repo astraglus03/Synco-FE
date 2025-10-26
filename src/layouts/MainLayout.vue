@@ -48,6 +48,11 @@ const convertToInternalId = (urlId, prefix) => {
 // 채널 타입을 단수형으로 변환 (chats → chat, meetings → meeting)
 const singularizeChannel = (channelType) => {
   if (!channelType) return channelType
+  
+  // 단수형 변환이 필요 없는 채널들 (이미 단수형)
+  const noSingularize = ['dashboard', 'friends', 'drive', 'calendar', 'profile', '1-1-chat']
+  if (noSingularize.includes(channelType)) return channelType
+  
   // 복수형이면 단수형으로 변환
   if (channelType.endsWith('s')) {
     return channelType.slice(0, -1)
@@ -117,23 +122,32 @@ const extractId = (fullId) => {
 // 채널 타입을 복수형으로 변환 (chat → chats, meeting → meetings)
 const pluralizeChannel = (channelType) => {
   if (!channelType) return channelType
+  
+  // 복수형 변환이 필요 없는 채널들
+  const noPluralize = ['dashboard', 'friends', 'drive', 'calendar', 'profile', '1-1-chat']
+  if (noPluralize.includes(channelType)) return channelType
+  
   // 이미 복수형이면 그대로 반환
   if (channelType.endsWith('s')) return channelType
+  
   // 복수형으로 변환
   return channelType + 's'
 }
 
 // 워크스페이스 선택 (URL 업데이트 포함)
-const selectWorkspace = (workspaceId) => {
+const selectWorkspace = async (workspaceId) => {
   const workspace = workspaceStore.workspaces.find(w => w.id === workspaceId)
   
   if (workspace) {
     // 워크스페이스 변경 시 멤버 사이드바 닫기
     uiStore.memberSidebarVisible = false
     
+    // 워크스페이스 스토어 상태 업데이트
+    await workspaceStore.selectWorkspace(workspace.id)
+    
     // URL 업데이트 (workspace_4 → 4)
     const cleanId = extractId(workspace.id)
-    router.push(`/workspaces/${cleanId}/dashboard`)
+    await router.push(`/workspaces/${cleanId}/dashboard`)
   }
 }
 

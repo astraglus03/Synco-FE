@@ -7,7 +7,7 @@
     
     <!-- 2. 통계 카드 그리드 (4개 카드) -->
     <v-row class="stats-grid">
-      <v-col cols="12" sm="6" md="3">
+      <v-col cols="12" sm="6" md="3" class="stat-col">
         <v-card class="stat-card stat-card-primary">
           <v-card-text class="d-flex align-center">
             <div class="stat-icon primary">
@@ -22,7 +22,7 @@
         </v-card>
       </v-col>
 
-      <v-col cols="12" sm="6" md="3">
+      <v-col cols="12" sm="6" md="3" class="stat-col">
         <div 
           class="stat-card-wrapper"
           @mouseenter="showInProgressDropdown = true"
@@ -74,7 +74,7 @@
         </div>
       </v-col>
 
-      <v-col cols="12" sm="6" md="3">
+      <v-col cols="12" sm="6" md="3" class="stat-col">
         <div 
           class="stat-card-wrapper"
           @mouseenter="showCompletedDropdown = true"
@@ -126,7 +126,7 @@
         </div>
       </v-col>
 
-      <v-col cols="12" sm="6" md="3">
+      <v-col cols="12" sm="6" md="3" class="stat-col">
         <v-card 
           class="stat-card stat-card-info clickable"
           @click="toggleMemberSidebar"
@@ -496,15 +496,15 @@
                     <v-icon size="small">mdi-account</v-icon>
                     {{ task.assignee }}
               </div>
-                </div>
+            </div>
               </div>
             </div>
             <div v-else class="empty-state">
               <v-icon size="large" color="grey-lighten-1">mdi-clipboard-text-off-outline</v-icon>
               <span class="empty-text">담당 업무가 없습니다</span>
-            </div>
-          </v-card-text>
-        </v-card>
+    </div>
+      </v-card-text>
+    </v-card>
         </v-col>
       </v-row>
   </div>
@@ -514,6 +514,7 @@
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useProjectScheduleStore } from '@/store/projectScheduleStore'
 import { useWorkspaceMemberStore } from '@/store/workspaceMemberStore'
+import { useWorkspaceStore } from '@/store/workspaceStore'
 import { useAuthStore } from '@/store/authStore'
 import { getProjectTasks } from '@/api/schedule/scheduleApi'
 import { getWorkspaceMembers } from '@/api/workspace/workSpaceApi'
@@ -529,6 +530,7 @@ const emit = defineEmits(['toggle-member-sidebar'])
 // Store
 const scheduleStore = useProjectScheduleStore()
 const memberStore = useWorkspaceMemberStore()
+const workspaceStore = useWorkspaceStore()
 const authStore = useAuthStore()
 
 // Refs
@@ -829,6 +831,10 @@ const periodData = computed(() => {
     }
     return result
   } else if (timeFilter.value === 'day') {
+    const totalDays = Math.floor((endDate - startDate) / (24 * 60 * 60 * 1000)) + 1
+    const totalWeeks = Math.ceil(totalDays / 7)
+    const isLastPage = currentPage.value === totalWeeks - 1
+    
     const weekStart = getWeekStart(new Date(startDate.getTime() + (currentPage.value * 7 * 24 * 60 * 60 * 1000)))
     
     for (let i = 0; i < 7; i++) {
@@ -854,11 +860,43 @@ const periodData = computed(() => {
         tasks: taskInfo.tasks
       })
     }
+    
+    // 마지막 페이지에서 종료일이 아직 포함되지 않았다면 추가
+    if (isLastPage && result.length > 0) {
+      const lastItem = result[result.length - 1]
+      const endDateLabel = `${endDate.getMonth() + 1}/${endDate.getDate()}`
+      
+      // 마지막 항목이 종료일이 아니면 종료일 추가
+      if (lastItem.name !== endDateLabel) {
+        const dayEnd = new Date(endDate)
+        dayEnd.setHours(23, 59, 59, 999)
+        
+        const taskInfo = getPeriodTaskInfo(endDate, dayEnd)
+        
+        result.push({
+          id: result.length + 1,
+          name: endDateLabel,
+          phase: getPhaseText(taskInfo.status),
+          progress: taskInfo.progress,
+          status: taskInfo.status,
+          statusText: getStatusText(taskInfo.status),
+          totalTasks: taskInfo.totalTasks,
+          completedTasks: taskInfo.completedTasks,
+          tasks: taskInfo.tasks
+        })
+      }
+    }
+    
     return result
   } else {
     // custom - 사용자 정의 기간
     const customStart = new Date(customStartDate.value)
     const customEnd = new Date(customEndDate.value)
+    
+    const totalDays = Math.floor((customEnd - customStart) / (24 * 60 * 60 * 1000)) + 1
+    const totalWeeks = Math.ceil(totalDays / 7)
+    const isLastPage = currentPage.value === totalWeeks - 1
+    
     const weekStart = getWeekStart(new Date(customStart.getTime() + (currentPage.value * 7 * 24 * 60 * 60 * 1000)))
     
     for (let i = 0; i < 7; i++) {
@@ -884,6 +922,33 @@ const periodData = computed(() => {
         tasks: taskInfo.tasks
       })
     }
+    
+    // 마지막 페이지에서 종료일이 아직 포함되지 않았다면 추가
+    if (isLastPage && result.length > 0) {
+      const lastItem = result[result.length - 1]
+      const endDateLabel = `${customEnd.getMonth() + 1}/${customEnd.getDate()}`
+      
+      // 마지막 항목이 종료일이 아니면 종료일 추가
+      if (lastItem.name !== endDateLabel) {
+        const dayEnd = new Date(customEnd)
+        dayEnd.setHours(23, 59, 59, 999)
+        
+        const taskInfo = getPeriodTaskInfo(customEnd, dayEnd)
+        
+        result.push({
+          id: result.length + 1,
+          name: endDateLabel,
+          phase: getPhaseText(taskInfo.status),
+          progress: taskInfo.progress,
+          status: taskInfo.status,
+          statusText: getStatusText(taskInfo.status),
+          totalTasks: taskInfo.totalTasks,
+          completedTasks: taskInfo.completedTasks,
+          tasks: taskInfo.tasks
+        })
+      }
+    }
+    
     return result
   }
 })
@@ -942,6 +1007,9 @@ const getTaskStatusText = (status) => {
 // Methods
 // 대시보드 통계 데이터 로드
 const loadDashboardStats = async () => {
+  // 컴포넌트가 언마운트되었으면 중단
+  if (!isMounted.value) return
+  
   // 프로젝트 ID 확인
   const projectId = currentProject.value?.id
   
@@ -955,6 +1023,7 @@ const loadDashboardStats = async () => {
       { taskSeq: 5, taskTitle: '테스트 케이스 작성', taskStatus: 'COMPLETED', assigneeName: '정우진' }
     ]
     
+    if (!isMounted.value) return
     allTasks.value = mockTasks
     inProgressTasks.value = mockTasks.filter(task => task.taskStatus === 'IN_PROGRESS')
     completedTasks.value = mockTasks.filter(task => task.taskStatus === 'COMPLETED')
@@ -971,10 +1040,14 @@ const loadDashboardStats = async () => {
   }
   
   try {
+    if (!isMounted.value) return
     isLoadingStats.value = true
     
     // 프로젝트의 모든 업무 조회
     const tasks = await getProjectTasks(projectId)
+    
+    // 컴포넌트가 언마운트되었으면 중단
+    if (!isMounted.value) return
     
     // 안전하게 배열로 변환
     allTasks.value = Array.isArray(tasks) ? tasks : []
@@ -990,6 +1063,7 @@ const loadDashboardStats = async () => {
       }
     })
     
+    if (!isMounted.value) return
     allTasks.value = actualTasks
     
     // 진행중인 업무 필터링
@@ -1013,14 +1087,19 @@ const loadDashboardStats = async () => {
     // 팀 멤버 목록 조회
     try {
       const members = await getWorkspaceMembers(projectId)
+      if (!isMounted.value) return
       teamMembers.value = members || []
     } catch (memberError) {
       console.warn('팀 멤버 조회 실패:', memberError)
+      if (!isMounted.value) return
       teamMembers.value = []
     }
     
   } catch (error) {
     console.error('대시보드 통계 로드 실패:', error)
+    
+    // 컴포넌트가 언마운트되었으면 중단
+    if (!isMounted.value) return
     
     // API 실패 시 mock 데이터 사용
     const mockTasks = [
@@ -1044,7 +1123,9 @@ const loadDashboardStats = async () => {
       { memberSeq: 5, name: '정우진', role: 'QA Engineer' }
     ]
   } finally {
-    isLoadingStats.value = false
+    if (isMounted.value) {
+      isLoadingStats.value = false
+    }
   }
 }
 
@@ -1386,20 +1467,27 @@ const getDayChartData = (startDate, endDate) => {
     const currentDay = new Date(weekStart)
     currentDay.setDate(currentDay.getDate() + i)
     
-    // 마지막 페이지에서는 종료일까지만 표시
+    // 종료일을 넘어가면 중단
     if (currentDay > endDate) {
-      // 마지막 페이지이고 종료일이 아직 추가되지 않았다면 종료일 추가
-      if (isLastPage && labels.length > 0 && currentDay.getDate() !== endDate.getDate()) {
-        labels.push(`${endDate.getMonth() + 1}/${endDate.getDate()}`)
-        actualData.push(getActualProgressByDate(endDate))
-        plannedData.push(getPlannedProgressByDate(endDate))
-      }
       break
     }
     
     labels.push(`${currentDay.getMonth() + 1}/${currentDay.getDate()}`)
     actualData.push(getActualProgressByDate(currentDay))
     plannedData.push(getPlannedProgressByDate(currentDay))
+  }
+  
+  // 마지막 페이지에서 종료일이 아직 포함되지 않았다면 추가
+  if (isLastPage && labels.length > 0) {
+    const lastLabel = labels[labels.length - 1]
+    const endDateLabel = `${endDate.getMonth() + 1}/${endDate.getDate()}`
+    
+    // 마지막 라벨이 종료일이 아니면 종료일 추가
+    if (lastLabel !== endDateLabel) {
+      labels.push(endDateLabel)
+      actualData.push(getActualProgressByDate(endDate))
+      plannedData.push(getPlannedProgressByDate(endDate))
+    }
   }
   
   return {
@@ -1659,13 +1747,31 @@ const updateChart = () => {
   createChart()
 }
 
+// 컴포넌트 마운트 상태 추적
+const isMounted = ref(false)
+
+// 워크스페이스 변경 감지하여 데이터 다시 로드
+watch(() => workspaceStore.currentWorkspace, async (newWorkspace, oldWorkspace) => {
+  if (isMounted.value && newWorkspace && newWorkspace !== oldWorkspace && oldWorkspace) {
+    console.log('워크스페이스 변경 감지:', oldWorkspace, '→', newWorkspace)
+    // 데이터 다시 로드
+    try {
+      await loadDashboardStats()
+    } catch (error) {
+      console.error('대시보드 데이터 로드 실패:', error)
+    }
+  }
+}, { immediate: false })
+
 // Lifecycle
 onMounted(async () => {
+  isMounted.value = true
   await createChart()
   await loadDashboardStats()
 })
 
 onUnmounted(() => {
+  isMounted.value = false
   if (chartInstance) {
     chartInstance.destroy()
   }
@@ -1727,9 +1833,17 @@ watch([allTasks, inProgressTasks, completedTasks, teamMembers], () => {
   z-index: 100;
 }
 
+.stat-col {
+  display: flex;
+  flex-direction: column;
+}
+
 .stat-card-wrapper {
   position: relative;
   width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
 }
 
 .stat-card {
@@ -1738,6 +1852,15 @@ watch([allTasks, inProgressTasks, completedTasks, teamMembers], () => {
   transition: all 0.2s ease;
   cursor: pointer;
   overflow: visible;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.stat-card :deep(.v-card) {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
 }
 
 .stat-card-with-dropdown {
@@ -1755,6 +1878,9 @@ watch([allTasks, inProgressTasks, completedTasks, teamMembers], () => {
 
 .stat-card .v-card-text {
   padding: 20px;
+  display: flex;
+  align-items: center;
+  min-height: 104px;
 }
 
 .stat-icon {
