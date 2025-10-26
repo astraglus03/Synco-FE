@@ -461,29 +461,17 @@
           </v-card-title>
 
           <v-card-text>
-            <div class="assignee-tasks">
+            <div v-if="filteredTasksByAssignee.length > 0" class="assignee-tasks scrollable-list">
               <div
                 v-for="task in filteredTasksByAssignee"
                 :key="task.id"
                 class="assignee-task-item"
               >
-                <div class="task-marker" :style="{ backgroundColor: getBoardColor(task.boardId) }"></div>
+                <div class="task-marker" :style="{ backgroundColor: getPriorityColor(task.priority) }"></div>
                 <div class="task-content">
                   <div class="task-header">
                     <span class="task-title">{{ task.title }}</span>
-                    <v-chip
-                      :color="getBoardColor(task.boardId)"
-                      size="x-small"
-                      variant="flat"
-                      class="board-chip"
-                    >
-                      {{ getBoardName(task.boardId) }}
-                    </v-chip>
-                  </div>
-                  <div class="task-period">
-                    {{ formatDateRange(task.startDate, task.endDate) }}
-                  </div>
-                  <div class="task-meta">
+                    <div class="task-chips">
                     <v-chip
                       :color="getPriorityColor(task.priority)"
                       size="x-small"
@@ -492,25 +480,28 @@
                       {{ getPriorityText(task.priority) }}
                     </v-chip>
                     <v-chip
-                      :color="getProgressColor(task.progress)"
+                        :color="getMilestoneColor(task.status)"
                       size="x-small"
-                      variant="flat"
                       class="status-chip"
                     >
-                      {{ getProgressStatusText(task.progress) }}
+                        {{ getMilestoneStatusText(task.status) }}
                     </v-chip>
                   </div>
-                  <div class="task-progress-section">
-                    <v-progress-linear
-                      :model-value="task.progress"
-                      :color="getProgressColor(task.progress)"
-                      height="6"
-                      rounded
-                    />
-                    <span class="progress-text">{{ task.progress }}%</span>
                   </div>
+                  <div class="task-period">
+                    <v-icon size="small">mdi-calendar-range</v-icon>
+                    {{ formatDateRange(task.startDate, task.endDate) }}
+                </div>
+                  <div class="task-assignee-info">
+                    <v-icon size="small">mdi-account</v-icon>
+                    {{ task.assignee }}
+              </div>
                 </div>
               </div>
+            </div>
+            <div v-else class="empty-state">
+              <v-icon size="large" color="grey-lighten-1">mdi-clipboard-text-off-outline</v-icon>
+              <span class="empty-text">담당 업무가 없습니다</span>
             </div>
           </v-card-text>
         </v-card>
@@ -560,6 +551,7 @@
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useProjectScheduleStore } from '@/store/projectScheduleStore'
 import { useWorkspaceMemberStore } from '@/store/workspaceMemberStore'
+import { useAuthStore } from '@/store/authStore'
 import { getProjectTasks } from '@/api/schedule/scheduleApi'
 import { getWorkspaceMembers } from '@/api/workspace/workSpaceApi'
 
@@ -574,6 +566,7 @@ const emit = defineEmits(['toggle-member-sidebar'])
 // Store
 const scheduleStore = useProjectScheduleStore()
 const memberStore = useWorkspaceMemberStore()
+const authStore = useAuthStore()
 
 // Refs
 const progressChart = ref(null)
@@ -742,17 +735,67 @@ const upcomingMilestones = computed(() => {
 
 const recentActivities = computed(() => scheduleStore.getRecentActivities)
 
+// 담당자 옵션 (memberList에서 가져오기)
 const assigneeOptions = computed(() => {
-  const assignees = [...new Set(scheduleStore.tasks.map(t => t.assignee))]
-  return ['내 업무', '전체', ...assignees]
+  if (!teamMembers.value || teamMembers.value.length === 0) return ['내 업무', '전체']
+  
+  const memberNames = teamMembers.value.map(member => member.name)
+  return ['내 업무', '전체', ...memberNames]
 })
 
+// 담당자별 업무 필터링
 const filteredTasksByAssignee = computed(() => {
+  if (!allTasks.value || allTasks.value.length === 0) return []
+  
+  const now = new Date()
+  now.setHours(0, 0, 0, 0)
+  
+  let filteredTasks = allTasks.value
+  
+  // 담당자 필터링
   if (selectedAssignee.value === '내 업무') {
-    // 실제로는 현재 로그인한 사용자의 업무를 반환
-    return scheduleStore.getTasksByAssignee('김민수').slice(0, 3)
+    // 현재 로그인한 사용자의 업무만 표시
+    const currentUserName = authStore.user?.name || authStore.user?.memberId
+    filteredTasks = filteredTasks.filter(task => {
+      const assigneeName = getMemberName(task.picMemberSeq) || task.assigneeName
+      return assigneeName === currentUserName
+    })
+  } else if (selectedAssignee.value !== '전체') {
+    // 특정 담당자의 업무만 표시
+    filteredTasks = filteredTasks.filter(task => {
+      const assigneeName = getMemberName(task.picMemberSeq) || task.assigneeName
+      return assigneeName === selectedAssignee.value
+    })
   }
-  return scheduleStore.getTasksByAssignee(selectedAssignee.value).slice(0, 5)
+  
+  // 우선순위 및 날짜 정보 추가
+  return filteredTasks
+    .map(task => {
+      const endDate = new Date(task.endDate)
+      endDate.setHours(0, 0, 0, 0)
+      const daysRemaining = Math.ceil((endDate - now) / (24 * 60 * 60 * 1000))
+      
+      // 남은 일수에 따라 우선순위 자동 설정
+      let priority = 'high'
+      if (daysRemaining >= 14) {
+        priority = 'low'
+      } else if (daysRemaining >= 10) {
+        priority = 'medium'
+      }
+      
+      return {
+        id: task.taskSeq,
+        title: task.taskTitle,
+        startDate: task.startDate || task.endDate, // startDate가 없으면 endDate 사용
+        endDate: task.endDate,
+        priority: priority,
+        progress: task.progress || 0,
+        status: task.taskStatus || task.status,
+        boardId: task.boardId,
+        assignee: getMemberName(task.picMemberSeq) || task.assigneeName || '미지정'
+      }
+    })
+    .sort((a, b) => new Date(a.endDate) - new Date(b.endDate)) // 마감일 빠른 순
 })
 
 const periodData = computed(() => {
@@ -2315,8 +2358,27 @@ watch([allTasks, inProgressTasks, completedTasks, teamMembers], () => {
 }
 
 .assignee-tasks {
-  max-height: 500px;
+  max-height: 600px;
   overflow-y: auto;
+  padding-right: 4px;
+}
+
+.assignee-tasks::-webkit-scrollbar {
+  width: 6px;
+}
+
+.assignee-tasks::-webkit-scrollbar-track {
+  background: #f1f5f9;
+  border-radius: 3px;
+}
+
+.assignee-tasks::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 3px;
+}
+
+.assignee-tasks::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
 }
 
 .assignee-task-item {
@@ -2351,16 +2413,35 @@ watch([allTasks, inProgressTasks, completedTasks, teamMembers], () => {
   margin-bottom: 8px;
 }
 
+.task-chips {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
 .task-title {
   font-size: 14px;
   font-weight: 600;
   color: #1e293b;
+  flex: 1;
 }
 
 .task-period {
+  display: flex;
+  align-items: center;
+  gap: 4px;
   font-size: 12px;
   color: #64748b;
-  margin-bottom: 8px;
+  margin-bottom: 6px;
+}
+
+.task-assignee-info {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: #64748b;
 }
 
 .task-meta {
