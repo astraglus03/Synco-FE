@@ -29,17 +29,17 @@
           @mouseleave="showInProgressDropdown = false"
         >
           <v-card class="stat-card stat-card-warning stat-card-with-dropdown">
-            <v-card-text class="d-flex align-center">
-              <div class="stat-icon warning">
-                <v-icon size="32" color="white">mdi-clipboard-check</v-icon>
-              </div>
-              <div class="stat-content">
-                <div class="stat-label">진행중인 업무</div>
-                <div class="stat-value">{{ inProgressTaskCount }}</div>
-                <div class="stat-description">할 일 보드</div>
-              </div>
-            </v-card-text>
-          </v-card>
+          <v-card-text class="d-flex align-center">
+            <div class="stat-icon warning">
+              <v-icon size="32" color="white">mdi-clipboard-check</v-icon>
+            </div>
+            <div class="stat-content">
+              <div class="stat-label">진행중인 업무</div>
+              <div class="stat-value">{{ inProgressTaskCount }}</div>
+              <div class="stat-description">할 일 보드</div>
+            </div>
+          </v-card-text>
+        </v-card>
           
           <!-- 진행중인 업무 드롭다운 -->
           <div v-if="showInProgressDropdown" class="task-dropdown">
@@ -81,17 +81,17 @@
           @mouseleave="showCompletedDropdown = false"
         >
           <v-card class="stat-card stat-card-success stat-card-with-dropdown">
-            <v-card-text class="d-flex align-center">
-              <div class="stat-icon success">
-                <v-icon size="32" color="white">mdi-check-circle</v-icon>
-              </div>
-              <div class="stat-content">
-                <div class="stat-label">완료된 업무</div>
-                <div class="stat-value">{{ completedTaskCount }}</div>
-                <div class="stat-description">완료 보드</div>
-              </div>
-            </v-card-text>
-          </v-card>
+          <v-card-text class="d-flex align-center">
+            <div class="stat-icon success">
+              <v-icon size="32" color="white">mdi-check-circle</v-icon>
+            </div>
+            <div class="stat-content">
+              <div class="stat-label">완료된 업무</div>
+              <div class="stat-value">{{ completedTaskCount }}</div>
+              <div class="stat-description">완료 보드</div>
+            </div>
+          </v-card-text>
+        </v-card>
           
           <!-- 완료된 업무 드롭다운 -->
           <div v-if="showCompletedDropdown" class="task-dropdown">
@@ -202,6 +202,29 @@
         <!-- 차트 영역 -->
         <div class="chart-container">
           <canvas ref="progressChart"></canvas>
+        </div>
+
+        <!-- 페이지네이션 버튼 -->
+        <div v-if="showPagination" class="chart-pagination">
+          <v-btn
+            :disabled="currentPage === 0"
+            @click="previousPage"
+            size="small"
+            variant="outlined"
+            icon
+          >
+            <v-icon>mdi-chevron-left</v-icon>
+          </v-btn>
+          <span class="page-info">{{ currentPage + 1 }} / {{ totalPages }}</span>
+          <v-btn
+            :disabled="currentPage >= totalPages - 1"
+            @click="nextPage"
+            size="small"
+            variant="outlined"
+            icon
+          >
+            <v-icon>mdi-chevron-right</v-icon>
+          </v-btn>
         </div>
 
         <!-- 기간별 진행 현황 -->
@@ -470,6 +493,12 @@ const showInProgressDropdown = ref(false)
 const showCompletedDropdown = ref(false)
 const isLoadingStats = ref(false)
 
+// 프로젝트 기간 관련
+const projectStartDate = ref(null)
+const projectEndDate = ref(null)
+const currentPage = ref(0) // 페이지네이션용
+const totalPages = ref(1) // 전체 페이지 수
+
 // Computed
 const currentProject = computed(() => scheduleStore.getCurrentProject)
 
@@ -503,6 +532,28 @@ const activeTeamMemberCount = computed(() => {
   return Array.isArray(teamMembers.value) ? teamMembers.value.length : 0
 })
 
+// 페이지네이션 표시 여부
+const showPagination = computed(() => {
+  const { months } = calculateProjectDates()
+  
+  if (timeFilter.value === 'month') {
+    return months > 3 // 4개월 이상일 때 페이지네이션 표시
+  } else if (timeFilter.value === 'week') {
+    const weeks = getWeeksInRange(projectStartDate.value, projectEndDate.value)
+    return weeks > 4 // 5주 이상일 때 페이지네이션 표시
+  } else if (timeFilter.value === 'day') {
+    return true // 일 단위는 항상 페이지네이션 표시
+  } else if (timeFilter.value === 'custom') {
+    // 사용자 정의 기간도 7일 이상이면 페이지네이션 표시
+    const customStart = new Date(customStartDate.value)
+    const customEnd = new Date(customEndDate.value)
+    const daysDiff = Math.floor((customEnd - customStart) / (24 * 60 * 60 * 1000))
+    return daysDiff >= 7
+  }
+  
+  return false
+})
+
 const upcomingDeadlines = computed(() => scheduleStore.getUpcomingDeadlines)
 const upcomingMilestones = computed(() => scheduleStore.getUpcomingMilestones)
 const recentActivities = computed(() => scheduleStore.getRecentActivities)
@@ -521,181 +572,145 @@ const filteredTasksByAssignee = computed(() => {
 })
 
 const periodData = computed(() => {
+  const { startDate, endDate, months } = calculateProjectDates()
+  
+  if (!startDate || !endDate) return []
+  
+  const result = []
+  
   if (timeFilter.value === 'month') {
-    return [
-      {
-        id: 1,
-        name: '2025년 9월',
-        phase: '기획 + 설계',
-        progress: 25,
-        status: 'completed',
-        statusText: '완료',
-        totalTasks: 4,
-        completedTasks: 4
-      },
-      {
-        id: 2,
-        name: '2025년 10월',
-        phase: '설계 + 개발',
-        progress: 18,
-        status: 'in-progress',
-        statusText: '진행중',
-        totalTasks: 6,
-        completedTasks: 1
-      },
-      {
-        id: 3,
-        name: '2025년 11월',
-        phase: '개발 + 테스트',
-        progress: 0,
-        status: 'pending',
-        statusText: '대기',
-        totalTasks: 6,
-        completedTasks: 0
-      },
-      {
-        id: 4,
-        name: '2025년 12월',
-        phase: '테스트 + 배포',
-        progress: 0,
-        status: 'pending',
-        statusText: '대기',
-        totalTasks: 6,
-        completedTasks: 0
-      }
-    ]
+    const displayMonths = months <= 3 ? 3 : 4
+    const startMonth = currentPage.value * 4
+    
+    for (let i = 0; i < displayMonths; i++) {
+      const monthIndex = startMonth + i
+      if (monthIndex >= months) break
+      
+      const periodStart = new Date(startDate)
+      periodStart.setMonth(periodStart.getMonth() + monthIndex)
+      periodStart.setDate(1)
+      
+      const periodEnd = new Date(periodStart.getFullYear(), periodStart.getMonth() + 1, 0)
+      
+      const taskInfo = getPeriodTaskInfo(periodStart, periodEnd)
+      
+      result.push({
+        id: i + 1,
+        name: `${periodStart.getFullYear()}년 ${periodStart.getMonth() + 1}월`,
+        phase: getPhaseText(taskInfo.status),
+        progress: taskInfo.progress,
+        status: taskInfo.status,
+        statusText: getStatusText(taskInfo.status),
+        totalTasks: taskInfo.totalTasks,
+        completedTasks: taskInfo.completedTasks
+      })
+    }
+    return result
   } else if (timeFilter.value === 'week') {
-    return [
-      {
-        id: 1,
-        name: '9/30주',
-        phase: '기획 + 설계',
-        progress: 6,
-        status: 'completed',
-        statusText: '완료',
-        totalTasks: 7,
-        completedTasks: 7
-      },
-      {
-        id: 2,
-        name: '10/7주',
-        phase: '설계 + 개발',
-        progress: 6,
-        status: 'completed',
-        statusText: '완료',
-        totalTasks: 7,
-        completedTasks: 7
-      },
-      {
-        id: 3,
-        name: '10/14주',
-        phase: '설계 + 개발',
-        progress: 6,
-        status: 'completed',
-        statusText: '완료',
-        totalTasks: 3,
-        completedTasks: 3
-      },
-      {
-        id: 4,
-        name: '10/21주',
-        phase: '설계 + 개발',
-        progress: 1,
-        status: 'in-progress',
-        statusText: '진행중',
-        totalTasks: 6,
-        completedTasks: 0
-      }
-    ]
+    const totalWeeks = getWeeksInRange(startDate, endDate)
+    const displayWeeks = totalWeeks <= 4 ? 3 : 4
+    const startWeek = currentPage.value * 4
+    let currentWeekStart = getWeekStart(startDate)
+    
+    for (let i = 0; i < displayWeeks; i++) {
+      const weekIndex = startWeek + i
+      if (weekIndex >= totalWeeks) break
+      
+      const weekDate = new Date(currentWeekStart)
+      weekDate.setDate(weekDate.getDate() + (weekIndex * 7))
+      const weekEnd = getWeekEnd(weekDate)
+      
+      const taskInfo = getPeriodTaskInfo(weekDate, weekEnd)
+      
+      result.push({
+        id: i + 1,
+        name: `${weekDate.getMonth() + 1}/${weekDate.getDate()}`,
+        phase: getPhaseText(taskInfo.status),
+        progress: taskInfo.progress,
+        status: taskInfo.status,
+        statusText: getStatusText(taskInfo.status),
+        totalTasks: taskInfo.totalTasks,
+        completedTasks: taskInfo.completedTasks
+      })
+    }
+    return result
   } else if (timeFilter.value === 'day') {
-    return [
-      {
-        id: 1,
-        name: '10/8',
-        phase: '설계 + 개발',
-        progress: 1,
-        status: 'completed',
-        statusText: '완료',
-        totalTasks: 7,
-        completedTasks: 7
-      },
-      {
-        id: 2,
-        name: '10/9',
-        phase: '설계 + 개발',
-        progress: 1,
-        status: 'completed',
-        statusText: '완료',
-        totalTasks: 5,
-        completedTasks: 5
-      },
-      {
-        id: 3,
-        name: '10/10',
-        phase: '설계 + 개발',
-        progress: 1,
-        status: 'completed',
-        statusText: '완료',
-        totalTasks: 4,
-        completedTasks: 4
-      },
-      {
-        id: 4,
-        name: '10/11',
-        phase: '설계 + 개발',
-        progress: 1,
-        status: 'in-progress',
-        statusText: '진행중',
-        totalTasks: 4,
-        completedTasks: 2
-      }
-    ]
+    const weekStart = getWeekStart(new Date(startDate.getTime() + (currentPage.value * 7 * 24 * 60 * 60 * 1000)))
+    
+    for (let i = 0; i < 7; i++) {
+      const currentDay = new Date(weekStart)
+      currentDay.setDate(currentDay.getDate() + i)
+      
+      if (currentDay > endDate) break
+      
+      const dayEnd = new Date(currentDay)
+      dayEnd.setHours(23, 59, 59, 999)
+      
+      const taskInfo = getPeriodTaskInfo(currentDay, dayEnd)
+      
+      result.push({
+        id: i + 1,
+        name: `${currentDay.getMonth() + 1}/${currentDay.getDate()}`,
+        phase: getPhaseText(taskInfo.status),
+        progress: taskInfo.progress,
+        status: taskInfo.status,
+        statusText: getStatusText(taskInfo.status),
+        totalTasks: taskInfo.totalTasks,
+        completedTasks: taskInfo.completedTasks
+      })
+    }
+    return result
   } else {
-    // custom
-    return [
-      {
-        id: 1,
-        name: '2025년 9월',
-        phase: '기획 + 설계',
-        progress: 25,
-        status: 'completed',
-        statusText: '완료',
-        totalTasks: 4,
-        completedTasks: 4
-      },
-      {
-        id: 2,
-        name: '2025년 10월',
-        phase: '설계 + 개발',
-        progress: 18,
-        status: 'in-progress',
-        statusText: '진행중',
-        totalTasks: 6,
-        completedTasks: 1
-      },
-      {
-        id: 3,
-        name: '2025년 11월',
-        phase: '개발 + 테스트',
-        progress: 0,
-        status: 'pending',
-        statusText: '대기',
-        totalTasks: 6,
-        completedTasks: 0
-      },
-      {
-        id: 4,
-        name: '2025년 12월',
-        phase: '테스트 + 배포',
-        progress: 0,
-        status: 'pending',
-        statusText: '대기',
-        totalTasks: 6,
-        completedTasks: 0
-      }
-    ]
+    // custom - 사용자 정의 기간
+    const customStart = new Date(customStartDate.value)
+    const customEnd = new Date(customEndDate.value)
+    const weekStart = getWeekStart(new Date(customStart.getTime() + (currentPage.value * 7 * 24 * 60 * 60 * 1000)))
+    
+    for (let i = 0; i < 7; i++) {
+      const currentDay = new Date(weekStart)
+      currentDay.setDate(currentDay.getDate() + i)
+      
+      if (currentDay > customEnd) break
+      
+      const dayEnd = new Date(currentDay)
+      dayEnd.setHours(23, 59, 59, 999)
+      
+      const taskInfo = getPeriodTaskInfo(currentDay, dayEnd)
+      
+      result.push({
+        id: i + 1,
+        name: `${currentDay.getMonth() + 1}/${currentDay.getDate()}`,
+        phase: getPhaseText(taskInfo.status),
+        progress: taskInfo.progress,
+        status: taskInfo.status,
+        statusText: getStatusText(taskInfo.status),
+        totalTasks: taskInfo.totalTasks,
+        completedTasks: taskInfo.completedTasks
+      })
+    }
+    return result
   }
 })
+
+// 상태 텍스트 반환
+const getStatusText = (status) => {
+  const statusMap = {
+    'completed': '완료',
+    'in-progress': '진행중',
+    'pending': '대기'
+  }
+  return statusMap[status] || '대기'
+}
+
+// 단계 텍스트 반환
+const getPhaseText = (status) => {
+  const phaseMap = {
+    'completed': '완료됨',
+    'in-progress': '진행중',
+    'pending': '예정'
+  }
+  return phaseMap[status] || '예정'
+}
 
 // Methods
 // 대시보드 통계 데이터 로드
@@ -811,6 +826,58 @@ const toggleMemberSidebar = () => {
   emit('toggle-member-sidebar')
 }
 
+// 페이지네이션 - 이전 페이지
+const previousPage = () => {
+  if (currentPage.value > 0) {
+    currentPage.value--
+    updateChart()
+  }
+}
+
+// 페이지네이션 - 다음 페이지
+const nextPage = () => {
+  if (currentPage.value < totalPages.value - 1) {
+    currentPage.value++
+    updateChart()
+  }
+}
+
+// 전체 페이지 수 계산
+const calculateTotalPages = () => {
+  const { months } = calculateProjectDates()
+  
+  if (timeFilter.value === 'month') {
+    if (months <= 3) {
+      totalPages.value = 1
+    } else {
+      totalPages.value = Math.ceil(months / 4)
+    }
+  } else if (timeFilter.value === 'week') {
+    const weeks = getWeeksInRange(projectStartDate.value, projectEndDate.value)
+    if (weeks <= 4) {
+      totalPages.value = 1
+    } else {
+      totalPages.value = Math.ceil(weeks / 4)
+    }
+  } else if (timeFilter.value === 'day') {
+    const totalDays = Math.floor((projectEndDate.value - projectStartDate.value) / (24 * 60 * 60 * 1000))
+    totalPages.value = Math.ceil(totalDays / 7)
+  } else if (timeFilter.value === 'custom') {
+    // 사용자 정의 기간
+    const customStart = new Date(customStartDate.value)
+    const customEnd = new Date(customEndDate.value)
+    const totalDays = Math.floor((customEnd - customStart) / (24 * 60 * 60 * 1000))
+    
+    if (totalDays < 7) {
+      totalPages.value = 1
+    } else {
+      totalPages.value = Math.ceil(totalDays / 7)
+    }
+  } else {
+    totalPages.value = 1
+  }
+}
+
 // 멤버 이름 가져오기
 const getMemberName = (memberSeq) => {
   if (!memberSeq) return '미지정'
@@ -819,11 +886,331 @@ const getMemberName = (memberSeq) => {
   return member?.name || '미지정'
 }
 
+// 프로젝트 기간 계산
+const calculateProjectDates = () => {
+  if (!allTasks.value || allTasks.value.length === 0) {
+    return { startDate: null, endDate: null, months: 0 }
+  }
+
+  const dates = allTasks.value
+    .filter(task => task.startDate || task.endDate)
+    .flatMap(task => [task.startDate, task.endDate].filter(Boolean))
+    .map(date => new Date(date))
+    .filter(date => !isNaN(date.getTime()))
+
+  if (dates.length === 0) {
+    return { startDate: null, endDate: null, months: 0 }
+  }
+
+  const startDate = new Date(Math.min(...dates))
+  const endDate = new Date(Math.max(...dates))
+  
+  // 개월 수 계산 (년도 차이 * 12 + 월 차이 + 1)
+  const months = (endDate.getFullYear() - startDate.getFullYear()) * 12 + 
+                 (endDate.getMonth() - startDate.getMonth()) + 1
+
+  projectStartDate.value = startDate
+  projectEndDate.value = endDate
+  
+  // 사용자 정의 날짜 초기화 (처음 한 번만)
+  if (customStartDate.value === '2025-09-01' && customEndDate.value === '2025-12-31') {
+    customStartDate.value = startDate.toISOString().split('T')[0]
+    customEndDate.value = endDate.toISOString().split('T')[0]
+  }
+
+  return { startDate, endDate, months }
+}
+
+// 주의 시작일(일요일) 찾기
+const getWeekStart = (date) => {
+  const d = new Date(date)
+  const day = d.getDay()
+  const diff = d.getDate() - day
+  return new Date(d.setDate(diff))
+}
+
+// 주의 종료일(토요일) 찾기
+const getWeekEnd = (date) => {
+  const weekStart = getWeekStart(date)
+  return new Date(weekStart.getTime() + 6 * 24 * 60 * 60 * 1000)
+}
+
+// 날짜 범위의 주 수 계산
+const getWeeksInRange = (startDate, endDate) => {
+  const weekStart = getWeekStart(startDate)
+  const weekEnd = getWeekEnd(endDate)
+  const diffTime = weekEnd.getTime() - weekStart.getTime()
+  return Math.ceil(diffTime / (7 * 24 * 60 * 60 * 1000))
+}
+
+// 특정 날짜까지의 계획 진행률 계산 (마감일 기준)
+const getPlannedProgressByDate = (targetDate) => {
+  if (!allTasks.value || allTasks.value.length === 0) return 0
+  
+  // 해당 날짜 이전에 마감인 업무 개수
+  const tasksBeforeDate = allTasks.value.filter(task => {
+    if (!task.endDate) return false
+    return new Date(task.endDate) <= targetDate
+  })
+  
+  const progress = Math.round((tasksBeforeDate.length / allTasks.value.length) * 100)
+  return Math.max(0, progress)
+}
+
+// 특정 기간의 업무 정보 계산
+const getPeriodTaskInfo = (startDate, endDate) => {
+  if (!allTasks.value || allTasks.value.length === 0) {
+    return { totalTasks: 0, completedTasks: 0, progress: 0, status: 'pending' }
+  }
+  
+  // 해당 기간에 마감인 업무들
+  const periodTasks = allTasks.value.filter(task => {
+    if (!task.endDate) return false
+    const taskEnd = new Date(task.endDate)
+    return taskEnd >= startDate && taskEnd <= endDate
+  })
+  
+  const totalTasks = periodTasks.length
+  const completedTasks = periodTasks.filter(task => {
+    const status = task.taskStatus || task.status
+    return status === 'COMPLETED' || status === '완료' || status === 'DONE' || status === 'FINISHED'
+  }).length
+  
+  const progress = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0
+  
+  let status = 'pending'
+  if (completedTasks === totalTasks && totalTasks > 0) {
+    status = 'completed'
+  } else if (completedTasks > 0) {
+    status = 'in-progress'
+  }
+  
+  return { totalTasks, completedTasks, progress, status }
+}
+
+// 특정 날짜까지의 실제 진행률 계산 (완료된 업무 기준)
+const getActualProgressByDate = (targetDate) => {
+  if (!allTasks.value || allTasks.value.length === 0) return 0
+  
+  const now = new Date()
+  const target = new Date(targetDate)
+  
+  // 미래 날짜인 경우: 현재까지 완료된 업무 비율로 고정
+  if (target > now) {
+    const completedTasks = allTasks.value.filter(task => {
+      const status = task.taskStatus || task.status
+      return status === 'COMPLETED' || status === '완료' || status === 'DONE' || status === 'FINISHED'
+    })
+    const progress = Math.round((completedTasks.length / allTasks.value.length) * 100)
+    return Math.max(0, progress)
+  }
+  
+  // 과거 날짜인 경우: 해당 날짜까지 마감이면서 완료된 업무의 비율
+  const tasksUpToDate = allTasks.value.filter(task => {
+    if (!task.endDate) return false
+    return new Date(task.endDate) <= target
+  })
+  
+  if (tasksUpToDate.length === 0) return 0
+  
+  const completedTasksUpToDate = tasksUpToDate.filter(task => {
+    const status = task.taskStatus || task.status
+    return status === 'COMPLETED' || status === '완료' || status === 'DONE' || status === 'FINISHED'
+  })
+  
+  const progress = Math.round((completedTasksUpToDate.length / allTasks.value.length) * 100)
+  return Math.max(0, progress)
+}
+
+// 월별 차트 데이터 생성
+const getMonthChartData = (startDate, endDate, months) => {
+  const labels = []
+  const actualData = []
+  const plannedData = []
+  
+  // 3개월 이하면 3개월만 표시
+  const displayMonths = months <= 3 ? 3 : 4
+  const startMonth = currentPage.value * 4
+  
+  for (let i = 0; i < displayMonths; i++) {
+    const monthIndex = startMonth + i
+    if (monthIndex >= months) break
+    
+    const currentDate = new Date(startDate)
+    currentDate.setMonth(currentDate.getMonth() + monthIndex)
+    
+    // 월 마지막 날
+    const lastDay = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0)
+    
+    labels.push(`${currentDate.getMonth() + 1}월`)
+    actualData.push(getActualProgressByDate(lastDay))
+    plannedData.push(getPlannedProgressByDate(lastDay))
+  }
+  
+  return {
+    labels,
+    datasets: [
+      {
+        label: '계획된 진행률',
+        data: plannedData,
+        borderColor: '#6366f1',
+        backgroundColor: 'rgba(99, 102, 241, 0.1)',
+        tension: 0.4,
+        borderWidth: 2,
+        pointRadius: 6,
+        pointHoverRadius: 8,
+        pointBackgroundColor: '#6366f1',
+        pointBorderColor: '#fff',
+        pointBorderWidth: 2
+      },
+      {
+        label: '실제 진행률',
+        data: actualData,
+        borderColor: '#22c55e',
+        backgroundColor: 'rgba(34, 197, 94, 0.1)',
+        tension: 0.4,
+        borderWidth: 2,
+        pointRadius: 6,
+        pointHoverRadius: 8,
+        pointBackgroundColor: '#22c55e',
+        pointBorderColor: '#fff',
+        pointBorderWidth: 2
+      }
+    ]
+  }
+}
+
+// 주별 차트 데이터 생성
+const getWeekChartData = (startDate, endDate) => {
+  const labels = []
+  const actualData = []
+  const plannedData = []
+  
+  const totalWeeks = getWeeksInRange(startDate, endDate)
+  const displayWeeks = totalWeeks <= 4 ? 3 : 4
+  const startWeek = currentPage.value * 4
+  
+  let currentWeekStart = getWeekStart(startDate)
+  
+  for (let i = 0; i < displayWeeks; i++) {
+    const weekIndex = startWeek + i
+    if (weekIndex >= totalWeeks) break
+    
+    const weekDate = new Date(currentWeekStart)
+    weekDate.setDate(weekDate.getDate() + (weekIndex * 7))
+    const weekEnd = getWeekEnd(weekDate)
+    
+    labels.push(`${weekDate.getMonth() + 1}/${weekDate.getDate()}`)
+    actualData.push(getActualProgressByDate(weekEnd))
+    plannedData.push(getPlannedProgressByDate(weekEnd))
+  }
+  
+  return {
+    labels,
+    datasets: [
+      {
+        label: '계획된 진행률',
+        data: plannedData,
+        borderColor: '#6366f1',
+        backgroundColor: 'rgba(99, 102, 241, 0.1)',
+        tension: 0.4,
+        borderWidth: 2,
+        pointRadius: 6,
+        pointHoverRadius: 8,
+        pointBackgroundColor: '#6366f1',
+        pointBorderColor: '#fff',
+        pointBorderWidth: 2
+      },
+      {
+        label: '실제 진행률',
+        data: actualData,
+        borderColor: '#22c55e',
+        backgroundColor: 'rgba(34, 197, 94, 0.1)',
+        tension: 0.4,
+        borderWidth: 2,
+        pointRadius: 6,
+        pointHoverRadius: 8,
+        pointBackgroundColor: '#22c55e',
+        pointBorderColor: '#fff',
+        pointBorderWidth: 2
+      }
+    ]
+  }
+}
+
+// 일별 차트 데이터 생성
+const getDayChartData = (startDate, endDate) => {
+  const labels = []
+  const actualData = []
+  const plannedData = []
+  
+  const totalDays = Math.floor((endDate - startDate) / (24 * 60 * 60 * 1000)) + 1
+  const totalWeeks = Math.ceil(totalDays / 7)
+  const isLastPage = currentPage.value === totalWeeks - 1
+  
+  const weekStart = getWeekStart(new Date(startDate.getTime() + (currentPage.value * 7 * 24 * 60 * 60 * 1000)))
+  
+  for (let i = 0; i < 7; i++) {
+    const currentDay = new Date(weekStart)
+    currentDay.setDate(currentDay.getDate() + i)
+    
+    // 마지막 페이지에서는 종료일까지만 표시
+    if (currentDay > endDate) {
+      // 마지막 페이지이고 종료일이 아직 추가되지 않았다면 종료일 추가
+      if (isLastPage && labels.length > 0 && currentDay.getDate() !== endDate.getDate()) {
+        labels.push(`${endDate.getMonth() + 1}/${endDate.getDate()}`)
+        actualData.push(getActualProgressByDate(endDate))
+        plannedData.push(getPlannedProgressByDate(endDate))
+      }
+      break
+    }
+    
+    labels.push(`${currentDay.getMonth() + 1}/${currentDay.getDate()}`)
+    actualData.push(getActualProgressByDate(currentDay))
+    plannedData.push(getPlannedProgressByDate(currentDay))
+  }
+  
+  return {
+    labels,
+    datasets: [
+      {
+        label: '계획된 진행률',
+        data: plannedData,
+        borderColor: '#6366f1',
+        backgroundColor: 'rgba(99, 102, 241, 0.1)',
+        tension: 0.4,
+        borderWidth: 2,
+        pointRadius: 4,
+        pointHoverRadius: 6,
+        pointBackgroundColor: '#6366f1',
+        pointBorderColor: '#fff',
+        pointBorderWidth: 2
+      },
+      {
+        label: '실제 진행률',
+        data: actualData,
+        borderColor: '#22c55e',
+        backgroundColor: 'rgba(34, 197, 94, 0.1)',
+        tension: 0.4,
+        borderWidth: 2,
+        pointRadius: 4,
+        pointHoverRadius: 6,
+        pointBackgroundColor: '#22c55e',
+        pointBorderColor: '#fff',
+        pointBorderWidth: 2
+      }
+    ]
+  }
+}
+
 const formatProjectPeriod = () => {
-  const start = new Date(currentProject.value.startDate)
-  const end = new Date(currentProject.value.endDate)
-  const months = Math.floor((end - start) / (1000 * 60 * 60 * 24 * 30))
-  return `${start.getFullYear()}년 ${start.getMonth() + 1}월 ~ ${end.getMonth() + 1}월 (${months}개월)`
+  const { startDate, endDate, months } = calculateProjectDates()
+  
+  if (!startDate || !endDate) {
+    return '프로젝트 기간 정보 없음'
+  }
+  
+  return `${startDate.getFullYear()}년 ${startDate.getMonth() + 1}월 ~ ${endDate.getFullYear()}년 ${endDate.getMonth() + 1}월 (${months}개월)`
 }
 
 const getPeriodProgressTitle = () => {
@@ -1037,135 +1424,28 @@ const createChart = async () => {
 }
 
 const getChartData = () => {
+  const { startDate, endDate, months } = calculateProjectDates()
+  
+  if (!startDate || !endDate) {
+    // 데이터가 없을 때 기본값
+    return {
+      labels: [],
+      datasets: []
+    }
+  }
+
   if (timeFilter.value === 'month') {
-    return {
-      labels: ['9월', '10월', '11월', '12월'],
-      datasets: [
-        {
-          label: '계획된 진행률',
-          data: [25, 50, 75, 100],
-          borderColor: '#6366f1',
-          backgroundColor: 'rgba(99, 102, 241, 0.1)',
-          tension: 0.4,
-          borderWidth: 2,
-          pointRadius: 6,
-          pointHoverRadius: 8,
-          pointBackgroundColor: '#6366f1',
-          pointBorderColor: '#fff',
-          pointBorderWidth: 2
-        },
-        {
-          label: '실제 진행률',
-          data: [20, 45, 60, 65],
-          borderColor: '#22c55e',
-          backgroundColor: 'rgba(34, 197, 94, 0.1)',
-          tension: 0.4,
-          borderWidth: 2,
-          pointRadius: 6,
-          pointHoverRadius: 8,
-          pointBackgroundColor: '#22c55e',
-          pointBorderColor: '#fff',
-          pointBorderWidth: 2
-        }
-      ]
-    }
+    return getMonthChartData(startDate, endDate, months)
   } else if (timeFilter.value === 'week') {
-    return {
-      labels: ['9/30주', '10/7주', '10/14주', '10/21주'],
-      datasets: [
-        {
-          label: '계획된 진행률',
-          data: [25, 55, 80, 100],
-          borderColor: '#6366f1',
-          backgroundColor: 'rgba(99, 102, 241, 0.1)',
-          tension: 0.4,
-          borderWidth: 2,
-          pointRadius: 6,
-          pointHoverRadius: 8,
-          pointBackgroundColor: '#6366f1',
-          pointBorderColor: '#fff',
-          pointBorderWidth: 2
-        },
-        {
-          label: '실제 진행률',
-          data: [10, 20, 15, 5],
-          borderColor: '#22c55e',
-          backgroundColor: 'rgba(34, 197, 94, 0.1)',
-          tension: 0.4,
-          borderWidth: 2,
-          pointRadius: 6,
-          pointHoverRadius: 8,
-          pointBackgroundColor: '#22c55e',
-          pointBorderColor: '#fff',
-          pointBorderWidth: 2
-        }
-      ]
-    }
+    return getWeekChartData(startDate, endDate)
   } else if (timeFilter.value === 'day') {
-    return {
-      labels: ['10/8', '10/9', '10/10', '10/11', '10/12', '10/13', '10/14', '10/15', '10/16', '10/17', '10/18', '10/19', '10/20', '10/21'],
-      datasets: [
-        {
-          label: '계획된 진행률',
-          data: [10, 20, 30, 40, 50, 60, 65, 70, 75, 80, 85, 90, 92, 95],
-          borderColor: '#6366f1',
-          backgroundColor: 'rgba(99, 102, 241, 0.1)',
-          tension: 0.4,
-          borderWidth: 2,
-          pointRadius: 4,
-          pointHoverRadius: 6,
-          pointBackgroundColor: '#6366f1',
-          pointBorderColor: '#fff',
-          pointBorderWidth: 2
-        },
-        {
-          label: '실제 진행률',
-          data: [5, 6, 7, 8, 9, 10, 9, 8, 9, 10, 11, 10, 9, 10],
-          borderColor: '#22c55e',
-          backgroundColor: 'rgba(34, 197, 94, 0.1)',
-          tension: 0.4,
-          borderWidth: 2,
-          pointRadius: 4,
-          pointHoverRadius: 6,
-          pointBackgroundColor: '#22c55e',
-          pointBorderColor: '#fff',
-          pointBorderWidth: 2
-        }
-      ]
-    }
+    return getDayChartData(startDate, endDate)
   } else {
-    // custom
-    return {
-      labels: ['9월', '10월', '11월', '12월'],
-      datasets: [
-        {
-          label: '계획된 진행률',
-          data: [25, 50, 75, 100],
-          borderColor: '#6366f1',
-          backgroundColor: 'rgba(99, 102, 241, 0.1)',
-          tension: 0.4,
-          borderWidth: 2,
-          pointRadius: 6,
-          pointHoverRadius: 8,
-          pointBackgroundColor: '#6366f1',
-          pointBorderColor: '#fff',
-          pointBorderWidth: 2
-        },
-        {
-          label: '실제 진행률',
-          data: [20, 45, 60, 65],
-          borderColor: '#22c55e',
-          backgroundColor: 'rgba(34, 197, 94, 0.1)',
-          tension: 0.4,
-          borderWidth: 2,
-          pointRadius: 6,
-          pointHoverRadius: 8,
-          pointBackgroundColor: '#22c55e',
-          pointBorderColor: '#fff',
-          pointBorderWidth: 2
-        }
-      ]
-    }
+    // custom - 사용자 정의 기간
+    const customStart = new Date(customStartDate.value)
+    const customEnd = new Date(customEndDate.value)
+    
+    return getDayChartData(customStart, customEnd)
   }
 }
 
@@ -1190,18 +1470,26 @@ onUnmounted(() => {
 
 // Watch
 watch(timeFilter, () => {
+  currentPage.value = 0 // 필터 변경 시 첫 페이지로
+  calculateTotalPages()
   updateChart()
 })
 
 watch([customStartDate, customEndDate], () => {
   if (timeFilter.value === 'custom') {
+    currentPage.value = 0 // 날짜 변경 시 첫 페이지로
+    calculateTotalPages()
     updateChart()
   }
 })
 
-// 통계 데이터 변화 감지
+// 통계 데이터 변화 감지 - 차트 업데이트
 watch([allTasks, inProgressTasks, completedTasks, teamMembers], () => {
-  // 통계 데이터가 변경될 때 필요한 로직이 있다면 여기에 추가
+  // 데이터가 변경되면 차트 업데이트
+  if (allTasks.value.length > 0) {
+    calculateTotalPages()
+    updateChart()
+  }
 }, { deep: true })
 </script>
 
@@ -1401,8 +1689,25 @@ watch([allTasks, inProgressTasks, completedTasks, teamMembers], () => {
 
 .chart-container {
   height: 220px;
-  margin-bottom: 32px;
+  margin-bottom: 16px;
   padding: 0 8px;
+}
+
+.chart-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  margin-bottom: 24px;
+  padding: 12px 0;
+}
+
+.page-info {
+  font-size: 14px;
+  font-weight: 500;
+  color: #64748b;
+  min-width: 60px;
+  text-align: center;
 }
 
 .period-progress-section h4 {
