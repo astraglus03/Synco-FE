@@ -35,9 +35,6 @@ const newChannelName = ref('')
 const showCreateMeetingModal = ref(false)
 const newMeetingName = ref('')
 
-// 팀 일정 생성 모달 상태
-const showCreateScheduleModal = ref(false)
-const newScheduleName = ref('')
 
 // 채널 설정 모달 상태
 const showChannelSettingsModal = ref(false)
@@ -190,6 +187,47 @@ const personalChannels = ref([
   { id: 'profile', name: '마이페이지', icon: 'mdi-account-cog', type: 'main' }
 ])
 
+// 프로젝트 워크스페이스 채널 목록
+const projectChannels = ref([
+  { id: 'dashboard', name: '프로젝트 대시보드', icon: 'mdi-view-dashboard', type: 'main' },
+  { 
+    id: 'chat', 
+    name: '프로젝트 채팅', 
+    icon: 'mdi-chat', 
+    type: 'main',
+    expanded: true,  // 기본값: 펼침
+    subChannels: [
+      { id: 'general', name: '일반', type: 'text', unread: 3 },
+      { id: 'marketing', name: '마케팅', type: 'text', unread: 0 },
+      { id: 'development', name: '개발', type: 'text', unread: 1 }
+    ]
+  },
+  { 
+    id: 'schedule', 
+    name: '프로젝트 일정관리', 
+    icon: 'mdi-calendar-check', 
+    type: 'main',
+    expanded: false,
+    subChannels: [
+      { id: 'team-schedule', name: '팀 일정관리', type: 'schedule' },
+      { id: 'personal-schedule', name: '개인 일정관리', type: 'schedule' }
+    ]
+  },
+  { id: 'drive', name: '드라이브', icon: 'mdi-folder', type: 'main' },
+  { 
+    id: 'meeting', 
+    name: '화상회의', 
+    icon: 'mdi-video', 
+    type: 'main',
+    expanded: false,
+    subChannels: [
+      { id: 'general-meeting', name: '일반 회의실', type: 'video', isActive: false },
+      { id: 'project-meeting', name: '프로젝트 회의실', type: 'video', isActive: true },
+      { id: 'brainstorming', name: '브레인스토밍', type: 'video', isActive: false }
+    ]
+  }
+])
+
 // 1:1 채팅 목록 (개인 워크스페이스일 때만)
 const directMessages = ref([
   { id: 'kim_minsu', name: '김민수', status: 'online', lastMessage: '안녕하세요!', time: '5분 전', unread: 2 },
@@ -243,6 +281,10 @@ const currentChannels = computed(() => {
       icon: 'mdi-calendar-check', 
       type: 'main',
       expanded: scheduleExpanded.value,
+      subChannels: [
+        { id: 'team-schedule', name: '팀 일정관리', type: 'schedule' },
+        { id: 'personal-schedule', name: '개인 일정관리', type: 'schedule' }
+      ],
       scheduleData: workspaceMemberStore.scheduleChannels // 멤버 정보를 위한 데이터
     },
     { id: 'drive', name: '드라이브', icon: 'mdi-folder', type: 'main' },
@@ -588,7 +630,7 @@ const createSchedule = () => {
   }
   
   // 프로젝트 일정관리의 하위 채널에 추가
-  const scheduleChannel = currentChannels.value.find(ch => ch.id === 'schedule')
+  const scheduleChannel = projectChannels.value.find(ch => ch.id === 'schedule')
   if (scheduleChannel && scheduleChannel.subChannels) {
     scheduleChannel.subChannels.push(newSchedule)
   }
@@ -774,14 +816,6 @@ const getStatusColor = (status) => {
             </v-icon>
             
             
-            <!-- 프로젝트 일정 생성 버튼 (프로젝트 일정관리일 때만) -->
-            <v-icon 
-              v-if="channel.id === 'schedule' && workspaceType === 'project' && (!collapsed || workspaceType === 'personal')"
-              class="create-channel-btn"
-              @click.stop="showCreateScheduleModal = true"
-            >
-              mdi-plus
-            </v-icon>
             
             <!-- 채널 설정 버튼 (채팅, 일정관리, 화상회의만 최상위에 표시, 드라이브 제외) -->
             <!-- 모든 멤버가 권한 목록을 조회할 수 있도록 톱니바퀴 표시 -->
@@ -824,7 +858,7 @@ const getStatusColor = (status) => {
               @mouseleave="hoveredChannel = null"
             >
               <v-icon class="subchannel-icon">
-                {{ subChannel.type === 'video' ? 'mdi-video' : subChannel.type === 'schedule' ? 'mdi-calendar' : 'mdi-pound' }}
+                {{ subChannel.type === 'video' ? 'mdi-video' : subChannel.type === 'schedule' ? 'mdi-pound' : 'mdi-pound' }}
               </v-icon>
               <span class="subchannel-name">{{ subChannel.name }}</span>
               
@@ -1065,53 +1099,6 @@ const getStatusColor = (status) => {
     </v-card>
   </v-dialog>
 
-  <!-- 팀 일정 생성 모달 -->
-  <v-dialog v-model="showCreateScheduleModal" max-width="400">
-    <v-card class="create-schedule-modal">
-      <div class="modal-header">
-        <div class="header-content">
-          <v-icon class="header-icon">mdi-calendar-plus</v-icon>
-          <h3 class="modal-title">새 일정 만들기</h3>
-        </div>
-        <v-btn
-          icon="mdi-close"
-          variant="text"
-          size="small"
-          @click="closeCreateScheduleModal"
-        />
-      </div>
-      
-      <div class="modal-body">
-        <div class="input-group">
-          <label class="input-label">일정 이름</label>
-          <v-text-field
-            v-model="newScheduleName"
-            placeholder="예: 프로젝트 일정"
-            variant="outlined"
-            density="compact"
-            hide-details
-            @keyup.enter="createSchedule"
-          />
-        </div>
-      </div>
-      
-      <div class="modal-actions">
-        <v-btn
-          variant="text"
-          @click="closeCreateScheduleModal"
-        >
-          취소
-        </v-btn>
-        <v-btn
-          color="primary"
-          :disabled="!newScheduleName.trim()"
-          @click="createSchedule"
-        >
-          만들기
-        </v-btn>
-      </div>
-    </v-card>
-  </v-dialog>
 
   <!-- 채널 설정 모달 -->
   <v-dialog v-model="showChannelSettingsModal" max-width="600" scrollable>
@@ -1573,8 +1560,7 @@ const getStatusColor = (status) => {
 
 /* 채널 생성 모달 */
 .create-channel-modal,
-.create-meeting-modal,
-.create-schedule-modal {
+.create-meeting-modal {
   background: rgb(var(--v-theme-surface));
 }
 
