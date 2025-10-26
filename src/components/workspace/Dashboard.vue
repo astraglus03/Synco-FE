@@ -23,73 +23,107 @@
       </v-col>
 
       <v-col cols="12" sm="6" md="3">
-        <v-card 
-          class="stat-card stat-card-warning" 
+        <div 
+          class="stat-card-wrapper"
           @mouseenter="showInProgressDropdown = true"
           @mouseleave="showInProgressDropdown = false"
         >
-          <v-card-text class="d-flex align-center">
-            <div class="stat-icon warning">
-              <v-icon size="32" color="white">mdi-clipboard-check</v-icon>
-            </div>
-            <div class="stat-content">
-              <div class="stat-label">진행중인 업무</div>
-              <div class="stat-value">{{ inProgressTaskCount }}</div>
-              <div class="stat-description">할 일 보드</div>
-            </div>
-          </v-card-text>
+          <v-card class="stat-card stat-card-warning stat-card-with-dropdown">
+            <v-card-text class="d-flex align-center">
+              <div class="stat-icon warning">
+                <v-icon size="32" color="white">mdi-clipboard-check</v-icon>
+              </div>
+              <div class="stat-content">
+                <div class="stat-label">진행중인 업무</div>
+                <div class="stat-value">{{ inProgressTaskCount }}</div>
+                <div class="stat-description">할 일 보드</div>
+              </div>
+            </v-card-text>
+          </v-card>
           
           <!-- 진행중인 업무 드롭다운 -->
-          <v-expand-transition>
-            <div v-show="showInProgressDropdown" class="task-dropdown">
-              <v-list density="compact">
-                <v-list-item
-                  v-for="task in inProgressTasks"
-                  :key="task.taskSeq"
-                  :title="task.taskTitle"
-                  :subtitle="task.assigneeName"
-                  class="task-item"
-                />
-                <v-list-item v-if="inProgressTasks.length === 0" title="진행중인 업무가 없습니다" />
-              </v-list>
-            </div>
-          </v-expand-transition>
-        </v-card>
+          <div v-if="showInProgressDropdown" class="task-dropdown">
+            <v-list density="compact">
+              <v-list-item
+                v-for="task in inProgressTasks"
+                :key="task.taskSeq"
+                class="task-item-enhanced"
+              >
+                <div class="task-item-content">
+                  <div class="task-item-header">
+                    <span class="task-title">{{ task.taskTitle }}</span>
+                    <v-chip size="x-small" color="warning" variant="flat">진행중</v-chip>
+                  </div>
+                  <div class="task-item-meta">
+                    <span class="task-assignee">
+                      <v-icon size="14">mdi-account</v-icon>
+                      {{ getMemberName(task.picMemberSeq) }}
+                    </span>
+                    <span v-if="task.endDate" class="task-date">
+                      <v-icon size="14">mdi-calendar</v-icon>
+                      {{ task.endDate }}
+                    </span>
+                  </div>
+                </div>
+              </v-list-item>
+              <v-list-item v-if="inProgressTasks.length === 0" class="empty-state">
+                <div class="empty-text">진행중인 업무가 없습니다</div>
+              </v-list-item>
+            </v-list>
+          </div>
+        </div>
       </v-col>
 
       <v-col cols="12" sm="6" md="3">
-        <v-card 
-          class="stat-card stat-card-success"
+        <div 
+          class="stat-card-wrapper"
           @mouseenter="showCompletedDropdown = true"
           @mouseleave="showCompletedDropdown = false"
         >
-          <v-card-text class="d-flex align-center">
-            <div class="stat-icon success">
-              <v-icon size="32" color="white">mdi-check-circle</v-icon>
-            </div>
-            <div class="stat-content">
-              <div class="stat-label">완료된 업무</div>
-              <div class="stat-value">{{ completedTaskCount }}</div>
-              <div class="stat-description">완료 보드</div>
-            </div>
-          </v-card-text>
+          <v-card class="stat-card stat-card-success stat-card-with-dropdown">
+            <v-card-text class="d-flex align-center">
+              <div class="stat-icon success">
+                <v-icon size="32" color="white">mdi-check-circle</v-icon>
+              </div>
+              <div class="stat-content">
+                <div class="stat-label">완료된 업무</div>
+                <div class="stat-value">{{ completedTaskCount }}</div>
+                <div class="stat-description">완료 보드</div>
+              </div>
+            </v-card-text>
+          </v-card>
           
           <!-- 완료된 업무 드롭다운 -->
-          <v-expand-transition>
-            <div v-show="showCompletedDropdown" class="task-dropdown">
-              <v-list density="compact">
-                <v-list-item
-                  v-for="task in completedTasks"
-                  :key="task.taskSeq"
-                  :title="task.taskTitle"
-                  :subtitle="task.assigneeName"
-                  class="task-item"
-                />
-                <v-list-item v-if="completedTasks.length === 0" title="완료된 업무가 없습니다" />
-              </v-list>
-            </div>
-          </v-expand-transition>
-        </v-card>
+          <div v-if="showCompletedDropdown" class="task-dropdown">
+            <v-list density="compact">
+              <v-list-item
+                v-for="task in completedTasks"
+                :key="task.taskSeq"
+                class="task-item-enhanced"
+              >
+                <div class="task-item-content">
+                  <div class="task-item-header">
+                    <span class="task-title">{{ task.taskTitle }}</span>
+                    <v-chip size="x-small" color="success" variant="flat">완료</v-chip>
+                  </div>
+                  <div class="task-item-meta">
+                    <span class="task-assignee">
+                      <v-icon size="14">mdi-account</v-icon>
+                      {{ getMemberName(task.picMemberSeq) }}
+                    </span>
+                    <span v-if="task.endDate" class="task-date">
+                      <v-icon size="14">mdi-calendar</v-icon>
+                      {{ task.endDate }}
+                    </span>
+                  </div>
+                </div>
+              </v-list-item>
+              <v-list-item v-if="completedTasks.length === 0" class="empty-state">
+                <div class="empty-text">완료된 업무가 없습니다</div>
+              </v-list-item>
+            </v-list>
+          </div>
+        </div>
       </v-col>
 
       <v-col cols="12" sm="6" md="3">
@@ -400,6 +434,7 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useProjectScheduleStore } from '@/store/projectScheduleStore'
+import { useWorkspaceMemberStore } from '@/store/workspaceMemberStore'
 import { getProjectTasks } from '@/api/schedule/scheduleApi'
 import { getWorkspaceMembers } from '@/api/workspace/workSpaceApi'
 
@@ -413,6 +448,7 @@ const emit = defineEmits(['toggle-member-sidebar'])
 
 // Store
 const scheduleStore = useProjectScheduleStore()
+const memberStore = useWorkspaceMemberStore()
 
 // Refs
 const progressChart = ref(null)
@@ -775,6 +811,14 @@ const toggleMemberSidebar = () => {
   emit('toggle-member-sidebar')
 }
 
+// 멤버 이름 가져오기
+const getMemberName = (memberSeq) => {
+  if (!memberSeq) return '미지정'
+  
+  const member = memberStore.members?.find(m => m.memberSeq === memberSeq)
+  return member?.name || '미지정'
+}
+
 const formatProjectPeriod = () => {
   const start = new Date(currentProject.value.startDate)
   const end = new Date(currentProject.value.endDate)
@@ -929,6 +973,7 @@ const createChart = async () => {
     options: {
       responsive: true,
       maintainAspectRatio: false,
+      clip: false,
       interaction: {
         mode: 'index',
         intersect: false
@@ -946,15 +991,23 @@ const createChart = async () => {
           borderWidth: 1
         }
       },
+      elements: {
+        point: {
+          hoverRadius: 8,
+          radius: 6
+        }
+      },
       scales: {
         y: {
           beginAtZero: true,
           max: 100,
+          grace: '5%',
           ticks: {
             callback: (value) => value + '%',
             font: {
               size: 11
-            }
+            },
+            values: [0, 20, 40, 60, 80, 100]
           },
           grid: {
             color: 'rgba(0, 0, 0, 0.05)'
@@ -969,6 +1022,14 @@ const createChart = async () => {
           grid: {
             display: false
           }
+        }
+      },
+      layout: {
+        padding: {
+          top: 20,
+          right: 20,
+          bottom: 10,
+          left: 10
         }
       }
     }
@@ -1171,12 +1232,29 @@ watch([allTasks, inProgressTasks, completedTasks, teamMembers], () => {
 /* 2. 통계 카드 그리드 */
 .stats-grid {
   margin-bottom: 24px;
+  position: relative;
+  z-index: 100;
+}
+
+.stat-card-wrapper {
+  position: relative;
+  width: 100%;
 }
 
 .stat-card {
+  position: relative;
   border-radius: 12px;
   transition: all 0.2s ease;
   cursor: pointer;
+  overflow: visible;
+}
+
+.stat-card-with-dropdown {
+  overflow: visible !important;
+}
+
+.stat-card-with-dropdown :deep(.v-card) {
+  overflow: visible !important;
 }
 
 .stat-card:hover {
@@ -1241,6 +1319,8 @@ watch([allTasks, inProgressTasks, completedTasks, teamMembers], () => {
 .progress-flow-card {
   border-radius: 12px;
   margin-bottom: 24px;
+  position: relative;
+  z-index: 1;
 }
 
 .flow-header {
@@ -1657,16 +1737,29 @@ watch([allTasks, inProgressTasks, completedTasks, teamMembers], () => {
 /* 드롭다운 스타일 */
 .task-dropdown {
   position: absolute;
-  top: 100%;
+  top: calc(100% - 8px);
   left: 0;
   right: 0;
   background: white;
   border: 1px solid #e0e0e0;
   border-radius: 8px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-  z-index: 1000;
-  max-height: 200px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+  z-index: 10000;
+  max-height: 300px;
   overflow-y: auto;
+  padding-top: 8px;
+  animation: fadeInDown 0.2s ease-out;
+}
+
+@keyframes fadeInDown {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .task-item {
@@ -1675,6 +1768,68 @@ watch([allTasks, inProgressTasks, completedTasks, teamMembers], () => {
 
 .task-item:last-child {
   border-bottom: none;
+}
+
+.task-item-enhanced {
+  padding: 12px 16px !important;
+  border-bottom: 1px solid #f0f0f0;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+
+.task-item-enhanced:hover {
+  background-color: #f8f9fa;
+}
+
+.task-item-enhanced:last-child {
+  border-bottom: none;
+}
+
+.task-item-content {
+  width: 100%;
+}
+
+.task-item-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.task-title {
+  font-size: 14px;
+  font-weight: 500;
+  color: #1e293b;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.task-item-meta {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 12px;
+  color: #64748b;
+}
+
+.task-assignee,
+.task-date {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.empty-state {
+  padding: 16px !important;
+  text-align: center;
+}
+
+.empty-text {
+  color: #94a3b8;
+  font-size: 13px;
 }
 
 /* 클릭 가능한 카드 */
@@ -1686,11 +1841,6 @@ watch([allTasks, inProgressTasks, completedTasks, teamMembers], () => {
 .clickable:hover {
   transform: translateY(-2px);
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-}
-
-/* 통계 카드 호버 시 드롭다운을 위한 상대 위치 */
-.stat-card {
-  position: relative;
 }
 
 /* 반응형 */
