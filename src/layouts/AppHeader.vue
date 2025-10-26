@@ -1370,26 +1370,6 @@ onMounted(() => {
       </div>
         </v-window-item>
       </v-window>
-
-      <!-- 액션 버튼 -->
-      <div class="dialog-actions">
-        <v-btn 
-          variant="outlined"
-          @click="workspaceSettingsOpen = false"
-          class="cancel-btn"
-        >
-          취소
-        </v-btn>
-        <v-btn 
-          color="primary" 
-          @click="saveWorkspaceSettings"
-          :disabled="!hasChanges"
-          class="save-btn"
-        >
-          <v-icon left>mdi-content-save</v-icon>
-          저장
-        </v-btn>
-      </div>
     </v-card>
   </v-dialog>
 

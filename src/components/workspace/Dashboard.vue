@@ -507,43 +507,6 @@
         </v-card>
         </v-col>
       </v-row>
-
-    <!-- 5. 최근 활동 카드 -->
-    <v-card class="activity-card">
-      <v-card-title class="section-title">
-        <v-icon color="warning" size="24">mdi-lightning-bolt</v-icon>
-        <span>최근 활동</span>
-      </v-card-title>
-
-      <v-card-text>
-        <div class="activity-list" @scroll="handleActivityScroll">
-          <div
-            v-for="activity in recentActivities"
-            :key="activity.id"
-            class="activity-item"
-          >
-            <v-avatar size="40" color="primary" class="activity-avatar">
-              <span class="avatar-text">{{ activity.avatar }}</span>
-            </v-avatar>
-            <div class="activity-content">
-              <div class="activity-text">
-                <strong>{{ activity.user }}</strong>님이 {{ activity.action }}
-              </div>
-              <div class="activity-time">{{ formatRelativeTime(activity.timestamp) }}</div>
-            </div>
-          </div>
-
-          <div v-if="isLoadingActivities" class="activity-loading">
-            <v-progress-circular indeterminate color="primary" size="32" />
-            <span>로딩 중...</span>
-          </div>
-
-          <div v-if="!hasMoreActivities && recentActivities.length > 0" class="activity-end">
-            더 이상 활동이 없습니다.
-          </div>
-    </div>
-      </v-card-text>
-    </v-card>
   </div>
 </template>
 
@@ -576,8 +539,6 @@ const timeFilter = ref('month')
 const customStartDate = ref('2025-09-01')
 const customEndDate = ref('2025-12-31')
 const selectedAssignee = ref('내 업무')
-const isLoadingActivities = ref(false)
-const hasMoreActivities = ref(true)
 
 // 대시보드 통계 관련 refs
 const allTasks = ref([])
@@ -733,7 +694,6 @@ const upcomingMilestones = computed(() => {
     })
 })
 
-const recentActivities = computed(() => scheduleStore.getRecentActivities)
 
 // 담당자 옵션 (memberList에서 가져오기)
 const assigneeOptions = computed(() => {
@@ -1586,42 +1546,6 @@ const formatDateRange = (startDate, endDate) => {
   return `${startDate} ~ ${endDate}`
 }
 
-const formatRelativeTime = (timestamp) => {
-  const now = new Date()
-  const diff = now - new Date(timestamp)
-  const minutes = Math.floor(diff / (1000 * 60))
-  const hours = Math.floor(diff / (1000 * 60 * 60))
-  const days = Math.floor(diff / (1000 * 60 * 60 * 24))
-
-  if (minutes < 1) return '방금 전'
-  if (minutes < 60) return `${minutes}분 전`
-  if (hours < 24) return `${hours}시간 전`
-  return `${days}일 전`
-}
-
-const handleActivityScroll = (event) => {
-  const { scrollTop, scrollHeight, clientHeight } = event.target
-  const threshold = 50
-
-  if (scrollHeight - scrollTop <= clientHeight + threshold && !isLoadingActivities.value && hasMoreActivities.value) {
-    loadMoreActivities()
-  }
-}
-
-const loadMoreActivities = async () => {
-  isLoadingActivities.value = true
-  
-  // 시뮬레이션: 1초 후 데이터 로드
-  setTimeout(() => {
-    scheduleStore.loadMoreActivities()
-    isLoadingActivities.value = false
-    
-    // 시뮬레이션: 2번 로드 후 더 이상 없음
-    if (recentActivities.value.length >= 10) {
-      hasMoreActivities.value = false
-    }
-  }, 1000)
-}
 
 const createChart = async () => {
   const { Chart, registerables } = await import('chart.js')
@@ -2467,72 +2391,6 @@ watch([allTasks, inProgressTasks, completedTasks, teamMembers], () => {
   color: #1e293b;
   min-width: 40px;
   text-align: right;
-}
-
-/* 5. 최근 활동 카드 */
-.activity-card {
-  border-radius: 12px;
-}
-
-.activity-list {
-  max-height: 400px;
-  overflow-y: auto;
-  padding-right: 8px;
-}
-
-.activity-item {
-  display: flex;
-  gap: 12px;
-  padding: 12px;
-  border-radius: 8px;
-  margin-bottom: 12px;
-  transition: background-color 0.2s ease;
-}
-
-.activity-item:hover {
-  background-color: #f8f9fa;
-}
-
-.activity-avatar {
-  flex-shrink: 0;
-}
-
-.avatar-text {
-  font-size: 16px;
-  font-weight: 600;
-  color: white;
-}
-
-.activity-content {
-  flex: 1;
-}
-
-.activity-text {
-  font-size: 14px;
-  color: #1e293b;
-  margin-bottom: 4px;
-  line-height: 1.5;
-}
-
-.activity-time {
-  font-size: 12px;
-  color: #94a3b8;
-}
-
-.activity-loading {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 12px;
-  padding: 24px;
-  color: #64748b;
-}
-
-.activity-end {
-  text-align: center;
-  padding: 24px;
-  font-size: 14px;
-  color: #94a3b8;
 }
 
 /* 드롭다운 스타일 */

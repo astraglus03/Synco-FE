@@ -460,7 +460,7 @@ const openAuthModal = (view) => {
 
 const handleLoginSuccess = (userData) => {
   console.log('로그인 성공:', userData)
-  router.push('/workspace')
+  router.push('/workspaces/personal/dashboard')
 }
 
 const handleSignupSuccess = (userData) => {
