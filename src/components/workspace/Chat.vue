@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted, onUnmounted } from "vue";
+import { ref, computed, onMounted, onUnmounted, nextTick } from "vue";
 import { usePermissions, PERMISSIONS } from "@/composables/usePermissions";
 import { useWorkspaceStore } from "@/store/workspaceStore";
 import { useWorkspaceMemberStore } from "@/store/workspaceMemberStore";
@@ -121,6 +121,10 @@ const otherTyping = ref(false);
 // 답장 관련 상태
 const replyToMessage = ref(null);
 const showReplyInput = ref(false);
+
+// 이전 메시지 로드 관련 상태
+const isLoadingMessages = ref(false);
+const hasMoreMessages = ref(true);
 
 // 컨텍스트 메뉴 관련 상태
 const showContextMenu = ref(false);
@@ -474,8 +478,102 @@ const createChannel = () => {
   }
 };
 
+const loadMoreMessages = async (lastId = null) => {
+  // 중복 로드 방지
+  if (isLoadingMessages.value || !hasMoreMessages.value) return;
+  
+  isLoadingMessages.value = true;
+  
+  try {
+    console.log("📥 이전 메시지 로드 시작 - lastId:", lastId);
+    
+    const url = `${import.meta.env.VITE_API_URL}/chat-service/chat/channels/${channelSeq.value}/messages${lastId ? `?lastId=${lastId}` : ''}`;
+
+    const res = await axios.get(url, {
+      headers: { 
+        Authorization: `Bearer ${token.value}`,
+        "X-Member-Seq": memberSeq.value
+      }
+    });
+
+    // 백엔드는 ResponseDto로 감싸져 있지 않을 수 있으므로 직접 배열인지 확인
+    let loadedMessages = res.data;
+    
+    // ResponseDto로 감싸진 경우 (res.data.data)
+    if (res.data && res.data.data && Array.isArray(res.data.data)) {
+      loadedMessages = res.data.data;
+    }
+    // 직접 배열인 경우
+    else if (Array.isArray(res.data)) {
+      loadedMessages = res.data;
+    } else {
+      console.warn("⚠️ 예상치 못한 응답 형식:", res.data);
+      hasMoreMessages.value = false;
+      return;
+    }
+
+    // 로드할 메시지가 없으면 종료
+    if (!loadedMessages || loadedMessages.length === 0) {
+      console.log("📭 더 이상 로드할 메시지가 없습니다.");
+      hasMoreMessages.value = false;
+      isLoadingMessages.value = false;
+      return;
+    }
+
+    console.log("📨 로드된 메시지 개수:", loadedMessages.length);
+
+    // 메시지 맵핑 → WebSocket 수신 형식과 동일하게 변환
+    const formatted = loadedMessages.map(m => ({
+      id: m.chatMessageSeq,
+      user: m.senderName,
+      content: m.chatMessageText,
+      time: new Date(m.createdAt).toLocaleTimeString("ko-KR", {
+        hour: "2-digit",
+        minute: "2-digit"
+      }),
+      profileImageUrl: m.senderProfileImageUrl || null,
+      senderSeq: m.senderSeq,
+      isOwn: m.senderSeq === memberSeq.value,
+      unread: 0,
+      files: (m.chatMessageFileUrls || "")
+        .split(",")
+        .filter(Boolean)
+        .map(url => ({ name: url.split("/").pop(), url, type: "file" })),
+      messageType: m.messageType || "TEXT",
+      replyToSeq: m.replyToSeq || null
+    }));
+
+    // ✅ 스크롤 위치 저장
+    const container = document.querySelector(".messages-container");
+    const oldScrollHeight = container ? container.scrollHeight : 0;
+    const oldScrollTop = container ? container.scrollTop : 0;
+
+    // ✅ prepend (기존 메시지 앞에 붙임) - reverse() 제거 (이미 최신순으로 받아옴)
+    messages.value = [...formatted.reverse(), ...messages.value];
+
+    // ✅ 스크롤 위치 복원 (새로 추가된 메시지 높이만큼 아래로 이동)
+    await new Promise(resolve => setTimeout(resolve, 50)); // DOM 업데이트 대기
+    
+    if (container) {
+      const newScrollHeight = container.scrollHeight;
+      const heightDifference = newScrollHeight - oldScrollHeight;
+      container.scrollTop = heightDifference; // 새로운 컨텐츠 높이만큼 스크롤
+      console.log("📍 스크롤 위치 복원 - 차이:", heightDifference);
+    }
+
+    if (!lastId) scrollToBottom();
+
+  } catch (e) {
+    console.error("❌ 메시지 로드 실패:", e);
+    hasMoreMessages.value = false;
+  } finally {
+    isLoadingMessages.value = false;
+  }
+};
+
+
 // 채널 변경 시 WebSocket 재연결
-const changeChannel = (channelId) => {
+const changeChannel = async (channelId) => {
   if (currentChannel.value === channelId) return;
 
   console.log("🔄 채널 변경:", currentChannel.value, "→", channelId);
@@ -488,9 +586,16 @@ const changeChannel = (channelId) => {
   currentChannel.value = channelId;
   channelSeq.value = parseInt(channelId); // 문자열을 숫자로 변환
   messages.value = [];
+  
+  // 이전 메시지 로드 상태 리셋
+  hasMoreMessages.value = true;
+  isLoadingMessages.value = false;
 
   console.log("✅ 채널 변경 완료 - 현재 채널 Seq:", channelSeq.value);
   console.log("🔍 channelSeq 타입:", typeof channelSeq.value);
+
+  // ✅ 이전 메시지 첫 로드
+  await loadMoreMessages(null);
 
   // 새 채널로 연결
   connectWebsocket();
@@ -682,6 +787,21 @@ const cancelReply = () => {
   replyToMessage.value = null;
   showReplyInput.value = false;
   newMessage.value = "";
+};
+
+// ✅ Scroll 최상단 감지 후 이전 메시지 로드
+const handleScroll = async (e) => {
+  const container = e.target;
+  
+  // 로딩 중이거나 더 이상 메시지가 없으면 리턴
+  if (isLoadingMessages.value || !hasMoreMessages.value) return;
+  
+  // 스크롤이 최상단에 있고 메시지가 있을 때만 로드
+  if (container.scrollTop === 0 && messages.value.length > 0) {
+    const oldest = messages.value[0];
+    console.log("🔄 최상단 스크롤 감지 - 이전 메시지 로드 시작 - oldest.id:", oldest.id);
+    await loadMoreMessages(oldest.id);
+  }
 };
 
 // @ 언급 관련 함수들 - 채널 참여 멤버 정보
@@ -919,20 +1039,32 @@ onMounted(async () => {
   }
 
   // ✅ 채널 참여 멤버 목록 초기화
-  getChannelMembers().then(() => {
+  getChannelMembers().then(async () => {
     // ✅ memberSeq가 유효할 때만 WebSocket 연결
     if (memberSeq.value > 0 && currentChannel.value) {
+      await loadMoreMessages(null); // ✅ 첫 로딩 필수
       connectWebsocket();
     } else {
       console.error("❌ memberSeq 또는 채널이 유효하지 않습니다.");
     }
   });
+
+  // ✅ 스크롤 이벤트 리스너 등록 (DOM 준비 대기)
+  await nextTick();
+  const container = document.querySelector(".messages-container");
+  if (container) {
+    container.addEventListener("scroll", handleScroll);
+  }
 });
 
 onUnmounted(() => {
   window.removeEventListener("select-chat-channel", handleSubChannelSelect);
   window.removeEventListener("click", closeContextMenu);
   disconnectWebsocket();
+  const container = document.querySelector(".messages-container");
+  if (container) {
+    container.removeEventListener("scroll", handleScroll);
+  }
 });
 </script>
 
