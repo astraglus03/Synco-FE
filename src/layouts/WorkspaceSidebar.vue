@@ -851,13 +851,13 @@ const selectSubChannel = (parentId, subChannelId) => {
     type: typeof subChannelId,
   });
 
-  // ✅ chat 채널인 경우 event bus로 직접 이벤트 발생 (URL 변경 방지)
+  // 항상 부모로 emit (URL 변경)
+  emit("select-subchannel", parentId, subChannelId);
+
+  // chat 채널인 경우 event bus로도 이벤트 발생 (Chat.vue에서 받기 위해)
   if (parentId === "chat") {
     console.log("🔔 Event bus로 채널 선택 발생:", parentId, subChannelId);
     emitter.emit("select-chat-channel", { parentId, subChannelId });
-  } else {
-    // chat이 아닌 다른 채널은 기존처럼 부모로 emit
-    emit("select-subchannel", parentId, subChannelId);
   }
 };
 
