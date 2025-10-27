@@ -84,6 +84,7 @@
               draggable="true"
               @dragstart="onDragStart($event, task)"
               @dragend="onDragEnd"
+              @dblclick="openTaskDetail(task)"
             >
               <div class="task-header">
                 <div class="task-title">{{ task.title }}</div>
@@ -142,6 +143,7 @@
             draggable="true"
             @dragstart="onDragStart($event, task)"
             @dragend="onDragEnd"
+            @dblclick="openTaskDetail(task)"
           >
             <div class="task-header">
               <div class="task-title">{{ task.title }}</div>
@@ -199,6 +201,7 @@
             draggable="true"
             @dragstart="onDragStart($event, task)"
             @dragend="onDragEnd"
+            @dblclick="openTaskDetail(task)"
           >
             <div class="task-header">
               <div class="task-title">{{ task.title }}</div>
@@ -233,11 +236,20 @@
       </div>
     </div>
 
-    <!-- Task 생성 모달 -->
+    <!-- Task 생성/수정 모달 -->
     <TaskCreateModal
       v-model="isTaskModalOpen"
       :project-id="currentProjectId"
+      :is-edit-mode="isEditMode"
+      :edit-task-data="editTaskData"
       @task-created="onTaskCreated"
+      @task-updated="onTaskUpdated"
+    />
+
+    <!-- Task 상세 모달 -->
+    <TaskDetailModal
+      v-model="isTaskDetailModalOpen"
+      :task-data="selectedTaskData"
     />
 
     <!-- 스낵바 -->
@@ -262,14 +274,15 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useProjectScheduleStore } from '../../store/projectScheduleStore.js'
 import { useWorkspaceStore } from '../../store/workspaceStore.js'
 import { useWorkspaceMemberStore } from '../../store/workspaceMemberStore.js'
 import { useAuthStore } from '../../store/authStore.js'
 import { getWorkspaceMembers } from '../../services/WorkspaceService.js'
-import { getProjectTasks } from '../../api/schedule/scheduleApi.js'
+import { getProjectTasks, getTaskDetail } from '../../api/schedule/scheduleApi.js'
 import TaskCreateModal from './TaskCreateModal.vue'
+import TaskDetailModal from './TaskDetailModal.vue'
 
 const props = defineProps({
   selectedSchedule: String
@@ -292,6 +305,14 @@ const dragOverColumn = ref(null)
 
 // Task 생성 모달 상태
 const isTaskModalOpen = ref(false)
+
+// Task 수정 모달 상태
+const isEditMode = ref(false)
+const editTaskData = ref(null)
+
+// Task 상세 모달 상태
+const isTaskDetailModalOpen = ref(false)
+const selectedTaskData = ref({})
 
 // 스낵바 상태
 const snackbar = ref({
@@ -507,10 +528,59 @@ const onTaskCreated = async (newTask) => {
   await refreshTasks()
 }
 
+// Task 수정 완료 후 처리
+const onTaskUpdated = async (updatedTask) => {
+  console.log('업무가 수정되었습니다:', updatedTask)
+  // 수정 모드 상태 초기화
+  isEditMode.value = false
+  editTaskData.value = null
+  // 태스크 목록 새로고침
+  await refreshTasks()
+}
+
+// 모달이 닫힐 때 수정 모드 상태 초기화
+watch(isTaskModalOpen, (newValue) => {
+  if (!newValue) {
+    // 모달이 닫힐 때 수정 모드 상태 초기화
+    isEditMode.value = false
+    editTaskData.value = null
+  }
+})
+
 // Task 수정
-const editTask = (task) => {
-  // TODO: TaskCreateModal을 수정 모드로 열기
-  console.log('태스크 수정:', task)
+const editTask = async (task) => {
+  try {
+    // 태스크 상세 정보 조회
+    const response = await getTaskDetail(task.id)
+    if (response.success) {
+      // 수정 모드로 설정하고 모달 열기
+      editTaskData.value = response.data
+      isEditMode.value = true
+      isTaskModalOpen.value = true
+    } else {
+      alert('태스크 정보를 불러오는데 실패했습니다.')
+    }
+  } catch (error) {
+    console.error('태스크 상세 조회 실패:', error)
+    alert('태스크 정보를 불러오는데 실패했습니다.')
+  }
+}
+
+// Task 상세 열기
+const openTaskDetail = async (task) => {
+  try {
+    // 태스크 상세 정보 조회
+    const response = await getTaskDetail(task.id)
+    if (response.success) {
+      selectedTaskData.value = response.data
+      isTaskDetailModalOpen.value = true
+    } else {
+      alert('태스크 정보를 불러오는데 실패했습니다.')
+    }
+  } catch (error) {
+    console.error('태스크 상세 조회 실패:', error)
+    alert('태스크 정보를 불러오는데 실패했습니다.')
+  }
 }
 
 // Task 삭제
