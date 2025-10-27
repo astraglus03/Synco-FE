@@ -87,7 +87,7 @@ const submit = async () => {
     await apiPatch('/workspace-service/member/social/memberId', requestData)
 
     // 성공 시 대시보드 페이지로 이동
-    await router.replace('/workspace/personal/dashboard')
+    await router.replace('/workspaces/personal/dashboard')
 
   } catch (error) {
     console.error('회원 ID 등록 실패:', error)

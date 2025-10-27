@@ -32,6 +32,11 @@ const closeMemberSidebar = () => {
   uiStore.memberSidebarVisible = false
 }
 
+// 멤버 사이드바 토글
+const toggleMemberSidebar = () => {
+  uiStore.toggleMemberSidebar()
+}
+
 // 선택된 일정 정보
 const selectedSchedule = ref('team-schedule')
 
@@ -128,6 +133,7 @@ const contentStyle = computed(() => {
       :selected-schedule="selectedSchedule"
       :selected-channel="selectedChannel"
       :navigate-to-personal-drive="navigateToPersonalDrive"
+      @toggle-member-sidebar="toggleMemberSidebar"
     />
     
     <!-- 멤버 사이드바 (프로젝트 워크스페이스일 때만 표시) -->

@@ -450,7 +450,7 @@ const demoTabs = ref([
 
 const goToWorkspace = () => {
   // 임시로 바로 워크스페이스로 이동 (UI 테스트용)
-  router.push('/workspace')
+  router.push('/workspaces')
 }
 
 const openAuthModal = (view) => {
@@ -460,7 +460,7 @@ const openAuthModal = (view) => {
 
 const handleLoginSuccess = (userData) => {
   console.log('로그인 성공:', userData)
-  router.push('/workspace')
+  router.push('/workspaces/personal/dashboard')
 }
 
 const handleSignupSuccess = (userData) => {
