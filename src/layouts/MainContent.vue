@@ -5,6 +5,7 @@ import PersonalDashboard from '@/components/workspace/PersonalDashboard.vue'
 import PersonalFriends from '@/components/workspace/PersonalFriends.vue'
 import PersonalDrive from '@/components/workspace/PersonalDrive.vue'
 import PersonalCalendar from '@/components/workspace/PersonalCalendar.vue'
+import PersonalSchedule from '@/components/workspace/PersonalSchedule.vue'
 import PersonalProfile from '@/components/workspace/PersonalProfile.vue'
 import PersonalChat from '@/components/workspace/PersonalChat.vue'
 import Dashboard from '@/components/workspace/Dashboard.vue'
@@ -32,7 +33,7 @@ const closeMemberSidebar = () => {
 }
 
 // 선택된 일정 정보
-const selectedSchedule = ref('general-schedule')
+const selectedSchedule = ref('team-schedule')
 
 // 선택된 채널 정보
 const selectedChannel = ref('')
@@ -40,6 +41,13 @@ const selectedChannel = ref('')
 // 일정 선택 이벤트 리스너
 const handleScheduleSelect = (event) => {
   selectedSchedule.value = event.detail.subChannelId
+}
+
+// 하위 채널 선택 이벤트 리스너
+const handleSubChannelSelect = (parentId, subChannelId) => {
+  if (parentId === 'schedule') {
+    selectedSchedule.value = subChannelId
+  }
 }
 
 // 채널 선택 이벤트 리스너
@@ -80,7 +88,13 @@ const currentComponent = computed(() => {
     switch (props.currentChannel) {
       case 'dashboard': return Dashboard
       case 'chat': return Chat
-      case 'schedule': return Schedule
+      case 'schedule': 
+        // 일정관리 하위 메뉴에 따라 다른 컴포넌트 반환
+        if (selectedSchedule.value === 'personal-schedule') {
+          return PersonalSchedule
+        } else {
+          return Schedule
+        }
       case 'drive': return ProjectDrive
       case 'meeting': return TeamMeeting
       default: return Dashboard
