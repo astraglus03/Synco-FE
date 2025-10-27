@@ -321,6 +321,34 @@ const snackbar = ref({
   color: 'error'
 })
 
+// 워크스페이스 변경 감지하여 데이터 다시 로드
+watch(() => workspaceStore.currentWorkspace, async (newWorkspace, oldWorkspace) => {
+  if (newWorkspace && newWorkspace !== oldWorkspace && oldWorkspace) {
+    console.log('🔄 [Schedule] 워크스페이스 변경 감지:', oldWorkspace, '→', newWorkspace)
+    
+    // 1. 먼저 스토어 데이터 초기화
+    projectScheduleStore.clearStoreData()
+    selectedFilter.value = null
+    workspaceMembers.value = []
+    
+    // 2. 새로운 워크스페이스 데이터 로드
+    try {
+      const currentWorkspace = workspaceStore.currentWorkspaceInfo
+      if (currentWorkspace && currentWorkspace.workSpaceSeq) {
+        await Promise.all([
+          projectScheduleStore.loadProjectTasks(),
+          loadWorkspaceMembers(),
+          workspaceMemberStore.loadWorkspaceMembers(currentWorkspace.workSpaceSeq),
+          workspaceMemberStore.loadChannels(currentWorkspace.workSpaceSeq)
+        ])
+        console.log('✅ [Schedule] 워크스페이스 데이터 로드 완료')
+      }
+    } catch (error) {
+      console.error('❌ [Schedule] 데이터 로딩 실패:', error)
+    }
+  }
+}, { immediate: false })
+
 // API 데이터 로딩
 onMounted(async () => {
   try {

@@ -175,6 +175,8 @@
               hide-details
               variant="outlined"
               class="date-input"
+              :min="customStartDateMin"
+              :max="customStartDateMax"
             />
             <v-text-field
               v-model="customEndDate"
@@ -184,6 +186,8 @@
               hide-details
               variant="outlined"
               class="date-input"
+              :min="customEndDateMin"
+              :max="customEndDateMax"
             />
           </div>
 
@@ -573,6 +577,39 @@ const totalPages = ref(1) // 전체 페이지 수
 
 // Computed
 const currentProject = computed(() => scheduleStore.getCurrentProject)
+
+// 사용자 정의 날짜 선택 범위 제한
+const customStartDateMin = computed(() => {
+  // 프로젝트 시작일 이전 선택 불가
+  return projectStartDate.value ? projectStartDate.value.toISOString().split('T')[0] : null
+})
+
+const customStartDateMax = computed(() => {
+  // 종료일보다 늦은 날짜 선택 불가
+  const endDate = customEndDate.value
+  const projectEnd = projectEndDate.value ? projectEndDate.value.toISOString().split('T')[0] : null
+  
+  if (endDate && projectEnd) {
+    return endDate < projectEnd ? endDate : projectEnd
+  }
+  return endDate || projectEnd
+})
+
+const customEndDateMin = computed(() => {
+  // 시작일보다 빠른 날짜 선택 불가
+  const startDate = customStartDate.value
+  const projectStart = projectStartDate.value ? projectStartDate.value.toISOString().split('T')[0] : null
+  
+  if (startDate && projectStart) {
+    return startDate > projectStart ? startDate : projectStart
+  }
+  return startDate || projectStart
+})
+
+const customEndDateMax = computed(() => {
+  // 프로젝트 종료일 이후 선택 불가
+  return projectEndDate.value ? projectEndDate.value.toISOString().split('T')[0] : null
+})
 
 // 프로젝트 진행률: 전체 업무 중 완료된 업무 비율
 const projectProgress = computed(() => {
@@ -983,9 +1020,9 @@ const getStatusText = (status) => {
   const statusMap = {
     'completed': '완료',
     'in-progress': '진행중',
-    'pending': '대기'
+    'pending': '할일'
   }
-  return statusMap[status] || '대기'
+  return statusMap[status] || '할일'
 }
 
 // 단계 텍스트 반환
@@ -1009,7 +1046,7 @@ const getTaskStatusColor = (status) => {
     '진행중': 'warning',
     'PROGRESS': 'warning',
     'TODO': 'info',
-    '대기': 'info',
+    '할일': 'info',
     'PENDING': 'info'
   }
   return statusColorMap[status] || 'grey'
@@ -1023,13 +1060,31 @@ const getTaskStatusText = (status) => {
     'FINISHED': '완료',
     'IN_PROGRESS': '진행중',
     'PROGRESS': '진행중',
-    'TODO': '대기',
-    'PENDING': '대기'
+    'TODO': '할일',
+    'PENDING': '할일'
   }
-  return statusTextMap[status] || status || '대기'
+  return statusTextMap[status] || status || '할일'
 }
 
 // Methods
+// 대시보드 데이터 초기화 함수
+const clearDashboardData = () => {
+  console.log('🧹 대시보드 데이터 초기화')
+  allTasks.value = []
+  inProgressTasks.value = []
+  completedTasks.value = []
+  teamMembers.value = []
+  
+  // 스토어 데이터도 초기화
+  scheduleStore.clearStoreData()
+  
+  // 차트도 초기화
+  if (chartInstance) {
+    chartInstance.destroy()
+    chartInstance = null
+  }
+}
+
 // 대시보드 통계 데이터 로드
 const loadDashboardStats = async () => {
   // 컴포넌트가 언마운트되었으면 중단
@@ -1653,10 +1708,10 @@ const getMilestoneStatusText = (status) => {
   const texts = {
     'COMPLETED': '완료',
     'IN_PROGRESS': '진행중',
-    'TODO': '대기',
+    'TODO': '할일',
     'completed': '완료',
     'in-progress': '진행중',
-    'pending': '대기'
+    'pending': '할일'
   }
   return texts[status] || status
 }
@@ -1806,9 +1861,18 @@ const isMounted = ref(false)
 watch(() => workspaceStore.currentWorkspace, async (newWorkspace, oldWorkspace) => {
   if (isMounted.value && newWorkspace && newWorkspace !== oldWorkspace && oldWorkspace) {
     console.log('워크스페이스 변경 감지:', oldWorkspace, '→', newWorkspace)
-    // 데이터 다시 로드
+    
+    // 1. 먼저 이전 데이터 초기화
+    clearDashboardData()
+    
+    // 2. 새로운 데이터 로드
     try {
       await loadDashboardStats()
+      
+      // 3. 차트 다시 생성
+      if (progressChart.value) {
+        await createChart()
+      }
     } catch (error) {
       console.error('대시보드 데이터 로드 실패:', error)
     }

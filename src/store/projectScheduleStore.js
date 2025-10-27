@@ -282,6 +282,22 @@ export const useProjectScheduleStore = defineStore('projectSchedule', {
         this.error = error.message
         throw error
       }
+    },
+
+    // 스토어 데이터 초기화 (워크스페이스 전환 시 사용)
+    clearStoreData() {
+      console.log('🧹 projectScheduleStore 데이터 초기화')
+      this.taskData = []
+      this.tasks = []
+      this.teamMembers = []
+      this.milestones = []
+      this.recentActivities = []
+      this.selectedFilterMember = null
+      this.error = null
+      this.isLoading = false
+      
+      // currentProject는 id만 초기화 (나머지는 유지)
+      this.currentProject.id = null
     }
   }
 })
