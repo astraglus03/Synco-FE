@@ -4,6 +4,7 @@ import { usePermissions, PERMISSIONS } from "@/composables/usePermissions";
 import { useWorkspaceStore } from "@/store/workspaceStore";
 import { useWorkspaceMemberStore } from "@/store/workspaceMemberStore";
 import { emitter } from "@/eventBus";
+import { useRoute } from "vue-router";
 import PollModal from "./PollModal.vue";
 import FileAttachmentModal from "./FileAttachmentModal.vue";
 import SockJS from "sockjs-client";
@@ -51,6 +52,7 @@ const { hasPermission, isManager, isSuper } = usePermissions();
 
 // Store 사용
 const workspaceStore = useWorkspaceStore();
+const route = useRoute();
 const workspaceMemberStore = useWorkspaceMemberStore();
 
 // Store 초기화 대기 함수
@@ -1241,11 +1243,18 @@ onMounted(async () => {
     return;
   }
 
-  // ✅ 초기 채널 설정
-  const initialChannel = props.selectedChannel || channels.value[0].id;
+  // ✅ URL에서 채널 ID 가져오기 (새로고침 시 유지)
+  const urlChannelId = route.params.subChannel?.toString();
+  console.log("🔍 URL 채널 ID:", urlChannelId);
+  console.log("🔍 route.params:", route.params);
+
+  // ✅ 초기 채널 설정 (URL > props > 첫번째 채널 순서)
+  const initialChannel =
+    urlChannelId || props.selectedChannel || channels.value[0].id;
   currentChannel.value = initialChannel;
   channelSeq.value = parseInt(initialChannel);
   console.log("🔍 최초 채널 선택:", {
+    urlChannelId,
     selectedChannel: props.selectedChannel,
     initialChannel,
     channelSeq: channelSeq.value,
