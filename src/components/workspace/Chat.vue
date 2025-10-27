@@ -1377,7 +1377,17 @@ onUnmounted(() => {
               @contextmenu="handleMessageRightClick(message, $event)"
             >
               <div class="message-content">
-                <div v-if="!message.isOwn" class="message-avatar">
+                <!-- ✅ 아바타: 항상 표시하되, 연속된 메시지는 투명하게 -->
+                <div
+                  v-if="!message.isOwn"
+                  class="message-avatar"
+                  :class="{
+                    'avatar-hidden':
+                      index > 0 &&
+                      messages[index - 1].user === message.user &&
+                      !messages[index - 1].isOwn,
+                  }"
+                >
                   <img
                     v-if="message.profileImageUrl"
                     :src="message.profileImageUrl"
@@ -1879,6 +1889,12 @@ onUnmounted(() => {
   flex-shrink: 0; /* 아바타 크기 고정 - 축소 방지 */
   min-width: 40px; /* 최소 너비 보장 */
   min-height: 40px; /* 최소 높이 보장 */
+}
+
+/* ✅ 연속된 메시지에서 아바타 투명하게 */
+.message-avatar.avatar-hidden {
+  opacity: 0;
+  pointer-events: none;
 }
 
 .avatar-image {
