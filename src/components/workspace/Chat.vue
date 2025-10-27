@@ -165,7 +165,7 @@ const highlightedMessage = computed(() => {
 
 // ✅ WebSocket 연결
 const connectWebsocket = () => {
-  console.log("!!!!!!!!!!!!!!!!!!!!!!!!토큰 확인:", token.value);
+  console.log("토큰 확인:", token.value);
   if (stompClient.value && stompClient.value.connected) return;
 
   const sockJs = new SockJS(
@@ -186,6 +186,15 @@ const connectWebsocket = () => {
           try {
             const parsed = JSON.parse(message.body);
             console.log("📩 메시지 수신:", parsed);
+
+            // ✅ 삭제 이벤트 처리 추가 (190줄 위치에 추가!)
+            if (parsed.action === "DELETE") {
+              console.log("🗑️ 삭제된 메시지:", parsed.chatMessageSeq);
+              messages.value = messages.value.filter(
+                (msg) => msg.id !== parsed.chatMessageSeq
+              );
+              return;
+            }
 
             // // ✅ 내가 보낸 메시지는 무시 (서버 broadcast에 포함되므로)
             // if (Number(parsed.senderSeq) === Number(memberSeq.value)) return;
