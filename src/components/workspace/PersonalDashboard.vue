@@ -20,13 +20,58 @@
         </div>
       </div>
 
-      <div class="stat-card">
-        <div class="stat-icon success">
-          <v-icon size="28">mdi-calendar-check</v-icon>
+      <div 
+        class="stat-card-wrapper"
+        @mouseenter="showSchedulesDropdown = true"
+        @mouseleave="showSchedulesDropdown = false"
+      >
+        <div class="stat-card stat-card-with-dropdown">
+          <div class="stat-icon success">
+            <v-icon size="28">mdi-calendar-check</v-icon>
+          </div>
+          <div class="stat-info">
+            <div class="stat-value">{{ schedulesCount }}</div>
+            <div class="stat-label">개인 일정</div>
+          </div>
         </div>
-        <div class="stat-info">
-          <div class="stat-value">{{ schedulesCount }}</div>
-          <div class="stat-label">개인 일정</div>
+        
+        <!-- 개인 일정 목록 드롭다운 -->
+        <div v-if="showSchedulesDropdown" class="projects-dropdown">
+          <div class="dropdown-header">
+            <strong>개인 일정 목록</strong>
+            <span class="project-count">{{ schedulesCount }}개</span>
+          </div>
+          
+          <div v-if="personalSchedules.length > 0" class="project-list">
+            <div
+              v-for="schedule in personalSchedules"
+              :key="schedule.taskSeq"
+              class="project-item"
+              @click="handleTaskClick(schedule.taskSeq, true)"
+            >
+              <div class="project-info">
+                <div class="project-name">{{ schedule.taskTitle }}</div>
+                <div class="project-description" v-if="schedule.taskContent">
+                  {{ schedule.taskContent }}
+                </div>
+                <div class="schedule-dropdown-meta">
+                  <v-chip size="x-small" :color="getTaskStatusColor(schedule.taskStatus)">
+                    {{ getTaskStatusText(schedule.taskStatus) }}
+                  </v-chip>
+                  <span class="schedule-date-text">
+                    <v-icon size="12">mdi-calendar</v-icon>
+                    {{ formatScheduleDate(schedule.startDate, schedule.endDate) }}
+                  </span>
+                </div>
+              </div>
+              <v-icon size="small" color="#94a3b8">mdi-chevron-right</v-icon>
+            </div>
+          </div>
+          
+          <div v-else class="empty-state">
+            <v-icon size="large" color="grey-lighten-1">mdi-calendar-blank</v-icon>
+            <span class="empty-text">등록된 일정이 없습니다</span>
+          </div>
         </div>
       </div>
 
@@ -128,7 +173,7 @@
             마감임박 ({{ urgentTasks.length }})
           </v-tab>
           <v-tab value="in-progress">진행중 ({{ inProgressTasks.length }})</v-tab>
-          <v-tab value="todo">대기 ({{ todoTasks.length }})</v-tab>
+          <v-tab value="todo">할 일 ({{ todoTasks.length }})</v-tab>
           <v-tab value="completed">완료 ({{ completedTasks.length }})</v-tab>
         </v-tabs>
 
@@ -142,7 +187,7 @@
             v-for="task in displayedTasks"
             :key="task.id"
             class="task-card"
-            @click="openTaskDetail(task)"
+            @click="handleTaskClick(task.taskSeq || task.id)"
           >
             <div class="task-content">
               <div class="task-title" :class="{ completed: task.status === 'COMPLETED' }">
@@ -162,9 +207,6 @@
                 </span>
               </div>
             </div>
-            <v-btn icon size="small" variant="text" @click.stop="editTask(task)">
-              <v-icon>mdi-pencil</v-icon>
-            </v-btn>
           </div>
         </div>
       </div>
@@ -195,33 +237,31 @@
 
           <div
             v-for="schedule in personalSchedules"
-            :key="schedule.id"
+            :key="schedule.taskSeq"
             class="schedule-card"
-            :class="{ today: schedule.isToday }"
+            :class="{ today: isToday(schedule.startDate) }"
+            @click="handleTaskClick(schedule.taskSeq, true)"
           >
-            <div class="schedule-date" :class="{ today: schedule.isToday }">
-              <div class="date-day">{{ schedule.day }}</div>
-              <div class="date-num">{{ schedule.date }}</div>
+            <div class="schedule-date" :class="{ today: isToday(schedule.startDate) }">
+              <div class="date-day">{{ formatDay(schedule.startDate) }}</div>
+              <div class="date-num">{{ formatDate(schedule.startDate) }}</div>
             </div>
             <div class="schedule-content">
-              <div class="schedule-title">{{ schedule.title }}</div>
+              <div class="schedule-title">{{ schedule.taskTitle }}</div>
               <div class="schedule-meta">
-                <v-chip size="x-small" :color="getScheduleTypeColor(schedule.type)">
-                  {{ getScheduleTypeText(schedule.type) }}
+                <v-chip size="x-small" :color="getTaskStatusColor(schedule.taskStatus)">
+                  {{ getTaskStatusText(schedule.taskStatus) }}
                 </v-chip>
                 <span class="meta-item">
                   <v-icon size="12">mdi-clock</v-icon>
-                  {{ schedule.time }}
+                  {{ formatPeriod(schedule.startDate, schedule.endDate) }}
                 </span>
-                <span v-if="schedule.location" class="meta-item">
-                  <v-icon size="12">mdi-map-marker</v-icon>
-                  {{ schedule.location }}
+                <span v-if="schedule.taskContent" class="meta-item">
+                  <v-icon size="12">mdi-text</v-icon>
+                  {{ schedule.taskContent }}
                 </span>
               </div>
             </div>
-            <v-btn icon size="x-small" variant="text" @click.stop="editSchedule(schedule)">
-              <v-icon size="16">mdi-pencil</v-icon>
-            </v-btn>
           </div>
         </div>
       </div>
@@ -597,6 +637,13 @@
       </v-card>
     </v-dialog>
   </div>
+
+  <!-- 업무 상세 모달 -->
+  <TaskDetailModal
+    v-model="showTaskDetailModal"
+    :taskData="selectedTask"
+    :isPersonal="isPersonalTask"
+  />
 </template>
 
 <script setup>
@@ -608,6 +655,7 @@ import { personalDriveApi } from '@/api/drive/driveApi'
 import { createWorkspace, getFriendList, searchMembers } from '@/api/workspace/workSpaceApi'
 import { useWorkspaceStore } from '@/store/workspaceStore'
 import { useAuthStore } from '@/store/authStore'
+import TaskDetailModal from './TaskDetailModal.vue'
 
 // Stores & Router
 const workspaceStore = useWorkspaceStore()
@@ -679,101 +727,11 @@ const allTasksData = ref([]) // 모든 프로젝트의 업무 데이터
 const quickActions = ref([
   { id: 1, label: '개인 일정', icon: 'mdi-calendar-plus', color: '#0ea5e9', action: 'new-schedule' },
   { id: 2, label: '파일 업로드', icon: 'mdi-file-upload', color: '#10b981', action: 'upload-file' },
-  { id: 3, label: '팀원 초대', icon: 'mdi-account-plus', color: '#8b5cf6', action: 'invite-member' },
-  { id: 4, label: '프로젝트', icon: 'mdi-folder-plus', color: '#ec4899', action: 'new-project' }
+  { id: 3, label: '프로젝트', icon: 'mdi-folder-plus', color: '#ec4899', action: 'new-project' }
 ])
 
-// 더미 데이터: 개인 일정 (클라이밍 테마 🧗‍♂️)
-const personalSchedules = ref([
-  {
-    id: 1,
-    title: '더클라임 강남 세션',
-    type: 'personal',
-    date: '26',
-    day: '토',
-    time: '10:00 - 12:00',
-    location: '더클라임 강남점',
-    description: '5.12a 루트 프로젝트 도전',
-    isToday: true
-  },
-  {
-    id: 2,
-    title: '클라이밍 장비 쇼핑',
-    type: 'personal',
-    date: '26',
-    day: '토',
-    time: '14:00 - 15:30',
-    location: '클라이밍코리아 매장',
-    description: '새 클라이밍화 구매 (La Sportiva Solution)',
-    isToday: true
-  },
-  {
-    id: 3,
-    title: '프로젝트 스프린트 회의',
-    type: 'work',
-    date: '27',
-    day: '일',
-    time: '10:00 - 11:00',
-    location: '온라인 (Zoom)',
-    description: '이번 주 개발 목표 설정',
-    isToday: false
-  },
-  {
-    id: 4,
-    title: '인수봉 암장 야외 클라이밍',
-    type: 'personal',
-    date: '27',
-    day: '일',
-    time: '13:00 - 18:00',
-    location: '인수봉 (북한산)',
-    description: '크랙 클라이밍 연습 + 멀티피치',
-    isToday: false
-  },
-  {
-    id: 5,
-    title: '클라이밍 크루 정기 모임',
-    type: 'social',
-    date: '28',
-    day: '월',
-    time: '19:00 - 21:00',
-    location: '더클라임 연남점',
-    description: '월요일 정기 세션 + 치맥',
-    isToday: false
-  },
-  {
-    id: 6,
-    title: '볼더링 대회 출전',
-    type: 'personal',
-    date: '29',
-    day: '화',
-    time: '18:00 - 22:00',
-    location: '클라이밍파크 성수점',
-    description: '오픈 볼더링 컴피티션 (V4-V7)',
-    isToday: false
-  },
-  {
-    id: 7,
-    title: '손가락 재활 운동',
-    type: 'personal',
-    date: '30',
-    day: '수',
-    time: '07:00 - 07:30',
-    location: '집',
-    description: '핑거보드 트레이닝 + 스트레칭',
-    isToday: false
-  },
-  {
-    id: 8,
-    title: '클라이밍 유튜브 촬영',
-    type: 'personal',
-    date: '31',
-    day: '목',
-    time: '15:00 - 17:00',
-    location: '더클라임 신림점',
-    description: '5.13a 온사이트 도전 영상',
-    isToday: false
-  }
-])
+// 개인 일정 데이터 (API로부터 가져옴)
+const personalSchedules = ref([])
 
 // 우선순위 옵션
 const priorityOptions = [
@@ -784,6 +742,9 @@ const priorityOptions = [
 
 // 프로젝트 드롭다운 표시 상태
 const showProjectsDropdown = ref(false)
+
+// 개인 일정 드롭다운 표시 상태
+const showSchedulesDropdown = ref(false)
 
 // Computed
 const projectFilterOptions = computed(() => {
@@ -899,16 +860,14 @@ const getPriorityText = (priority) => {
   return texts[priority] || priority
 }
 
-const openTaskDetail = (task) => {
-  console.log('작업 상세:', task)
-}
+// openTaskDetail 함수는 하단의 handleTaskClick으로 대체됨
 
 const editTask = (task) => {
-  console.log('작업 수정:', task)
+  // TODO: 작업 수정 모달 구현
 }
 
 const editSchedule = (schedule) => {
-  console.log('일정 수정:', schedule)
+  // TODO: 일정 수정 모달 구현
 }
 
 const getScheduleTypeColor = (type) => {
@@ -931,18 +890,71 @@ const getScheduleTypeText = (type) => {
   return texts[type] || type
 }
 
+// 업무 상태 색상
+const getTaskStatusColor = (status) => {
+  const colors = {
+    TODO: 'info',
+    IN_PROGRESS: 'warning',
+    COMPLETED: 'success'
+  }
+  return colors[status] || 'grey'
+}
+
+// 업무 상태 텍스트
+const getTaskStatusText = (status) => {
+  const texts = {
+    TODO: '예정',
+    IN_PROGRESS: '진행중',
+    COMPLETED: '완료'
+  }
+  return texts[status] || status
+}
+
+// 날짜 포맷팅 (일)
+const formatDate = (dateString) => {
+  if (!dateString) return ''
+  const date = new Date(dateString)
+  return date.getDate()
+}
+
+// 날짜 포맷팅 (요일)
+const formatDay = (dateString) => {
+  if (!dateString) return ''
+  const date = new Date(dateString)
+  const days = ['일', '월', '화', '수', '목', '금', '토']
+  return days[date.getDay()]
+}
+
+// 기간 포맷팅
+const formatPeriod = (startDate, endDate) => {
+  if (!startDate || !endDate) return ''
+  return `${startDate} ~ ${endDate}`
+}
+
+// 일정 날짜 포맷팅 (드롭다운용)
+const formatScheduleDate = (startDate, endDate) => {
+  if (!startDate) return ''
+  if (startDate === endDate) return startDate
+  return `${startDate} ~ ${endDate}`
+}
+
+// 오늘 날짜 확인
+const isToday = (dateString) => {
+  if (!dateString) return false
+  const date = new Date(dateString)
+  const today = new Date()
+  return date.getDate() === today.getDate() &&
+         date.getMonth() === today.getMonth() &&
+         date.getFullYear() === today.getFullYear()
+}
+
 const handleQuickAction = (action) => {
   switch (action) {
     case 'new-schedule':
-      console.log('개인 일정 생성')
       // TODO: 개인 일정 생성 모달 구현
       break
     case 'upload-file':
       showFileUploadDialog.value = true
-      break
-    case 'invite-member':
-      console.log('팀원 초대')
-      // TODO: 팀원 초대 모달 구현
       break
     case 'new-project':
       showProjectDialog.value = true
@@ -963,11 +975,15 @@ const handleFileUpload = async () => {
   }
 
   try {
-    console.log('파일 업로드:', uploadFiles.value)
+    // 개인 워크스페이스 정보 가져오기
+    const personalWorkspace = workspaceStore.workspaces.find(ws => ws.type === 'personal')
     
-    // 개인 드라이브 channelSeq는 2로 고정 (TEST_CHANNEL_SEQ)
-    const channelSeq = 2
-    const response = await personalDriveApi.uploadFiles(uploadFiles.value, channelSeq, null)
+    if (!personalWorkspace || !personalWorkspace.workSpaceSeq) {
+      alert('개인 워크스페이스 정보를 찾을 수 없습니다.')
+      return
+    }
+    
+    const response = await personalDriveApi.uploadFiles(uploadFiles.value, personalWorkspace.workSpaceSeq, null)
     
     if (response.success) {
       alert(`${uploadFiles.value.length}개의 파일이 업로드되었습니다.`)
@@ -980,7 +996,6 @@ const handleFileUpload = async () => {
       throw new Error(response.error || '파일 업로드 실패')
     }
   } catch (error) {
-    console.error('파일 업로드 실패:', error)
     alert('파일 업로드에 실패했습니다: ' + (error.message || error))
   }
 }
@@ -1022,7 +1037,7 @@ const loadProjectFriendList = async () => {
       isFriend: true
     }))
   } catch (error) {
-    console.error('친구 목록 로딩 실패:', error)
+    // 에러 무시
   } finally {
     isLoadingProjectFriends.value = false
   }
@@ -1058,7 +1073,6 @@ watch(memberSearchQuery, (newValue) => {
         isFriend: member.isFriend || false
       }))
     } catch (error) {
-      console.error('회원 검색 실패:', error)
       memberSearchResults.value = []
     } finally {
       isLoadingMemberSearch.value = false
@@ -1123,7 +1137,6 @@ const handleCreateProject = async () => {
     // 모달 닫기
     closeProjectDialog()
   } catch (error) {
-    console.error('프로젝트 생성 실패:', error)
     alert('프로젝트 생성에 실패했습니다: ' + (error.message || error))
   }
 }
@@ -1182,7 +1195,6 @@ const loadFriends = async () => {
     const data = await friendApi.getFriendList()
     friendsList.value = data.content || data || []
   } catch (error) {
-    console.error('친구 목록 로드 실패:', error)
     friendsList.value = []
   }
 }
@@ -1190,18 +1202,109 @@ const loadFriends = async () => {
 // 개인 드라이브 파일 개수 로드
 const loadDriveFiles = async () => {
   try {
-    // 개인 드라이브는 channelSeq가 2로 고정 (TEST_CHANNEL_SEQ)
-    const response = await personalDriveApi.getItems(2, null)
+    // 개인 워크스페이스 정보 가져오기
+    const personalWorkspace = workspaceStore.workspaces.find(ws => ws.type === 'personal')
     
-    if (response.success && response.data) {
-      driveItems.value = response.data
-      console.log('📁 개인 드라이브 파일 개수:', driveItems.value.length)
-    } else {
+    console.log('📁 [개인 드라이브] 워크스페이스 검색:', personalWorkspace)
+    
+    if (!personalWorkspace || !personalWorkspace.workSpaceSeq) {
+      console.warn('⚠️ [개인 드라이브] 개인 워크스페이스 정보가 없습니다')
       driveItems.value = []
+      return
     }
+    
+    console.log('📡 [개인 드라이브] API 호출, Seq:', personalWorkspace.workSpaceSeq)
+    const response = await personalDriveApi.getItems(personalWorkspace.workSpaceSeq, null)
+    
+    console.log('📦 [개인 드라이브] API 응답:', response)
+    
+    // 백엔드 응답 구조 처리: { success, data } 또는 직접 배열
+    const driveData = response?.data || response
+    driveItems.value = Array.isArray(driveData) ? driveData : []
+    
+    console.log('✅ [개인 드라이브] 로드 완료:', driveItems.value.length, '개')
   } catch (error) {
-    console.error('개인 드라이브 로드 실패:', error)
+    console.error('❌ [개인 드라이브] 로드 실패:', error)
     driveItems.value = []
+  }
+}
+
+// 개인 일정 목록 로드
+const loadPersonalSchedules = async () => {
+  try {
+    // 개인 워크스페이스 정보 가져오기
+    const personalWorkspace = workspaceStore.workspaces.find(ws => ws.type === 'personal')
+    
+    console.log('📅 [개인 일정] 워크스페이스 검색:', personalWorkspace)
+    
+    if (!personalWorkspace || !personalWorkspace.workSpaceSeq) {
+      console.warn('⚠️ [개인 일정] 개인 워크스페이스 정보가 없습니다')
+      console.log('전체 워크스페이스:', workspaceStore.workspaces)
+      personalSchedules.value = []
+      return
+    }
+    
+    console.log('📡 [개인 일정] API 호출, Seq:', personalWorkspace.workSpaceSeq)
+    console.log('📡 [개인 일정] API URL:', `/task-service/scheduleManagement/project/tasks/${personalWorkspace.workSpaceSeq}`)
+    
+    // 프로젝트 Task API 사용 (개인 워크스페이스도 동일한 API)
+    const response = await scheduleApi.getProjectTasks(personalWorkspace.workSpaceSeq)
+    console.log('📦 [개인 일정] API 응답 (raw):', JSON.stringify(response, null, 2))
+    
+    // 백엔드 응답 구조 처리
+    let scheduleData = response?.data || response
+    console.log('📦 [개인 일정] 처리된 데이터 타입:', typeof scheduleData, Array.isArray(scheduleData))
+    
+    // 배열이 아닌 경우 처리
+    if (!Array.isArray(scheduleData)) {
+      console.log('⚠️ [개인 일정] 응답이 배열이 아닙니다:', scheduleData)
+      personalSchedules.value = []
+      return
+    }
+    
+    console.log('📦 [개인 일정] 배열 길이:', scheduleData.length)
+    
+    // 배열이 비어있는 경우
+    if (scheduleData.length === 0) {
+      console.log('ℹ️ [개인 일정] 등록된 일정이 없습니다')
+      personalSchedules.value = []
+      return
+    }
+    
+    // 상태별로 그룹화된 데이터에서 실제 일정 추출
+    let schedules = []
+    
+    for (let i = 0; i < scheduleData.length; i++) {
+      const group = scheduleData[i]
+      console.log(`📦 [개인 일정] 그룹 ${i}:`, JSON.stringify(group, null, 2))
+      
+      // taskResDtoList가 있는 경우 (그룹화된 응답)
+      if (group && group.taskResDtoList && Array.isArray(group.taskResDtoList)) {
+        console.log(`✅ [개인 일정] 그룹 ${i}에서 ${group.taskResDtoList.length}개 추출`)
+        schedules = schedules.concat(group.taskResDtoList)
+      }
+      // 직접 Task 객체인 경우
+      else if (group && (group.taskSeq || group.taskTitle)) {
+        console.log(`✅ [개인 일정] 그룹 ${i}는 직접 Task 객체`)
+        schedules.push(group)
+      }
+    }
+    
+    personalSchedules.value = schedules
+    console.log('✅ [개인 일정] 로드 완료:', personalSchedules.value.length, '개')
+    console.log('✅ [개인 일정] 최종 데이터:', JSON.stringify(personalSchedules.value, null, 2))
+  } catch (error) {
+    console.error('❌ [개인 일정] 로드 실패:', error)
+    console.error('❌ [개인 일정] 에러 상세:', error.response?.data || error.message)
+    console.error('❌ [개인 일정] HTTP 상태:', error.response?.status)
+    
+    // 500 에러는 백엔드 문제이므로 빈 배열로 처리
+    if (error.response?.status === 500) {
+      console.warn('⚠️ [개인 일정] 백엔드 서버 오류 - 빈 목록으로 표시합니다')
+      console.warn('⚠️ [개인 일정] 백엔드 팀에 API 확인 요청이 필요합니다')
+    }
+    
+    personalSchedules.value = []
   }
 }
 
@@ -1211,11 +1314,7 @@ const loadMyTasks = async () => {
     const projectWorkspaces = projects.value
     const currentUserSeq = authStore.memberSeq
     
-    console.log('📋 프로젝트 목록:', projectWorkspaces)
-    console.log('👤 현재 사용자 memberSeq:', currentUserSeq)
-    
     if (projectWorkspaces.length === 0) {
-      console.log('⚠️ 프로젝트가 없습니다')
       myTasks.value = []
       return
     }
@@ -1223,23 +1322,22 @@ const loadMyTasks = async () => {
     // 모든 프로젝트의 업무를 병렬로 가져오기
     const taskPromises = projectWorkspaces.map(async (project) => {
       try {
-        console.log(`🔄 프로젝트 ${project.name} (ID: ${project.id}) 업무 로드 중...`)
         const response = await scheduleApi.getProjectTasks(project.id)
-        console.log(`📦 프로젝트 ${project.name} API 응답:`, response)
         
-        // API 응답 구조 처리
+        // 백엔드 응답 구조 처리: { success, data } 또는 직접 배열
+        const taskData = response?.data || response
+        const taskArray = Array.isArray(taskData) ? taskData : []
+        
+        // 중첩된 구조에서 실제 업무 데이터 추출
         let tasks = []
-        if (Array.isArray(response)) {
-          // 직접 배열인 경우
-          tasks = response.flatMap(group => group.taskResDtoList || [])
-        } else if (response.data) {
-          // data 속성이 있는 경우
-          if (Array.isArray(response.data)) {
-            tasks = response.data.flatMap(group => group.taskResDtoList || [])
+        taskArray.forEach(group => {
+          if (group.taskResDtoList && Array.isArray(group.taskResDtoList)) {
+            tasks = tasks.concat(group.taskResDtoList)
+          } else if (group.taskStatus) {
+            // 단일 업무인 경우
+            tasks.push(group)
           }
-        }
-        
-        console.log(`✅ 프로젝트 ${project.name} 업무 ${tasks.length}개 로드됨`)
+        })
         
         // 프로젝트 정보 추가
         return tasks.map(task => ({
@@ -1254,7 +1352,6 @@ const loadMyTasks = async () => {
           assigneeSeq: task.picMemberSeq
         }))
       } catch (error) {
-        console.error(`❌ 프로젝트 ${project.name} 업무 로드 실패:`, error)
         return []
       }
     })
@@ -1262,29 +1359,18 @@ const loadMyTasks = async () => {
     const allProjectTasks = await Promise.all(taskPromises)
     const flatTasks = allProjectTasks.flat()
     
-    console.log(`📊 전체 업무 개수: ${flatTasks.length}`)
-    
     // 내가 담당자인 업무만 필터링
     if (currentUserSeq) {
       myTasks.value = flatTasks.filter(task => {
-        const isMyTask = task.assigneeSeq && Number(task.assigneeSeq) === Number(currentUserSeq)
-        if (isMyTask) {
-          console.log(`✓ 내 업무: ${task.title} (담당자: ${task.assigneeSeq})`)
-        }
-        return isMyTask
+        return task.assigneeSeq && Number(task.assigneeSeq) === Number(currentUserSeq)
       })
-      console.log(`👤 내가 담당자인 업무: ${myTasks.value.length}개`)
     } else {
-      // memberSeq가 없으면 모든 업무 표시
-      console.log('⚠️ memberSeq가 없어서 모든 업무 표시')
       myTasks.value = flatTasks
     }
     
     allTasksData.value = flatTasks
-    console.log('✅ 내 업무 로드 완료:', myTasks.value)
     
   } catch (error) {
-    console.error('❌ 내 업무 로드 실패:', error)
     myTasks.value = []
   }
 }
@@ -1311,10 +1397,25 @@ const getPriorityFromTask = (task) => {
   return 'medium' // 기본값: 보통
 }
 
-// 워크스페이스 변경 감지하여 업무 다시 로드
-watch(() => workspaceStore.workspaces, (newWorkspaces) => {
-  console.log('🔄 워크스페이스 변경 감지:', newWorkspaces.length)
+// 워크스페이스 변경 감지하여 데이터 다시 로드
+watch(() => workspaceStore.workspaces, (newWorkspaces, oldWorkspaces) => {
+  console.log('🔄 워크스페이스 변경 감지:', oldWorkspaces?.length, '→', newWorkspaces.length)
+  
   if (newWorkspaces.length > 0) {
+    // 개인 워크스페이스가 추가되었는지 확인
+    const personalWorkspace = newWorkspaces.find(ws => ws.type === 'personal')
+    const oldPersonalWorkspace = oldWorkspaces?.find(ws => ws.type === 'personal')
+    
+    // 개인 워크스페이스가 새로 추가되었거나 workSpaceSeq가 변경된 경우
+    if (personalWorkspace && 
+        (!oldPersonalWorkspace || 
+         personalWorkspace.workSpaceSeq !== oldPersonalWorkspace.workSpaceSeq)) {
+      console.log('🔄 개인 워크스페이스 변경 감지, 데이터 다시 로드')
+      loadPersonalSchedules()
+      loadDriveFiles()
+    }
+    
+    // 프로젝트 워크스페이스 변경 시 내 업무 다시 로드
     loadMyTasks()
   }
 }, { deep: true })
@@ -1325,8 +1426,6 @@ const navigateToDrive = () => {
 }
 
 const navigateToProject = async (projectId) => {
-  console.log('프로젝트로 이동:', projectId)
-  
   // 워크스페이스 선택
   await workspaceStore.selectWorkspace(projectId)
   
@@ -1341,26 +1440,92 @@ onMounted(async () => {
   updateDateTime()
   timeInterval = setInterval(updateDateTime, 60000)
   
+  console.log('🚀 [PersonalDashboard] onMounted 시작')
+  console.log('📦 [PersonalDashboard] 현재 워크스페이스:', workspaceStore.workspaces)
+  
   // 워크스페이스 목록이 로드될 때까지 대기
   if (workspaceStore.workspaces.length === 0) {
+    console.log('🔄 [PersonalDashboard] 워크스페이스 로딩 시작')
     await workspaceStore.loadMyWorkspaces()
+    console.log('✅ [PersonalDashboard] 워크스페이스 로딩 완료:', workspaceStore.workspaces)
   }
   
+  // 개인 워크스페이스가 제대로 로드되었는지 확인
+  const personalWorkspace = workspaceStore.workspaces.find(ws => ws.type === 'personal')
+  console.log('📦 [PersonalDashboard] 개인 워크스페이스:', personalWorkspace)
+  
   // 데이터 로드 (병렬 처리)
+  console.log('🔄 [PersonalDashboard] 데이터 로드 시작')
   await Promise.all([
     loadFriends(),
-    loadDriveFiles()
+    loadDriveFiles(),
+    loadPersonalSchedules()
   ])
   
   // 워크스페이스가 이미 있으면 업무 로드
   if (workspaceStore.workspaces.length > 0) {
+    console.log('🔄 [PersonalDashboard] 내 업무 로드 시작')
     await loadMyTasks()
   }
+  
+  console.log('✅ [PersonalDashboard] onMounted 완료')
 })
 
 onUnmounted(() => {
   if (timeInterval) {
     clearInterval(timeInterval)
+  }
+})
+
+// 업무 상세 모달 관련
+const showTaskDetailModal = ref(false)
+const selectedTask = ref({})
+const isLoadingTask = ref(false)
+const isPersonalTask = ref(false)
+
+// 업무 항목 클릭 핸들러
+const handleTaskClick = async (taskSeq, isPersonal = false) => {
+  if (!taskSeq) {
+    return
+  }
+  
+  try {
+    isLoadingTask.value = true
+    isPersonalTask.value = isPersonal
+    
+    // 모두 프로젝트 Task API 사용 (개인/프로젝트 동일)
+    const response = await scheduleApi.getTaskDetail(taskSeq)
+    
+    // 백엔드 응답 구조 처리: { success, data } 또는 직접 객체
+    const taskDetail = response?.data || response
+    
+    if (taskDetail) {
+      selectedTask.value = taskDetail
+      showTaskDetailModal.value = true
+    } else {
+      alert('업무 정보가 없습니다.')
+    }
+  } catch (error) {
+    alert('업무 정보를 불러오는데 실패했습니다: ' + error.message)
+  } finally {
+    isLoadingTask.value = false
+  }
+}
+
+// 모달이 닫힐 때 데이터 새로고침
+watch(showTaskDetailModal, async (newVal, oldVal) => {
+  // 모달이 열림 → 닫힘 상태로 변경될 때
+  if (oldVal === true && newVal === false) {
+    // 데이터 새로고침
+    if (isPersonalTask.value) {
+      // 개인 일정이었으면 개인 일정 목록 새로고침
+      await loadPersonalSchedules()
+    } else {
+      // 프로젝트 업무였으면 내 업무 목록 새로고침
+      await loadMyTasks()
+    }
+    selectedTask.value = {}
+    isPersonalTask.value = false
   }
 })
 </script>
@@ -1542,6 +1707,23 @@ onUnmounted(() => {
 
 .projects-dropdown::-webkit-scrollbar-thumb:hover {
   background: #94a3b8;
+}
+
+/* 일정 드롭다운 메타 정보 */
+.schedule-dropdown-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+  flex-wrap: wrap;
+}
+
+.schedule-date-text {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: #64748b;
 }
 
 .stat-icon {

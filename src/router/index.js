@@ -17,9 +17,22 @@ const routes = [
     meta: { requiresAuth: false },
   },
   {
+    path: '/workspace',
+    redirect: '/workspaces/personal/dashboard',
+    meta: { requiresAuth: true }, // 인증 필요
+  },
+  {
     path: '/workspaces',
     redirect: '/workspaces/personal/dashboard',
     meta: { requiresAuth: true }, // 인증 필요
+  },
+  {
+    path: '/workspace/:workspaceId/:channel/:subChannel?',
+    redirect: (to) => {
+      // 기존 /workspace URL을 /workspaces로 리다이렉트
+      return `/workspaces/${to.params.workspaceId}/${to.params.channel}${to.params.subChannel ? '/' + to.params.subChannel : ''}`
+    },
+    meta: { requiresAuth: true },
   },
   {
     path: '/workspaces/:workspaceId/:channel/:subChannel?',

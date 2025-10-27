@@ -450,7 +450,7 @@ const demoTabs = ref([
 
 const goToWorkspace = () => {
   // 임시로 바로 워크스페이스로 이동 (UI 테스트용)
-  router.push('/workspace')
+  router.push('/workspaces')
 }
 
 const openAuthModal = (view) => {

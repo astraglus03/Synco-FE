@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import { getMyWorkspaces } from '@/api/workspace/workSpaceApi'
+import { getMyWorkspaces, getPersonalWorkspace } from '@/api/workspace/workSpaceApi'
 import { Authority } from '@/models/workspace/WorkspaceModels'
 
 export const useWorkspaceStore = defineStore('workspace', () => {
@@ -74,21 +74,48 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     workspaces.value.push(workspace)
   }
 
+  // 개인 워크스페이스 로드
+  const loadPersonalWorkspace = async () => {
+    try {
+      const personalWorkspace = await getPersonalWorkspace()
+      
+      if (personalWorkspace) {
+        console.log('✅ [개인WS Store] 로드 성공, Seq:', personalWorkspace.workSpaceSeq)
+        
+        // 기존 personal 워크스페이스 제거하고 새로 추가
+        const projectWorkspaces = workspaces.value.filter(w => w.type === 'project')
+        
+        workspaces.value = [
+          {
+            id: 'personal',
+            workSpaceSeq: personalWorkspace.workSpaceSeq,
+            name: '내 워크스페이스',
+            type: 'personal',
+            icon: 'mdi-home'
+          },
+          ...projectWorkspaces
+        ]
+        
+        return personalWorkspace
+      } else {
+        console.warn('⚠️ [개인WS Store] 응답이 null입니다')
+      }
+      
+      return null
+    } catch (error) {
+      console.error('❌ [개인WS Store] 로딩 실패:', error.response?.data || error.message)
+      return null
+    }
+  }
+
   // 내 워크스페이스 목록 로드
   const loadMyWorkspaces = async () => {
     try {
-      const workspaceList = await getMyWorkspaces()
+      // 1. 개인 워크스페이스 로드
+      const personal = await loadPersonalWorkspace()
       
-      // 조회 결과 로그 출력
-      console.log('🔍 API 조회 결과:', workspaceList)
-      console.log('📊 조회된 워크스페이스 개수:', workspaceList.length)
-      workspaceList.forEach((ws, index) => {
-        console.log(`  [${index + 1}] ${ws.workSpaceName}`, {
-          workSpaceSeq: ws.workSpaceSeq,
-          workSpaceType: ws.workSpaceType,
-          thumbnailImageUrl: ws.thumbnailImageUrl
-        })
-      })
+      // 2. 프로젝트 워크스페이스 목록 로드
+      const workspaceList = await getMyWorkspaces()
       
       // 기존 personal 워크스페이스 유지
       const personalWorkspace = workspaces.value.find(w => w.type === 'personal')
@@ -102,8 +129,6 @@ export const useWorkspaceStore = defineStore('workspace', () => {
         profile: ws.thumbnailImageUrl,
         icon: ws.iconText
       }))
-      
-      console.log('✅ 최종 서버 사이드바 목록:', apiWorkspaces.map(ws => ws.name))
       
       workspaces.value = personalWorkspace 
         ? [personalWorkspace, ...apiWorkspaces]
@@ -133,6 +158,7 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     selectChannel,
     selectSubChannel,
     addWorkspace,
+    loadPersonalWorkspace,
     loadMyWorkspaces
   }
 })

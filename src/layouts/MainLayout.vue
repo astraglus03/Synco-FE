@@ -165,8 +165,12 @@ const selectChannel = (channelId) => {
 const selectSubChannel = (parentId, subChannelId) => {
   const currentWorkspace = workspaceStore.currentWorkspaceInfo
   if (currentWorkspace) {
-    // 하위 채널의 경우 URL에 subChannel 정보 포함
-    router.push(`/workspace/${currentWorkspace.id}/${parentId}/${subChannelId}`)
+    // URL 형식: /workspaces/4/schedules/12
+    const cleanWorkspaceId = extractId(currentWorkspace.id)
+    const cleanChannelId = pluralizeChannel(parentId)
+    const cleanSubChannelId = extractId(subChannelId)
+    
+    router.push(`/workspaces/${cleanWorkspaceId}/${cleanChannelId}/${cleanSubChannelId}`)
     
     // MainContent에 하위 채널 선택 이벤트 전달
     if (parentId === 'schedule') {

@@ -48,6 +48,7 @@
                 v-for="task in inProgressTasks"
                 :key="task.taskSeq"
                 class="task-item-enhanced"
+                @click="handleTaskClick(task.taskSeq)"
               >
                 <div class="task-item-content">
                   <div class="task-item-header">
@@ -100,6 +101,7 @@
                 v-for="task in completedTasks"
                 :key="task.taskSeq"
                 class="task-item-enhanced"
+                @click="handleTaskClick(task.taskSeq)"
               >
                 <div class="task-item-content">
                   <div class="task-item-header">
@@ -291,7 +293,8 @@
                     <div
                       v-for="task in period.tasks"
                       :key="task.taskSeq"
-                      class="period-task-item"
+                      class="period-task-item clickable"
+                      @click="handleTaskClick(task.taskSeq)"
                     >
                       <div class="task-item-content">
                         <div class="task-item-header">
@@ -347,7 +350,8 @@
               <div
                 v-for="task in upcomingDeadlines"
                 :key="task.id"
-                class="deadline-item"
+                class="deadline-item clickable"
+                @click="handleTaskClick(task.id)"
               >
                 <div class="deadline-marker" :style="{ backgroundColor: getPriorityColor(task.priority) }"></div>
                 <div class="deadline-content">
@@ -398,7 +402,8 @@
               <div
                 v-for="milestone in upcomingMilestones"
                 :key="milestone.id"
-                class="milestone-item"
+                class="milestone-item clickable"
+                @click="handleTaskClick(milestone.id)"
               >
                   <div class="milestone-marker" :style="{ backgroundColor: getPriorityColor(milestone.priority) }"></div>
                 <div class="milestone-content">
@@ -465,7 +470,8 @@
               <div
                 v-for="task in filteredTasksByAssignee"
                 :key="task.id"
-                class="assignee-task-item"
+                class="assignee-task-item clickable"
+                @click="handleTaskClick(task.id)"
               >
                 <div class="task-marker" :style="{ backgroundColor: getPriorityColor(task.priority) }"></div>
                 <div class="task-content">
@@ -508,6 +514,12 @@
         </v-col>
       </v-row>
   </div>
+
+  <!-- 업무 상세 모달 -->
+  <TaskDetailModal
+    v-model="showTaskDetailModal"
+    :taskData="selectedTask"
+  />
 </template>
 
 <script setup>
@@ -516,8 +528,9 @@ import { useProjectScheduleStore } from '@/store/projectScheduleStore'
 import { useWorkspaceMemberStore } from '@/store/workspaceMemberStore'
 import { useWorkspaceStore } from '@/store/workspaceStore'
 import { useAuthStore } from '@/store/authStore'
-import { getProjectTasks } from '@/api/schedule/scheduleApi'
+import { getProjectTasks, getTaskDetail } from '@/api/schedule/scheduleApi'
 import { getWorkspaceMembers } from '@/api/workspace/workSpaceApi'
+import TaskDetailModal from './TaskDetailModal.vue'
 
 // Props
 const props = defineProps({
@@ -835,7 +848,13 @@ const periodData = computed(() => {
     const totalWeeks = Math.ceil(totalDays / 7)
     const isLastPage = currentPage.value === totalWeeks - 1
     
-    const weekStart = getWeekStart(new Date(startDate.getTime() + (currentPage.value * 7 * 24 * 60 * 60 * 1000)))
+    // 첫 번째 페이지는 프로젝트 시작일부터, 그 외에는 주 단위로 계산
+    let weekStart
+    if (currentPage.value === 0) {
+      weekStart = new Date(startDate)
+    } else {
+      weekStart = getWeekStart(new Date(startDate.getTime() + (currentPage.value * 7 * 24 * 60 * 60 * 1000)))
+    }
     
     for (let i = 0; i < 7; i++) {
       const currentDay = new Date(weekStart)
@@ -897,7 +916,13 @@ const periodData = computed(() => {
     const totalWeeks = Math.ceil(totalDays / 7)
     const isLastPage = currentPage.value === totalWeeks - 1
     
-    const weekStart = getWeekStart(new Date(customStart.getTime() + (currentPage.value * 7 * 24 * 60 * 60 * 1000)))
+    // 첫 번째 페이지는 사용자 지정 시작일부터, 그 외에는 주 단위로 계산
+    let weekStart
+    if (currentPage.value === 0) {
+      weekStart = new Date(customStart)
+    } else {
+      weekStart = getWeekStart(new Date(customStart.getTime() + (currentPage.value * 7 * 24 * 60 * 60 * 1000)))
+    }
     
     for (let i = 0; i < 7; i++) {
       const currentDay = new Date(weekStart)
@@ -1043,14 +1068,20 @@ const loadDashboardStats = async () => {
     if (!isMounted.value) return
     isLoadingStats.value = true
     
+    console.log('📡 대시보드 통계 로딩 시작:', projectId)
     // 프로젝트의 모든 업무 조회
-    const tasks = await getProjectTasks(projectId)
+    const response = await getProjectTasks(projectId)
+    console.log('📦 받은 응답:', response)
     
     // 컴포넌트가 언마운트되었으면 중단
     if (!isMounted.value) return
     
+    // 백엔드 응답 구조 처리: { success, data } 또는 직접 배열
+    const tasks = response?.data || response
+    
     // 안전하게 배열로 변환
     allTasks.value = Array.isArray(tasks) ? tasks : []
+    console.log('✅ 받은 태스크 배열:', allTasks.value)
     
     // 중첩된 구조에서 실제 업무 데이터 추출
     let actualTasks = []
@@ -1065,6 +1096,7 @@ const loadDashboardStats = async () => {
     
     if (!isMounted.value) return
     allTasks.value = actualTasks
+    console.log('✅ 추출된 실제 태스크:', allTasks.value)
     
     // 진행중인 업무 필터링
     inProgressTasks.value = allTasks.value.filter(task => {
@@ -1086,11 +1118,18 @@ const loadDashboardStats = async () => {
     
     // 팀 멤버 목록 조회
     try {
-      const members = await getWorkspaceMembers(projectId)
+      console.log('📡 팀 멤버 조회 시작:', projectId)
+      const memberResponse = await getWorkspaceMembers(projectId)
+      console.log('📦 받은 멤버 응답:', memberResponse)
+      
       if (!isMounted.value) return
-      teamMembers.value = members || []
+      
+      // 백엔드 응답 구조 처리: { success, data } 또는 직접 배열
+      const members = memberResponse?.data || memberResponse
+      teamMembers.value = Array.isArray(members) ? members : []
+      console.log('✅ 팀 멤버 저장:', teamMembers.value)
     } catch (memberError) {
-      console.warn('팀 멤버 조회 실패:', memberError)
+      console.warn('❌ 팀 멤버 조회 실패:', memberError)
       if (!isMounted.value) return
       teamMembers.value = []
     }
@@ -1461,7 +1500,13 @@ const getDayChartData = (startDate, endDate) => {
   const totalWeeks = Math.ceil(totalDays / 7)
   const isLastPage = currentPage.value === totalWeeks - 1
   
-  const weekStart = getWeekStart(new Date(startDate.getTime() + (currentPage.value * 7 * 24 * 60 * 60 * 1000)))
+  // 첫 번째 페이지는 시작일부터, 그 외에는 주 단위로 계산
+  let weekStart
+  if (currentPage.value === 0) {
+    weekStart = new Date(startDate)
+  } else {
+    weekStart = getWeekStart(new Date(startDate.getTime() + (currentPage.value * 7 * 24 * 60 * 60 * 1000)))
+  }
   
   for (let i = 0; i < 7; i++) {
     const currentDay = new Date(weekStart)
@@ -1530,7 +1575,7 @@ const formatProjectPeriod = () => {
     return '프로젝트 기간 정보 없음'
   }
   
-  return `${startDate.getFullYear()}년 ${startDate.getMonth() + 1}월 ~ ${endDate.getFullYear()}년 ${endDate.getMonth() + 1}월 (${months}개월)`
+  return `${startDate.getFullYear()}년 ${startDate.getMonth() + 1}월 ${startDate.getDate()}일 ~ ${endDate.getFullYear()}년 ${endDate.getMonth() + 1}월 ${endDate.getDate()}일 (${months}개월)`
 }
 
 const getPeriodProgressTitle = () => {
@@ -1666,7 +1711,14 @@ const createChart = async () => {
           titleColor: '#fff',
           bodyColor: '#fff',
           borderColor: '#3b82f6',
-          borderWidth: 1
+          borderWidth: 1,
+          callbacks: {
+            label: (context) => {
+              const label = context.dataset.label || ''
+              const value = context.parsed.y
+              return `${label}: ${value}%`
+            }
+          }
         }
       },
       elements: {
@@ -1763,6 +1815,30 @@ watch(() => workspaceStore.currentWorkspace, async (newWorkspace, oldWorkspace) 
   }
 }, { immediate: false })
 
+// 워크스페이스 멤버 변경 감지 (초대/강제탈퇴 시 대시보드 최신화)
+watch(() => memberStore.members, async (newMembers, oldMembers) => {
+  // isMounted이고 멤버 배열이 존재하며, 이전 값도 존재하는 경우만 처리 (초기 로드 제외)
+  if (!isMounted.value || !newMembers || !oldMembers) return
+  
+  // 멤버 수가 변경된 경우에만 업데이트
+  if (newMembers.length !== oldMembers.length) {
+    console.log('🔄 워크스페이스 멤버 변경 감지:', oldMembers.length, '→', newMembers.length)
+    
+    // 멤버 목록만 다시 로드
+    try {
+      const projectId = currentProject.value?.id
+      if (projectId) {
+        const memberResponse = await getWorkspaceMembers(projectId)
+        const members = memberResponse?.data || memberResponse
+        teamMembers.value = Array.isArray(members) ? members : []
+        console.log('✅ 대시보드 팀 멤버 최신화 완료:', teamMembers.value.length, '명')
+      }
+    } catch (error) {
+      console.error('❌ 멤버 목록 최신화 실패:', error)
+    }
+  }
+}, { deep: true })
+
 // Lifecycle
 onMounted(async () => {
   isMounted.value = true
@@ -1800,6 +1876,58 @@ watch([allTasks, inProgressTasks, completedTasks, teamMembers], () => {
     updateChart()
   }
 }, { deep: true })
+
+// 업무 상세 모달 관련
+const showTaskDetailModal = ref(false)
+const selectedTask = ref({})
+const isLoadingTask = ref(false)
+
+// 업무 항목 클릭 핸들러
+const handleTaskClick = async (taskSeq) => {
+  console.log('🖱️ 업무 클릭:', taskSeq)
+  
+  if (!taskSeq) {
+    console.warn('⚠️ taskSeq가 없습니다:', taskSeq)
+    return
+  }
+  
+  try {
+    isLoadingTask.value = true
+    
+    // API로 업무 상세 정보 가져오기
+    console.log('📡 API 호출 시작: getTaskDetail(' + taskSeq + ')')
+    const response = await getTaskDetail(taskSeq)
+    console.log('📦 받은 응답:', response)
+    
+    // 백엔드 응답 구조 처리: { success, data } 또는 직접 객체
+    const taskDetail = response?.data || response
+    
+    if (taskDetail) {
+      selectedTask.value = taskDetail
+      console.log('✅ selectedTask에 저장됨:', selectedTask.value)
+      showTaskDetailModal.value = true
+      console.log('✅ 모달 열기:', showTaskDetailModal.value)
+    } else {
+      console.error('❌ 업무 정보를 가져올 수 없습니다.')
+      alert('업무 정보가 없습니다.')
+    }
+  } catch (error) {
+    console.error('❌ 업무 상세 조회 실패:', error)
+    alert('업무 정보를 불러오는데 실패했습니다: ' + error.message)
+  } finally {
+    isLoadingTask.value = false
+  }
+}
+
+// 모달이 닫힐 때 데이터 새로고침
+watch(showTaskDetailModal, async (newVal, oldVal) => {
+  // 모달이 열림 → 닫힘 상태로 변경될 때
+  if (oldVal === true && newVal === false) {
+    // 데이터 새로고침
+    await loadStats()
+    selectedTask.value = {}
+  }
+})
 </script>
 
 <style scoped>

@@ -1,6 +1,7 @@
 <script setup>
 import { ref, computed, watch, onMounted } from 'vue'
 import { useWorkspaceStore } from '@/store/workspaceStore'
+import { useWorkspaceMemberStore } from '@/store/workspaceMemberStore'
 import { getWorkspaceMembers } from '@/api/workspace/workSpaceApi'
 
 const props = defineProps({
@@ -11,6 +12,7 @@ const emit = defineEmits(['close'])
 
 // Store
 const workspaceStore = useWorkspaceStore()
+const workspaceMemberStore = useWorkspaceMemberStore()
 
 // 프로젝트 멤버 목록
 const projectMembers = ref([])
@@ -51,6 +53,18 @@ const loadMembers = async () => {
 watch(() => workspaceStore.currentWorkspace, () => {
   loadMembers()
 })
+
+// 워크스페이스 멤버 변경 감지 (초대/강제탈퇴 시 멤버 사이드바 최신화)
+watch(() => workspaceMemberStore.members, (newMembers, oldMembers) => {
+  // 멤버 배열이 존재하고 이전 값도 존재하는 경우만 처리 (초기 로드 제외)
+  if (!newMembers || !oldMembers) return
+  
+  // 멤버 수가 변경된 경우에만 업데이트
+  if (newMembers.length !== oldMembers.length) {
+    console.log('🔄 멤버 사이드바 최신화:', oldMembers.length, '→', newMembers.length)
+    loadMembers()
+  }
+}, { deep: true })
 
 // 사이드바 표시 시 멤버 목록 로드
 watch(() => props.visible, (newVisible) => {
