@@ -3,6 +3,7 @@ import { ref, computed, onMounted, onUnmounted, nextTick } from "vue";
 import { usePermissions, PERMISSIONS } from "@/composables/usePermissions";
 import { useWorkspaceStore } from "@/store/workspaceStore";
 import { useWorkspaceMemberStore } from "@/store/workspaceMemberStore";
+import { emitter } from "@/eventBus";
 import PollModal from "./PollModal.vue";
 import FileAttachmentModal from "./FileAttachmentModal.vue";
 import SockJS from "sockjs-client";
@@ -785,8 +786,8 @@ const changeChannel = async (channelId) => {
 };
 
 // 하위 채널 선택 이벤트 처리
-const handleSubChannelSelect = (event) => {
-  const { parentId, subChannelId } = event.detail;
+const handleSubChannelSelect = ({ parentId, subChannelId }) => {
+  console.log("📣 select-chat-channel 이벤트:", parentId, subChannelId);
   if (parentId === "chat") {
     changeChannel(subChannelId);
   }
@@ -1198,7 +1199,8 @@ const shouldShowDivider = (message, index) => {
 
 // 이벤트 리스너 등록/해제
 onMounted(async () => {
-  window.addEventListener("select-chat-channel", handleSubChannelSelect);
+  console.log("📥 listener mounted!");
+  emitter.on("select-chat-channel", handleSubChannelSelect);
   window.addEventListener("click", closeContextMenu);
 
   const accessToken = localStorage.getItem("accessToken");
@@ -1302,7 +1304,7 @@ onMounted(async () => {
 });
 
 onUnmounted(() => {
-  window.removeEventListener("select-chat-channel", handleSubChannelSelect);
+  emitter.off("select-chat-channel", handleSubChannelSelect);
   window.removeEventListener("click", closeContextMenu);
   disconnectWebsocket();
   const container = document.querySelector(".messages-container");

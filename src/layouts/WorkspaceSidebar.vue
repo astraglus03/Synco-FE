@@ -16,6 +16,7 @@ import { useAuthStore } from "@/store/authStore";
 import { useWorkspaceStore } from "@/store/workspaceStore";
 import { useWorkspaceMemberStore } from "@/store/workspaceMemberStore";
 import { Authority } from "@/models/workspace/WorkspaceModels";
+import { emitter } from "@/eventBus";
 
 const props = defineProps({
   collapsed: Boolean,
@@ -844,7 +845,20 @@ const toggleChannel = (channelId) => {
 
 // 하위 채널 선택
 const selectSubChannel = (parentId, subChannelId) => {
-  emit("select-subchannel", parentId, subChannelId);
+  console.log("🔔 selectSubChannel 호출됨:", {
+    parentId,
+    subChannelId,
+    type: typeof subChannelId,
+  });
+
+  // ✅ chat 채널인 경우 event bus로 직접 이벤트 발생 (URL 변경 방지)
+  if (parentId === "chat") {
+    console.log("🔔 Event bus로 채널 선택 발생:", parentId, subChannelId);
+    emitter.emit("select-chat-channel", { parentId, subChannelId });
+  } else {
+    // chat이 아닌 다른 채널은 기존처럼 부모로 emit
+    emit("select-subchannel", parentId, subChannelId);
+  }
 };
 
 // 접힌 상태에서 채팅 채널 클릭 시 처리
