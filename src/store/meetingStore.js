@@ -73,10 +73,8 @@ export const useMeetingStore = defineStore('meeting', () => {
   })
   
   const activeRoomsInCurrentChannel = computed(() => {
-    if (!currentChannel.value) return []
-    return activeRooms.value.filter(room => 
-      room.channelSeq === currentChannel.value.channelSeq
-    )
+    // 이미 특정 채널의 활성 회의만 가져오므로 필터링 불필요
+    return activeRooms.value
   })
 
   // 액션
@@ -103,16 +101,22 @@ export const useMeetingStore = defineStore('meeting', () => {
     }
   }
 
-  const loadActiveRooms = async (channelSeq) => {
+  const loadActiveRooms = async (workSpaceSeq) => {
     try {
       isLoading.value = true
       error.value = null
       
-      const response = await meetingApi.getActiveRooms(channelSeq, currentMemberSeq.value)
+      console.log('📋 loadActiveRooms 호출:')
+      console.log('  - workSpaceSeq:', workSpaceSeq)
+      console.log('  - currentMemberSeq.value:', currentMemberSeq.value)
+      
+      const response = await meetingApi.getActiveRooms(workSpaceSeq, currentMemberSeq.value)
       activeRooms.value = response.data.content.map(room => new RoomActiveListDto(room))
       
+      console.log('📋 활성 회의 목록 업데이트:', activeRooms.value)
       return activeRooms.value
     } catch (err) {
+      console.error('📋 loadActiveRooms 실패:', err)
       error.value = err.message || '활성 회의 목록을 불러오는데 실패했습니다.'
       throw err
     } finally {
@@ -137,12 +141,12 @@ export const useMeetingStore = defineStore('meeting', () => {
     }
   }
 
-  const createRoom = async (roomName, description = '', alarmMemberList = []) => {
+  const createRoom = async (workSpaceSeq, roomName, description = '', alarmMemberList = []) => {
     try {
       isCreating.value = true
       error.value = null
       
-      const roomCreateReqDto = new RoomCreateReqDto(roomName, description, alarmMemberList)
+      const roomCreateReqDto = new RoomCreateReqDto(workSpaceSeq,roomName, description, alarmMemberList)
       const response = await meetingApi.createRoom(currentMemberSeq.value, roomCreateReqDto)
       const roomSession = new RoomSessionResDto(response.data)
       
@@ -363,7 +367,13 @@ export const useMeetingStore = defineStore('meeting', () => {
 
   // 새 탭에서 미팅 열기
   const openMeetingInNewTab = (meetingData) => {
+    // 쿼리스트링으로 전송 (sessionStorage는 탭 간 공유 안 됨)
     const meetingUrl = `/meeting/${meetingData.roomId}`
+      + `?token=${encodeURIComponent(meetingData.livekitToken)}`
+      + `&roomName=${encodeURIComponent(meetingData.livekitRoomName)}`
+      + `&displayName=${encodeURIComponent(meetingData.roomName || '')}`
+      + `&isHost=${meetingData.isHost ? 'true' : 'false'}`
+    
     const newWindow = window.open(meetingUrl, '_blank', 'width=1200,height=800')
     
     if (!newWindow) {
@@ -385,10 +395,6 @@ export const useMeetingStore = defineStore('meeting', () => {
   // 채널 선택
   const selectChannel = (channel) => {
     currentChannel.value = channel
-    // 활성 회의 목록 로드
-    if (channel) {
-      loadActiveRooms(channel.channelSeq)
-    }
   }
 
   // 에러 초기화

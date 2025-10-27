@@ -8,6 +8,8 @@ const API_ENDPOINTS = {
   CANCEL_ROOM: (roomId) => `/task-service/rooms/${roomId}/cancel`,
   SEND_MESSAGE: (roomId) => `/task-service/rooms/${roomId}/messages`,
   GET_MESSAGES: (roomId) => `/task-service/rooms/${roomId}/messages`,
+  START_RECORDING: (roomId) => `/task-service/rooms/${roomId}/recording/start`,
+  STOP_RECORDING: (roomId) => `/task-service/rooms/${roomId}/recording/stop`,
   
   // 가상회의 채널 관련 (VirtualMeetingController)
   CREATE_BASIC_CHANNEL: '/task-service/virtual-meeting/createBasicChannel',
@@ -24,7 +26,8 @@ const API_ENDPOINTS = {
 
 // 화상회의 방 생성 요청 DTO
 export class RoomCreateReqDto {
-  constructor(roomName, description = '', alarmMemberList = []) {
+  constructor(workSpaceSeq, roomName, description = '', alarmMemberList = []) {
+    this.workSpaceSeq = workSpaceSeq
     this.roomName = roomName
     this.description = description
     this.alarmMemberList = alarmMemberList
@@ -167,6 +170,36 @@ export const meetingApi = {
     }
   },
 
+  // 녹화 시작
+  async startRecording(memberSeq, roomId) {
+    try {
+      const response = await axios.post(API_ENDPOINTS.START_RECORDING(roomId), {}, {
+        headers: {
+          'X-Member-Seq': memberSeq
+        }
+      })
+      return response.data
+    } catch (error) {
+      console.error('녹화 시작 실패:', error)
+      throw error
+    }
+  },
+
+  // 녹화 중지
+  async stopRecording(memberSeq, roomId) {
+    try {
+      const response = await axios.post(API_ENDPOINTS.STOP_RECORDING(roomId), {}, {
+        headers: {
+          'X-Member-Seq': memberSeq
+        }
+      })
+      return response.data
+    } catch (error) {
+      console.error('녹화 중지 실패:', error)
+      throw error
+    }
+  },
+
   // 워크스페이스 멤버 목록 조회
   async getWorkSpaceMembers(workSpaceSeq) {
     try {
@@ -287,9 +320,16 @@ export const meetingApi = {
   },
 
   // 활성 회의 목록 조회
-  async getActiveRooms(channelSeq, memberSeq, page = 0, size = 10) {
+  async getActiveRooms(workSpaceSeq, memberSeq, page = 0, size = 10) {
     try {
-      const response = await axios.get(API_ENDPOINTS.GET_ACTIVE_ROOMS(channelSeq), {
+      const url = API_ENDPOINTS.GET_ACTIVE_ROOMS(workSpaceSeq)
+      console.log('🔍 활성 회의 목록 API 호출:')
+      console.log('  - URL:', url)
+      console.log('  - workSpaceSeq:', workSpaceSeq)
+      console.log('  - memberSeq:', memberSeq)
+      
+      // 백엔드 엔드포인트는 /channel/{channelSeq}이지만 실제로는 workSpaceSeq를 전달해야 함
+      const response = await axios.get(url, {
         headers: {
           'X-Member-Seq': memberSeq
         },
@@ -299,9 +339,15 @@ export const meetingApi = {
           sort: 'createdAt,desc'
         }
       })
+      
+      console.log('✅ API 응답:', response.data)
       return response.data
     } catch (error) {
-      console.error('활성 회의 목록 조회 실패:', error)
+      console.error('❌ 활성 회의 목록 조회 실패:', error)
+      if (error.response) {
+        console.error('  - Status:', error.response.status)
+        console.error('  - Data:', error.response.data)
+      }
       throw error
     }
   }

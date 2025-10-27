@@ -30,7 +30,8 @@ export const ActiveStatus = {
 
 // 화상회의 방 생성 요청 DTO
 export class RoomCreateReqDto {
-  constructor(roomName, description = '', alarmMemberList = []) {
+  constructor(workSpaceSeq, roomName, description = '', alarmMemberList = []) {
+    this.workSpaceSeq = workSpaceSeq
     this.roomName = roomName
     this.description = description
     this.alarmMemberList = alarmMemberList

@@ -346,8 +346,11 @@ watch(() => meetingStore.error, (newError) => {
 // 메서드
 const refreshMeetings = async () => {
   try {
-    if (currentChannelData.value) {
-      await meetingStore.loadActiveRooms(currentChannelData.value.channelSeq)
+    if (currentWorkSpaceSeq.value) {
+      await meetingStore.loadActiveRooms(currentWorkSpaceSeq.value)
+      console.log(currentWorkSpaceSeq.value, '회의 목록 새로고침 완료')
+
+      console.log('활성 회의 목록:', activeRooms.value)
     }
   } catch (error) {
     console.error('회의 목록 새로고침 실패:', error)
@@ -389,6 +392,7 @@ const closeCreateRoomModal = () => {
 const confirmCreateRoom = async () => {
   try {
     await meetingStore.createRoom(
+      workspaceStore.currentWorkspaceInfo.workSpaceSeq,
       newRoomName.value,
       newRoomDescription.value,
       selectedMembers.value
@@ -442,12 +446,15 @@ const initialize = async () => {
     
     if (needsChannelLoad) {
       await meetingStore.loadChannels(currentWorkSpaceSeq.value)
+    }
+    
+    // 채널이 있으면 첫 번째 채널 선택하고 활성 회의 목록 로드
+    if (meetingStore.channels.length > 0) {
+      const defaultChannel = meetingStore.channels[0]
+      meetingStore.selectChannel(defaultChannel)
       
-      // 첫 번째 채널 선택 (기본 채널)
-      if (meetingStore.channels.length > 0) {
-        const defaultChannel = meetingStore.channels[0]
-        meetingStore.selectChannel(defaultChannel)
-      }
+      // 활성 회의 목록 로드
+      await meetingStore.loadActiveRooms(currentWorkSpaceSeq.value)
     }
   } catch (error) {
     console.error('초기화 실패:', error)
@@ -466,15 +473,10 @@ watch(() => workspaceStore.currentWorkspaceInfo, async (newWorkspace, oldWorkspa
 }, { deep: true })
 
 // 생명주기
-onMounted(() => {
-  // 컴포넌트가 마운트될 때는 최소한의 초기화만 수행
-  // 실제 데이터 로드는 워크스페이스 변경 감지에서 처리
+onMounted(async () => {
+  // 컴포넌트가 마운트될 때 초기화 수행
   if (currentWorkSpaceSeq.value) {
-    meetingStore.setCurrentUser(
-      currentMemberSeq.value,
-      currentAuthority.value,
-      currentWorkSpaceSeq.value
-    )
+    await initialize()
   }
 })
 
