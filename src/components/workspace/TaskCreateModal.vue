@@ -2,8 +2,8 @@
   <v-dialog v-model="isOpen" max-width="800px" persistent>
     <v-card>
       <v-card-title class="d-flex align-center">
-        <v-icon left color="primary">mdi-plus-circle</v-icon>
-        새 업무 생성
+        <v-icon left color="primary">{{ isEditMode ? 'mdi-pencil' : 'mdi-plus-circle' }}</v-icon>
+        {{ isEditMode ? '업무 수정' : '새 업무 생성' }}
       </v-card-title>
       
        <v-card-text>
@@ -27,7 +27,7 @@
               <div class="mb-4">
                 <label class="text-subtitle-1 font-weight-medium mb-2 d-block">업무 설명</label>
                 <v-textarea
-                  v-model="taskData.taskContents"
+                  v-model="taskData.taskContent"
                   placeholder="업무에 대한 자세한 설명을 입력하세요..."
                   :rules="contentsRules"
                   outlined
@@ -130,7 +130,7 @@
           :loading="isCreating"
           :disabled="!isFormValid"
         >
-          생성
+          {{ isEditMode ? '수정' : '생성' }}
         </v-btn>
       </v-card-actions>
     </v-card>
@@ -139,7 +139,7 @@
 
 <script setup>
 import { ref, computed, watch, onMounted } from 'vue'
-import { getProjectMemberList, createTask as createTaskApi } from '../../api/schedule/scheduleApi.js'
+import { getProjectMemberList, createTask as createTaskApi, updateTask as updateTaskApi } from '../../api/schedule/scheduleApi.js'
 
 const props = defineProps({
   modelValue: {
@@ -149,10 +149,18 @@ const props = defineProps({
   projectId: {
     type: Number,
     required: true
+  },
+  isEditMode: {
+    type: Boolean,
+    default: false
+  },
+  editTaskData: {
+    type: Object,
+    default: null
   }
 })
 
-const emit = defineEmits(['update:modelValue', 'taskCreated'])
+const emit = defineEmits(['update:modelValue', 'taskCreated', 'taskUpdated'])
 
 // 모달 상태
 const isOpen = computed({
@@ -171,7 +179,7 @@ const isLoadingMembers = ref(false)
 // 업무 데이터
 const taskData = ref({
   taskTitle: '',
-  taskContents: '',
+  taskContent: '',
   taskStatus: 'TODO',
   startDate: '',
   endDate: '',
@@ -213,6 +221,12 @@ const getMemberInitial = (memberName) => {
   return memberName.charAt(0).toUpperCase()
 }
 
+// 날짜 형식을 HTML date input에 맞게 변환
+const formatDateForInput = (dateString) => {
+  if (!dateString) return ''
+  return new Date(dateString).toISOString().split('T')[0]
+}
+
 // 프로젝트 멤버 목록 로드
 const loadProjectMembers = async () => {
   try {
@@ -228,7 +242,7 @@ const loadProjectMembers = async () => {
   }
 }
 
-// 업무 생성
+// 업무 생성/수정
 const createTask = async () => {
   if (!formRef.value) return
   
@@ -244,19 +258,33 @@ const createTask = async () => {
       return
     }
 
-    const response = await createTaskApi(taskData.value)
-    
-    if (response.success) {
-      alert('업무가 성공적으로 생성되었습니다.')
-      emit('taskCreated', response.data)
-      closeModal()
-      resetForm()
+    if (props.isEditMode) {
+      // 수정 모드
+      const response = await updateTaskApi(props.editTaskData.taskSeq, taskData.value)
+      
+      if (response.success) {
+        alert('업무가 성공적으로 수정되었습니다.')
+        emit('taskUpdated', response.data)
+        closeModal()
+      } else {
+        alert('업무 수정에 실패했습니다.')
+      }
     } else {
-      alert('업무 생성에 실패했습니다.')
+      // 생성 모드
+      const response = await createTaskApi(taskData.value)
+      
+      if (response.success) {
+        alert('업무가 성공적으로 생성되었습니다.')
+        emit('taskCreated', response.data)
+        closeModal()
+        resetForm()
+      } else {
+        alert('업무 생성에 실패했습니다.')
+      }
     }
   } catch (error) {
-    console.error('업무 생성 실패:', error)
-    alert('업무 생성 중 오류가 발생했습니다.')
+    console.error('업무 처리 실패:', error)
+    alert('업무 처리 중 오류가 발생했습니다.')
   } finally {
     isCreating.value = false
   }
@@ -264,6 +292,7 @@ const createTask = async () => {
 
 // 모달 닫기
 const closeModal = () => {
+  resetForm()
   isOpen.value = false
 }
 
@@ -271,7 +300,7 @@ const closeModal = () => {
 const resetForm = () => {
   taskData.value = {
     taskTitle: '',
-    taskContents: '',
+    taskContent: '',
     taskStatus: 'TODO',
     startDate: '',
     endDate: '',
@@ -287,10 +316,31 @@ const resetForm = () => {
 watch(isOpen, (newValue) => {
   if (newValue) {
     loadProjectMembers()
-    // 기본값 설정
-    const today = new Date().toISOString().split('T')[0]
-    taskData.value.startDate = today
-    taskData.value.endDate = today
+    
+    if (props.isEditMode && props.editTaskData) {
+      // 수정 모드: 상세 데이터로 폼 채우기
+      taskData.value = {
+        taskTitle: props.editTaskData.taskTitle || '',
+        taskContent: props.editTaskData.taskContent || '',
+        taskStatus: props.editTaskData.taskStatus || 'TODO',
+        startDate: formatDateForInput(props.editTaskData.startDate),
+        endDate: formatDateForInput(props.editTaskData.endDate),
+        picMemberSeq: props.editTaskData.picScheduleManagementChannelMemberSeq || null,
+        boardSeq: props.editTaskData.boardSeq || null
+      }
+    } else {
+      // 생성 모드: 기본값으로 초기화
+      const today = new Date().toISOString().split('T')[0]
+      taskData.value = {
+        taskTitle: '',
+        taskContent: '',
+        taskStatus: 'TODO',
+        startDate: today,
+        endDate: today,
+        picMemberSeq: null,
+        boardSeq: null
+      }
+    }
   }
 })
 

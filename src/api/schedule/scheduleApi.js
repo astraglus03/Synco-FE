@@ -61,7 +61,7 @@ export const createTask = async (taskData) => {
 // 태스크 수정 API
 export const updateTask = async (taskSeq, taskData) => {
   try {
-    const response = await apiClient.put(`/task-service/scheduleManagement/project/task/${taskSeq}`, taskData)
+    const response = await apiClient.patch(`/task-service/scheduleManagement/project/task/${taskSeq}`, taskData)
     return response.data
   } catch (error) {
     console.error('태스크 수정 실패:', error)

@@ -4,10 +4,10 @@
       <!-- 헤더 -->
       <div class="modal-header">
         <div class="header-content">
-          <v-icon class="header-icon" color="primary">mdi-folder-plus</v-icon>
+          <v-icon class="header-icon" color="primary">{{ isEditMode ? 'mdi-pencil' : 'mdi-folder-plus' }}</v-icon>
           <div class="header-text">
-            <h3 class="modal-title">새 보드 추가</h3>
-            <p class="modal-subtitle">프로젝트를 위한 보드를 생성하세요</p>
+            <h3 class="modal-title">{{ isEditMode ? '보드 수정' : '새 보드 추가' }}</h3>
+            <p class="modal-subtitle">{{ isEditMode ? '보드 정보를 수정하세요' : '프로젝트를 위한 보드를 생성하세요' }}</p>
           </div>
         </div>
         <v-btn
@@ -85,12 +85,12 @@
         </v-btn>
         <v-btn
           color="primary"
-          prepend-icon="mdi-plus"
+          :prepend-icon="isEditMode ? 'mdi-pencil' : 'mdi-plus'"
           @click="createBoard"
           :loading="isCreating"
           :disabled="!isFormValid || !boardData.colors"
         >
-          보드 생성
+          {{ isEditMode ? '수정' : '보드 생성' }}
         </v-btn>
       </v-card-actions>
     </v-card>
@@ -99,7 +99,7 @@
 
 <script setup>
 import { ref, computed, watch } from 'vue'
-import { createBoard as createBoardApi, getProjectMemberList } from '../../api/schedule/scheduleApi.js'
+import { createBoard as createBoardApi, getProjectMemberList, updateBoard as updateBoardApi, getBoardDetail } from '../../api/schedule/scheduleApi.js'
 import { useWorkspaceStore } from '../../store/workspaceStore.js'
 import { useWorkspaceMemberStore } from '../../store/workspaceMemberStore.js'
 import { useAuthStore } from '../../store/authStore.js'
@@ -108,10 +108,18 @@ const props = defineProps({
   isOpen: {
     type: Boolean,
     default: false
+  },
+  isEditMode: {
+    type: Boolean,
+    default: false
+  },
+  editBoardData: {
+    type: Object,
+    default: null
   }
 })
 
-const emit = defineEmits(['update:isOpen', 'board-created'])
+const emit = defineEmits(['update:isOpen', 'board-created', 'board-updated'])
 
 // Store
 const workspaceStore = useWorkspaceStore()
@@ -178,7 +186,7 @@ const selectColor = (color) => {
   boardData.value.colors = color
 }
 
-// 보드 생성
+// 보드 생성/수정
 const createBoard = async () => {
   if (!formRef.value) return
   
@@ -204,15 +212,23 @@ const createBoard = async () => {
       scheduleManagementChannelMemberSeq: currentUserScheduleMemberSeq.value
     }
 
-    await createBoardApi(requestData)
+    if (props.isEditMode) {
+      // 수정 모드
+      await updateBoardApi(props.editBoardData.boardSeq, requestData)
+      alert('보드가 성공적으로 수정되었습니다!')
+      emit('board-updated')
+    } else {
+      // 생성 모드
+      await createBoardApi(requestData)
+      alert('보드가 성공적으로 생성되었습니다!')
+      emit('board-created')
+    }
     
-    alert('보드가 성공적으로 생성되었습니다!')
-    emit('board-created')
     closeModal()
     
   } catch (error) {
-    console.error('보드 생성 실패:', error)
-    alert('보드 생성에 실패했습니다. 다시 시도해주세요.')
+    console.error('보드 처리 실패:', error)
+    alert('보드 처리에 실패했습니다. 다시 시도해주세요.')
   } finally {
     isCreating.value = false
   }
@@ -237,7 +253,22 @@ const resetForm = () => {
 // 모달이 열릴 때 폼 초기화 및 사용자 정보 찾기
 watch(() => props.isOpen, async (newValue) => {
   if (newValue) {
-    resetForm()
+    if (props.isEditMode && props.editBoardData) {
+      // 수정 모드: 기존 데이터로 폼 채우기
+      boardData.value = {
+        boardName: props.editBoardData.boardName || '',
+        colors: props.editBoardData.colors || ''
+      }
+      
+      // 색상 선택 강제 적용
+      if (props.editBoardData.colors) {
+        // selectColor 함수를 호출하여 UI 업데이트 강제
+        selectColor(props.editBoardData.colors)
+      }
+    } else {
+      // 생성 모드: 폼 초기화
+      resetForm()
+    }
     await findCurrentUserScheduleMemberSeq()
   }
 })

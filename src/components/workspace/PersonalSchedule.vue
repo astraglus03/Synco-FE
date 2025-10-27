@@ -69,7 +69,7 @@
             </div>
             
             <div class="task-content">
-              <div class="task-description">{{ task.taskContents }}</div>
+              <div class="task-description">{{ task.taskContent }}</div>
               <div class="task-dates">
                 <v-icon size="16" color="grey">mdi-calendar</v-icon>
                 <span>{{ task.startDate }} ~ {{ task.endDate }}</span>
@@ -117,6 +117,7 @@
           :class="{ 
             'drag-over': dragOverSection === 'board' || dragOverBoard === board.boardSeq 
           }"
+          :style="{ backgroundColor: board.colors }"
         >
           <div 
             class="board-header" 
@@ -200,10 +201,13 @@
       </div>
     </div>
 
-    <!-- 보드 생성 모달 -->
+    <!-- 보드 생성/수정 모달 -->
     <BoardCreateModal
       v-model:isOpen="showBoardModal"
+      :is-edit-mode="isEditMode"
+      :edit-board-data="editBoardData"
       @board-created="onBoardCreated"
+      @board-updated="onBoardUpdated"
     />
   </div>
 </template>
@@ -211,7 +215,7 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { useWorkspaceStore } from '../../store/workspaceStore.js'
-import { getMyTasks, getProjectBoards, moveTaskToBoard, updateBoardOrders, deleteBoard } from '../../api/schedule/scheduleApi.js'
+import { getMyTasks, getProjectBoards, moveTaskToBoard, updateBoardOrders, deleteBoard, getBoardDetail } from '../../api/schedule/scheduleApi.js'
 import BoardCreateModal from './BoardCreateModal.vue'
 
 const workspaceStore = useWorkspaceStore()
@@ -224,6 +228,8 @@ const isLoadingBoards = ref(false)
 const error = ref(null)
 const draggedTask = ref(null)
 const showBoardModal = ref(false)
+const isEditMode = ref(false)
+const editBoardData = ref(null)
 const dragOverSection = ref(null)
 const draggedBoard = ref(null)
 const dragOverBoard = ref(null)
@@ -424,9 +430,34 @@ const onBoardOrderDrop = async (event, targetBoard) => {
 }
 
 // 보드 수정
-const editBoard = (board) => {
-  // TODO: BoardCreateModal을 수정 모드로 열기
-  console.log('보드 수정:', board)
+const editBoard = async (board) => {
+  try {
+    // 보드 상세 정보 조회
+    const response = await getBoardDetail(board.boardSeq)
+    if (response.success) {
+      // 수정 모드로 설정하고 모달 열기
+      editBoardData.value = response.data
+      isEditMode.value = true
+      showBoardModal.value = true
+    } else {
+      alert('보드 정보를 불러오는데 실패했습니다.')
+    }
+  } catch (error) {
+    console.error('보드 상세 조회 실패:', error)
+    alert('보드 정보를 불러오는데 실패했습니다.')
+  }
+}
+
+// 보드 수정 완료 시 처리
+const onBoardUpdated = async () => {
+  // 수정 모드 상태 초기화
+  isEditMode.value = false
+  editBoardData.value = null
+  // 보드 목록 새로고침
+  await loadBoards()
+  
+  // 강제 리렌더링
+  boards.value = [...boards.value]
 }
 
 // 보드 삭제
@@ -737,27 +768,6 @@ onMounted(async () => {
   transform: scale(1.02);
 }
 
-/* 보드별 전체 색상 적용 */
-.kanban-board:nth-child(1) {
-  background: #e3f2fd !important;
-}
-
-.kanban-board:nth-child(2) {
-  background: #fff3e0 !important;
-}
-
-.kanban-board:nth-child(3) {
-  background: #e8f5e8 !important;
-}
-
-.kanban-board:nth-child(4) {
-  background: #f3e5f5 !important;
-}
-
-.kanban-board:nth-child(5) {
-  background: #e0f2f1 !important;
-}
-
 .board-header {
   padding: 16px 20px;
   color: #333;
@@ -767,7 +777,6 @@ onMounted(async () => {
   font-weight: 600;
   font-size: 16px;
   border-radius: 8px 8px 0 0;
-  background: transparent !important;
 }
 
 .board-actions {
