@@ -900,7 +900,6 @@ const handleAttachFiles = (files) => {
   } else {
     // 제한 내에서 추가
     attachedFiles.value.push(...files);
-    showToastNotification(`${files.length}개 파일이 첨부되었습니다.`);
   }
 
   showAttachmentMenu.value = false;
@@ -1574,18 +1573,6 @@ onUnmounted(() => {
 
         <!-- 첨부된 파일들 표시 -->
         <div v-if="attachedFiles.length > 0" class="attached-files">
-          <div class="attached-files-header">
-            <span class="files-count"
-              >첨부된 파일 ({{ attachedFilesCount }}/{{ MAX_FILES }})</span
-            >
-            <v-chip
-              v-if="attachedFilesCount >= MAX_FILES * 0.8"
-              color="warning"
-              size="small"
-            >
-              거의 가득참
-            </v-chip>
-          </div>
           <div
             v-for="(file, index) in attachedFiles"
             :key="index"
