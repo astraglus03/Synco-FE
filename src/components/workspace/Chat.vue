@@ -1204,17 +1204,10 @@ const handleInputChange = () => {
   isTyping.value = newMessage.value.length > 0;
 };
 
-// ✅ 구분선 표시 여부 판단
+// ✅ 구분선 표시 여부 판단 (비활성화)
 const shouldShowDivider = (message, index) => {
-  if (index === 0) return false;
-  if (!lastReadMessageSeq.value) return false;
-
-  const prevMessage = messages.value[index - 1];
-  // 이전 메시지는 lastReadMessageSeq보다 작고, 현재 메시지는 크거나 같을 때 구분선 표시
-  return (
-    prevMessage.id < lastReadMessageSeq.value &&
-    message.id >= lastReadMessageSeq.value
-  );
+  // 구분선 표시 안함
+  return false;
 };
 
 // 이벤트 리스너 등록/해제
@@ -1479,7 +1472,7 @@ onUnmounted(() => {
                       <span class="reply-preview-user">
                         {{
                           getReplyToMessage(message.replyToSeq)?.user ||
-                          "삭제된 사용자"
+                          " "
                         }}
                       </span>
                     </div>
