@@ -223,3 +223,73 @@ export const deleteComment = async (commentSeq) => {
     throw error
   }
 }
+
+// ===== 개인 워크스페이스 일정관리 API =====
+
+// 개인 스케줄 Task 생성
+export const createPersonalTask = async (workSpaceSeq, taskData) => {
+  try {
+    const response = await apiClient.post(`/task-service/scheduleManagement/personal/task/${workSpaceSeq}`, taskData)
+    return response.data
+  } catch (error) {
+    console.error('개인 스케줄 Task 생성 실패:', error)
+    throw error
+  }
+}
+
+// 개인 스케줄 Task 목록 조회 (상태별로 그룹화)
+export const getPersonalTasks = async (workSpaceSeq) => {
+  try {
+    const response = await apiClient.get(`/task-service/scheduleManagement/personal/tasks/${workSpaceSeq}`)
+    return response.data
+  } catch (error) {
+    console.error('개인 스케줄 Task 목록 조회 실패:', error)
+    throw error
+  }
+}
+
+// 개인 스케줄 Task 상세 조회
+export const getPersonalTask = async (taskSeq) => {
+  try {
+    const response = await apiClient.get(`/task-service/scheduleManagement/personal/task/${taskSeq}`)
+    return response.data
+  } catch (error) {
+    console.error('개인 스케줄 Task 상세 조회 실패:', error)
+    throw error
+  }
+}
+
+// 개인 스케줄 Task 수정
+export const updatePersonalTask = async (taskSeq, taskData) => {
+  try {
+    const response = await apiClient.patch(`/task-service/scheduleManagement/personal/task/${taskSeq}`, taskData)
+    return response.data
+  } catch (error) {
+    console.error('개인 스케줄 Task 수정 실패:', error)
+    throw error
+  }
+}
+
+// 개인 스케줄 Task 상태 변경
+export const updatePersonalTaskStatus = async (taskSeq, newStatus) => {
+  try {
+    const response = await apiClient.patch(`/task-service/scheduleManagement/personal/task/${taskSeq}/status`, {
+      taskStatus: newStatus
+    })
+    return response.data
+  } catch (error) {
+    console.error('개인 스케줄 Task 상태 변경 실패:', error)
+    throw error
+  }
+}
+
+// 개인 스케줄 Task 삭제
+export const deletePersonalTask = async (taskSeq) => {
+  try {
+    const response = await apiClient.delete(`/task-service/scheduleManagement/personal/task/${taskSeq}`)
+    return response.data
+  } catch (error) {
+    console.error('개인 스케줄 Task 삭제 실패:', error)
+    throw error
+  }
+}
