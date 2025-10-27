@@ -3075,9 +3075,11 @@ onUnmounted(() => {
   width: 100% !important;
   max-width: 100% !important;
   resize: none !important;
-  line-height: 1.4 !important;
+  line-height: 52px !important;
   overflow-x: hidden !important;
   box-sizing: border-box !important;
+  padding-top: 16px !important;
+  padding-bottom: 16px !important;
 }
 
 .input-field {
