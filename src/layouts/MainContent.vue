@@ -137,7 +137,7 @@ const contentStyle = computed(() => {
       :selected-channel="selectedChannel"
       :navigate-to-personal-drive="navigateToPersonalDrive"
     />
-    
+
     <!-- 멤버 사이드바 (프로젝트 워크스페이스일 때만 표시) -->
     <MemberSidebar
       v-if="workspaceType === 'project' && memberSidebarVisible"
