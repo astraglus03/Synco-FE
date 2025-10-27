@@ -132,6 +132,7 @@ const showReplyInput = ref(false);
 // 이전 메시지 로드 관련 상태
 const isLoadingMessages = ref(false);
 const hasMoreMessages = ref(true);
+const lastReadMessageSeq = ref(null); // ✅ 마지막 읽은 메시지 seq 저장
 
 // 컨텍스트 메뉴 관련 상태
 const showContextMenu = ref(false);
@@ -280,8 +281,18 @@ const disconnectWebsocket = async () => {
   try {
     // 🟡 읽음 처리 API 호출
     await axios.post(
-      `${import.meta.env.VITE_API_URL}/chat/room/${channelSeq.value}/read`
+      `${import.meta.env.VITE_API_URL}/chat-service/chat/channels/${
+        channelSeq.value
+      }/read`,
+      {},
+      {
+        headers: {
+          "X-Member-Seq": memberSeq.value,
+          Authorization: `Bearer ${token.value}`,
+        },
+      }
     );
+    console.log("✅ 마지막 읽은 메시지 업데이트 완료");
   } catch (e) {
     console.warn("읽음 처리 실패:", e);
   }
@@ -551,6 +562,7 @@ const loadMoreMessages = async (lastId = null) => {
         .map((url) => ({ name: url.split("/").pop(), url, type: "file" })),
       messageType: m.messageType || "TEXT",
       replyToSeq: m.replyToSeq || null,
+      isNewMessage: false, // ✅ 이전 메시지는 false
     }));
 
     // ✅ 스크롤 위치 저장
@@ -558,25 +570,145 @@ const loadMoreMessages = async (lastId = null) => {
     const oldScrollHeight = container ? container.scrollHeight : 0;
     const oldScrollTop = container ? container.scrollTop : 0;
 
-    // ✅ prepend (기존 메시지 앞에 붙임) - reverse() 제거 (이미 최신순으로 받아옴)
+    // ✅ prepend (기존 메시지 앞에 붙임)
+    // BE에서 DESC 순서로 반환되므로 reverse() 후 앞에 추가하면 올바른 시간순 (오래된 → 최신)
     messages.value = [...formatted.reverse(), ...messages.value];
 
-    // ✅ 스크롤 위치 복원 (새로 추가된 메시지 높이만큼 아래로 이동)
-    await new Promise((resolve) => setTimeout(resolve, 50)); // DOM 업데이트 대기
+    // ✅ 재접속 시(lastReadMessageSeq.value가 있으면): 구분선 위치 복원
+    if (lastReadMessageSeq.value) {
+      console.log("📍 재접속 - 구분선 위치로 스크롤 복원");
 
-    if (container) {
-      const newScrollHeight = container.scrollHeight;
-      const heightDifference = newScrollHeight - oldScrollHeight;
-      container.scrollTop = heightDifference; // 새로운 컨텐츠 높이만큼 스크롤
-      console.log("📍 스크롤 위치 복원 - 차이:", heightDifference);
+      // DOM 업데이트 대기
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      // 구분선 위치 찾아서 스크롤
+      const firstNewMessage = document.querySelector(
+        `[data-message-id="${lastReadMessageSeq.value}"]`
+      );
+      if (firstNewMessage) {
+        const divider = firstNewMessage.previousElementSibling;
+        if (divider && divider.classList.contains("message-divider")) {
+          divider.scrollIntoView({ behavior: "instant", block: "start" });
+          console.log("📍 구분선 위치로 스크롤 복원 완료");
+        } else {
+          firstNewMessage.scrollIntoView({
+            behavior: "instant",
+            block: "start",
+          });
+          console.log("📍 새 메시지 위치로 스크롤 복원 완료");
+        }
+      }
+
+      return;
     }
 
-    if (!lastId) scrollToBottom();
+    // ✅ 최초 접속 시: 스크롤 조작
+    // lastId가 있으면 이전 메시지 추가 로드 중
+    if (lastId) {
+      await new Promise((resolve) => setTimeout(resolve, 50)); // DOM 업데이트 대기
+
+      if (container) {
+        const newScrollHeight = container.scrollHeight;
+        const heightDifference = newScrollHeight - oldScrollHeight;
+        container.scrollTop = heightDifference; // 새로운 컨텐츠 높이만큼 스크롤
+        console.log("📍 스크롤 위치 복원 - 차이:", heightDifference);
+      }
+    } else {
+      // 처음 로드하는 경우 맨 아래로 스크롤
+      await new Promise((resolve) => setTimeout(resolve, 50)); // DOM 업데이트 대기
+      scrollToBottom();
+      console.log("📍 최초 접속 - 맨 아래로 스크롤");
+    }
   } catch (e) {
     console.error("❌ 메시지 로드 실패:", e);
     hasMoreMessages.value = false;
   } finally {
     isLoadingMessages.value = false;
+  }
+};
+
+// ✅ 마지막 읽은 메시지 이후의 새 메시지 로드
+const loadMessagesAfterLastRead = async () => {
+  if (isLoadingMessages.value) return [];
+
+  isLoadingMessages.value = true;
+
+  try {
+    console.log("📥 새 메시지 로드 시작 (마지막 읽은 메시지 이후)");
+
+    const url = `${import.meta.env.VITE_API_URL}/chat-service/chat/channels/${
+      channelSeq.value
+    }/messages/after-last-read`;
+
+    const res = await axios.get(url, {
+      headers: {
+        Authorization: `Bearer ${token.value}`,
+        "X-Member-Seq": memberSeq.value,
+      },
+    });
+
+    let loadedMessages = res.data;
+
+    if (res.data && res.data.data && Array.isArray(res.data.data)) {
+      loadedMessages = res.data.data;
+    } else if (Array.isArray(res.data)) {
+      loadedMessages = res.data;
+    } else {
+      console.warn("⚠️ 예상치 못한 응답 형식:", res.data);
+      lastReadMessageSeq.value = null;
+      isLoadingMessages.value = false;
+      return [];
+    }
+
+    if (!loadedMessages || loadedMessages.length === 0) {
+      console.log(
+        "📭 새 메시지가 없습니다. (최초 접속 또는 읽을 새 메시지 없음)"
+      );
+      lastReadMessageSeq.value = null;
+      isLoadingMessages.value = false;
+      return [];
+    }
+
+    console.log("📨 로드된 새 메시지 개수:", loadedMessages.length);
+
+    // 메시지 맵핑
+    const formatted = loadedMessages.map((m) => ({
+      id: m.chatMessageSeq,
+      user: m.senderName,
+      content: m.chatMessageText,
+      time: new Date(m.createdAt).toLocaleTimeString("ko-KR", {
+        hour: "2-digit",
+        minute: "2-digit",
+      }),
+      profileImageUrl: m.senderProfileImageUrl || null,
+      senderSeq: m.senderSeq,
+      isOwn: Number(m.senderSeq) === Number(memberSeq.value),
+      unread: Number(m.senderSeq) !== Number(memberSeq.value) ? 1 : 0,
+      files: (m.chatMessageFileUrls || "")
+        .split(",")
+        .filter(Boolean)
+        .map((url) => ({ name: url.split("/").pop(), url, type: "file" })),
+      messageType: m.messageType || "TEXT",
+      replyToSeq: m.replyToSeq || null,
+      isNewMessage: true, // ✅ 새 메시지 플래그
+    }));
+
+    // 마지막 읽은 메시지 저장 (가장 오래된 새 메시지)
+    // ✅ 새 메시지가 있으면 → 재접속 (lastReadSeq가 있음)
+    // ✅ 새 메시지가 없으면 → 최초 접속 또는 읽을 새 메시지 없음 (lastReadSeq가 null)
+    if (formatted.length > 0) {
+      lastReadMessageSeq.value = formatted[0].id;
+      console.log("📍 마지막 읽은 메시지 seq:", lastReadMessageSeq.value);
+      console.log("🔄 재접속 감지 - 구분선 표시 예정");
+    }
+
+    isLoadingMessages.value = false;
+    return formatted;
+  } catch (e) {
+    console.error("❌ 새 메시지 로드 실패:", e);
+    lastReadMessageSeq.value = null;
+    isLoadingMessages.value = false;
+    return [];
   }
 };
 
@@ -598,12 +730,55 @@ const changeChannel = async (channelId) => {
   // 이전 메시지 로드 상태 리셋
   hasMoreMessages.value = true;
   isLoadingMessages.value = false;
+  lastReadMessageSeq.value = null; // ✅ 마지막 읽은 메시지 초기화
 
   console.log("✅ 채널 변경 완료 - 현재 채널 Seq:", channelSeq.value);
   console.log("🔍 channelSeq 타입:", typeof channelSeq.value);
 
-  // ✅ 이전 메시지 첫 로드
-  await loadMoreMessages(null);
+  // ✅ 1단계: 마지막 읽은 이후의 새 메시지 로드
+  const newMessages = await loadMessagesAfterLastRead();
+
+  // ✅ 2단계: 재접속 여부에 따른 처리
+  if (newMessages.length > 0 && lastReadMessageSeq.value) {
+    // 🔄 재접속: 새 메시지 표시 및 구분선으로 스크롤
+    messages.value = newMessages;
+
+    // DOM 업데이트 대기
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    // 구분선(새 메시지 시작점)이 상단에 오도록 스크롤
+    const container = document.querySelector(".messages-container");
+    if (container) {
+      const firstNewMessage = document.querySelector(
+        `[data-message-id="${lastReadMessageSeq.value}"]`
+      );
+      if (firstNewMessage) {
+        // 구분선이 메시지 위에 있으므로, 메시지의 이전 형제 요소를 찾아서 스크롤
+        const divider = firstNewMessage.previousElementSibling;
+        if (divider && divider.classList.contains("message-divider")) {
+          // 구분선으로 스크롤
+          divider.scrollIntoView({ behavior: "instant", block: "start" });
+          console.log("📍 구분선 위치로 스크롤 완료 (상단)");
+        } else {
+          // 구분선이 없으면 메시지 상단으로 스크롤
+          firstNewMessage.scrollIntoView({
+            behavior: "instant",
+            block: "start",
+          });
+          console.log("📍 새 메시지 위치로 스크롤 완료");
+        }
+      }
+    }
+  } else {
+    // 🆕 최초 접속: 모든 메시지 로드 후 맨 아래로 스크롤
+    console.log("🆕 최초 접속 감지 - 모든 메시지 로드");
+  }
+
+  // ✅ 3단계: 이전 메시지 로드
+  // 재접속 시(lastReadMessageSeq.value가 있으면): 구분선 이전의 메시지만 로드
+  // 최초 접속 시(null): 최신 메시지 로드
+  const lastId = lastReadMessageSeq.value || null;
+  await loadMoreMessages(lastId);
 
   // 새 채널로 연결
   connectWebsocket();
@@ -1008,6 +1183,19 @@ const handleInputChange = () => {
   isTyping.value = newMessage.value.length > 0;
 };
 
+// ✅ 구분선 표시 여부 판단
+const shouldShowDivider = (message, index) => {
+  if (index === 0) return false;
+  if (!lastReadMessageSeq.value) return false;
+
+  const prevMessage = messages.value[index - 1];
+  // 이전 메시지는 lastReadMessageSeq보다 작고, 현재 메시지는 크거나 같을 때 구분선 표시
+  return (
+    prevMessage.id < lastReadMessageSeq.value &&
+    message.id >= lastReadMessageSeq.value
+  );
+};
+
 // 이벤트 리스너 등록/해제
 onMounted(async () => {
   window.addEventListener("select-chat-channel", handleSubChannelSelect);
@@ -1051,9 +1239,54 @@ onMounted(async () => {
 
   // ✅ 채널 참여 멤버 목록 초기화
   getChannelMembers().then(async () => {
-    // ✅ memberSeq가 유효할 때만 WebSocket 연결
+    // ✅ memberSeq가 유효할 때만 첫 채널 로드
     if (memberSeq.value > 0 && currentChannel.value) {
-      await loadMoreMessages(null); // ✅ 첫 로딩 필수
+      // ✅ 1. 마지막 읽은 이후의 새 메시지 로드 시도
+      const newMessages = await loadMessagesAfterLastRead();
+
+      // ✅ 2. 재접속 여부에 따른 처리
+      if (newMessages.length > 0 && lastReadMessageSeq.value) {
+        // 🔄 재접속: 새 메시지 표시 및 구분선으로 스크롤
+        messages.value = newMessages;
+
+        // DOM 업데이트 대기
+        await new Promise((resolve) => setTimeout(resolve, 50));
+
+        // 구분선(새 메시지 시작점)이 상단에 오도록 스크롤
+        const container = document.querySelector(".messages-container");
+        if (container) {
+          const firstNewMessage = document.querySelector(
+            `[data-message-id="${lastReadMessageSeq.value}"]`
+          );
+          if (firstNewMessage) {
+            // 구분선이 메시지 위에 있으므로, 메시지의 이전 형제 요소를 찾아서 스크롤
+            const divider = firstNewMessage.previousElementSibling;
+            if (divider && divider.classList.contains("message-divider")) {
+              // 구분선으로 스크롤
+              divider.scrollIntoView({ behavior: "instant", block: "start" });
+              console.log("📍 구분선 위치로 스크롤 완료 (상단)");
+            } else {
+              // 구분선이 없으면 메시지 상단으로 스크롤
+              firstNewMessage.scrollIntoView({
+                behavior: "instant",
+                block: "start",
+              });
+              console.log("📍 새 메시지 위치로 스크롤 완료");
+            }
+          }
+        }
+      } else {
+        // 🆕 최초 접속: 모든 메시지 로드 후 맨 아래로 스크롤
+        console.log("🆕 최초 접속 감지 - 모든 메시지 로드");
+      }
+
+      // ✅ 3. 이전 메시지 로드
+      // 재접속 시(lastReadMessageSeq.value가 있으면): 구분선 이전의 메시지만 로드
+      // 최초 접속 시(null): 최신 메시지 로드
+      const lastId = lastReadMessageSeq.value || null;
+      await loadMoreMessages(lastId);
+
+      // ✅ 4. WebSocket 연결
       connectWebsocket();
     } else {
       console.error("❌ memberSeq 또는 채널이 유효하지 않습니다.");
@@ -1114,144 +1347,156 @@ onUnmounted(() => {
       <!-- 메시지 목록 -->
       <div class="messages-container">
         <div class="messages-list">
-          <div
-            v-for="(message, index) in messages"
-            :key="message.id"
-            :data-message-id="message.id"
-            class="message-item"
-            :class="{
-              'own-message': message.isOwn,
-              consecutive:
-                !message.isOwn &&
-                index > 0 &&
-                messages[index - 1].user === message.user &&
-                !messages[index - 1].isOwn,
-              'first-in-group':
-                !message.isOwn &&
-                (index === 0 ||
-                  messages[index - 1].user !== message.user ||
-                  messages[index - 1].isOwn),
-            }"
-            @contextmenu="handleMessageRightClick(message, $event)"
-          >
-            <div class="message-content">
-              <div v-if="!message.isOwn" class="message-avatar">
-                <img
-                  v-if="message.profileImageUrl"
-                  :src="message.profileImageUrl"
-                  alt="avatar"
-                  class="avatar-image"
-                />
-                <span v-else>{{ message.avatar }}</span>
-              </div>
+          <template v-for="(message, index) in messages" :key="message.id">
+            <!-- ✅ 구분선: 새 메시지와 이전 메시지 사이 -->
+            <div
+              v-if="shouldShowDivider(message, index)"
+              class="message-divider"
+            >
+              <div class="divider-line"></div>
+              <span class="divider-text">새 메시지</span>
+              <div class="divider-line"></div>
+            </div>
 
-              <div class="message-group">
-                <!-- 발신자 이름 (상대방 메시지의 첫 번째만) -->
-                <div
-                  v-if="
-                    !message.isOwn &&
-                    (index === 0 ||
-                      messages[index - 1].user !== message.user ||
-                      messages[index - 1].isOwn)
-                  "
-                  class="message-sender"
-                >
-                  {{ message.user }}
+            <div
+              :data-message-id="message.id"
+              class="message-item"
+              :class="{
+                'own-message': message.isOwn,
+                consecutive:
+                  !message.isOwn &&
+                  index > 0 &&
+                  messages[index - 1].user === message.user &&
+                  !messages[index - 1].isOwn,
+                'first-in-group':
+                  !message.isOwn &&
+                  (index === 0 ||
+                    messages[index - 1].user !== message.user ||
+                    messages[index - 1].isOwn),
+              }"
+              @contextmenu="handleMessageRightClick(message, $event)"
+            >
+              <div class="message-content">
+                <div v-if="!message.isOwn" class="message-avatar">
+                  <img
+                    v-if="message.profileImageUrl"
+                    :src="message.profileImageUrl"
+                    alt="avatar"
+                    class="avatar-image"
+                  />
+                  <span v-else>{{ message.avatar }}</span>
                 </div>
 
-                <!-- 답장 메시지 미리보기 (메시지 위쪽에 표시) -->
-                <div
-                  v-if="message.messageType === 'REPLY' && message.replyToSeq"
-                  class="reply-preview-above"
-                  :class="{
-                    'deleted-message': !getReplyToMessage(message.replyToSeq),
-                  }"
-                  @click="
-                    getReplyToMessage(message.replyToSeq)
-                      ? scrollToOriginalMessage(message.replyToSeq)
-                      : null
-                  "
-                >
-                  <div class="reply-preview-header">
-                    <v-icon
-                      size="12"
-                      :color="
-                        getReplyToMessage(message.replyToSeq)
-                          ? 'primary'
-                          : 'error'
+                <div class="message-group">
+                  <!-- 발신자 이름 (상대방 메시지의 첫 번째만) -->
+                  <div
+                    v-if="
+                      !message.isOwn &&
+                      (index === 0 ||
+                        messages[index - 1].user !== message.user ||
+                        messages[index - 1].isOwn)
+                    "
+                    class="message-sender"
+                  >
+                    {{ message.user }}
+                  </div>
+
+                  <!-- 답장 메시지 미리보기 (메시지 위쪽에 표시) -->
+                  <div
+                    v-if="message.messageType === 'REPLY' && message.replyToSeq"
+                    class="reply-preview-above"
+                    :class="{
+                      'deleted-message': !getReplyToMessage(message.replyToSeq),
+                    }"
+                    @click="
+                      getReplyToMessage(message.replyToSeq)
+                        ? scrollToOriginalMessage(message.replyToSeq)
+                        : null
+                    "
+                  >
+                    <div class="reply-preview-header">
+                      <v-icon
+                        size="12"
+                        :color="
+                          getReplyToMessage(message.replyToSeq)
+                            ? 'primary'
+                            : 'error'
+                        "
+                      >
+                        {{
+                          getReplyToMessage(message.replyToSeq)
+                            ? "mdi-reply"
+                            : "mdi-delete"
+                        }}
+                      </v-icon>
+                      <span class="reply-preview-user">
+                        {{
+                          getReplyToMessage(message.replyToSeq)?.user ||
+                          "삭제된 사용자"
+                        }}
+                      </span>
+                    </div>
+                    <div
+                      class="reply-preview-text"
+                      v-html="
+                        parseMentions(
+                          getReplyToMessage(message.replyToSeq)?.content ||
+                            '삭제된 메시지입니다.'
+                        )
                       "
-                    >
-                      {{
-                        getReplyToMessage(message.replyToSeq)
-                          ? "mdi-reply"
-                          : "mdi-delete"
-                      }}
-                    </v-icon>
-                    <span class="reply-preview-user">
-                      {{
-                        getReplyToMessage(message.replyToSeq)?.user ||
-                        "삭제된 사용자"
-                      }}
-                    </span>
+                    ></div>
                   </div>
                   <div
-                    class="reply-preview-text"
-                    v-html="
-                      parseMentions(
-                        getReplyToMessage(message.replyToSeq)?.content ||
-                          '삭제된 메시지입니다.'
-                      )
-                    "
-                  ></div>
-                </div>
-                <div
-                  class="message-bubble"
-                  :class="{
-                    mentioned: isMentionedMessage(message),
-                  }"
-                >
-                  <div
-                    v-if="message.content"
-                    class="message-text"
-                    v-html="parseMentions(message.content)"
-                  ></div>
-
-                  <!-- 첨부된 파일들 표시 -->
-                  <div
-                    v-if="Array.isArray(message.files) && message.files.length"
-                    class="message-files"
+                    class="message-bubble"
+                    :class="{
+                      mentioned: isMentionedMessage(message),
+                    }"
                   >
                     <div
-                      v-for="(file, i) in message.files"
-                      :key="i"
-                      class="message-file-item"
+                      v-if="message.content"
+                      class="message-text"
+                      v-html="parseMentions(message.content)"
+                    ></div>
+
+                    <!-- 첨부된 파일들 표시 -->
+                    <div
+                      v-if="
+                        Array.isArray(message.files) && message.files.length
+                      "
+                      class="message-files"
                     >
-                      <v-icon class="mr-2">mdi-file</v-icon>
-                      <a
-                        :href="file.url"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        class="file-name"
+                      <div
+                        v-for="(file, i) in message.files"
+                        :key="i"
+                        class="message-file-item"
                       >
-                        {{ file.name }}
-                      </a>
+                        <v-icon class="mr-2">mdi-file</v-icon>
+                        <a
+                          :href="file.url"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          class="file-name"
+                        >
+                          {{ file.name }}
+                        </a>
+                      </div>
                     </div>
                   </div>
-                </div>
 
-                <!-- 메시지 메타 정보 (시간, 안읽음수) -->
-                <div class="message-meta">
-                  <div
-                    v-if="!message.isOwn && message.unread"
-                    class="unread-count"
-                  >
-                    {{ message.unread }}
+                  <!-- 메시지 메타 정보 (시간, 안읽음수) -->
+                  <div class="message-meta">
+                    <div
+                      v-if="!message.isOwn && message.unread"
+                      class="unread-count"
+                    >
+                      {{ message.unread }}
+                    </div>
+                    <div class="message-time">{{ message.time }}</div>
                   </div>
-                  <div class="message-time">{{ message.time }}</div>
                 </div>
               </div>
             </div>
-          </div>
+          </template>
         </div>
       </div>
 
@@ -2855,8 +3100,41 @@ onUnmounted(() => {
   }
 }
 
-🟣 메시지 텍스트 색도 살짝 강조 .message-bubble.mentioned .message-text {
+/* 🟣 메시지 텍스트 색도 살짝 강조 */
+.message-bubble.mentioned .message-text {
   color: #4c1d95 !important;
   font-weight: 600;
+}
+
+/* ✅ 구분선 스타일 */
+.message-divider {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  margin: 24px 0;
+  padding: 0 24px;
+}
+
+.divider-line {
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(
+    to right,
+    transparent,
+    rgba(var(--v-theme-primary), 0.3),
+    transparent
+  );
+}
+
+.divider-text {
+  font-size: 12px;
+  font-weight: 600;
+  color: rgb(var(--v-theme-primary));
+  background: rgb(var(--v-theme-surface));
+  padding: 4px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(var(--v-theme-primary), 0.3);
+  white-space: nowrap;
 }
 </style>
