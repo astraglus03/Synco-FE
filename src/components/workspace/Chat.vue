@@ -55,7 +55,10 @@ const workspaceMemberStore = useWorkspaceMemberStore();
 const waitForStore = () => {
   return new Promise((resolve) => {
     const checkStore = () => {
-      if (workspaceStore.currentWorkspaceInfo && workspaceMemberStore.chatChannels?.length > 0) {
+      if (
+        workspaceStore.currentWorkspaceInfo &&
+        workspaceMemberStore.chatChannels?.length > 0
+      ) {
         resolve();
       } else {
         setTimeout(checkStore, 100);
@@ -74,17 +77,21 @@ const memberSeq = ref(0);
 
 // 채널 목록 (Store에서 가져오기)
 const channels = computed(() => {
-  const channelList = workspaceMemberStore.chatChannels?.map(channel => ({
-    id: channel.channelSeq.toString(),
-    name: channel.channelName,
-    type: "text",
-    unread: 0,
-    channelData: channel
-  })) || [];
-  
-  console.log("📋 Store에서 가져온 채널 데이터:", workspaceMemberStore.chatChannels);
+  const channelList =
+    workspaceMemberStore.chatChannels?.map((channel) => ({
+      id: channel.channelSeq.toString(),
+      name: channel.channelName,
+      type: "text",
+      unread: 0,
+      channelData: channel,
+    })) || [];
+
+  console.log(
+    "📋 Store에서 가져온 채널 데이터:",
+    workspaceMemberStore.chatChannels
+  );
   console.log("📋 변환된 채널 목록:", channelList);
-  
+
   return channelList;
 });
 
@@ -104,19 +111,19 @@ const messageInputFocused = ref(false);
 const otherTyping = ref(false);
 
 // 모달 관련
-  const showPollModal = ref(false);
-  const showFileModal = ref(false);
-  const showFileLimitModal = ref(false);
-  const fileLimitMessage = ref("");
-  
-  // 첨부된 파일들
-  const attachedFiles = ref([]);
-  
-  // 파일 첨부 제한 설정
-  const MAX_FILES = 20;
-  const attachedFilesCount = computed(() => attachedFiles.value.length);
-  const canAttachMore = computed(() => attachedFilesCount.value < MAX_FILES);
-  const remainingSlots = computed(() => MAX_FILES - attachedFilesCount.value);
+const showPollModal = ref(false);
+const showFileModal = ref(false);
+const showFileLimitModal = ref(false);
+const fileLimitMessage = ref("");
+
+// 첨부된 파일들
+const attachedFiles = ref([]);
+
+// 파일 첨부 제한 설정
+const MAX_FILES = 20;
+const attachedFilesCount = computed(() => attachedFiles.value.length);
+const canAttachMore = computed(() => attachedFilesCount.value < MAX_FILES);
+const remainingSlots = computed(() => MAX_FILES - attachedFilesCount.value);
 
 // 답장 관련 상태
 const replyToMessage = ref(null);
@@ -234,8 +241,9 @@ const connectWebsocket = () => {
                   ? parsed.senderProfileImageUrl
                   : null,
               senderSeq: parsed.senderSeq,
-              isOwn: parsed.senderSeq === memberSeq.value,
-              unread: parsed.senderSeq !== memberSeq.value ? 1 : 0,
+              isOwn: Number(parsed.senderSeq) === Number(memberSeq.value), // ✅ 타입 변환 후 비교
+              unread:
+                Number(parsed.senderSeq) !== Number(memberSeq.value) ? 1 : 0,
               files: fileList, // ✅ 추가
               messageType: parsed.messageType || "TEXT", // ✅ 메시지 타입 추가
               replyToSeq: parsed.replyToSeq || null, // ✅ 답장 대상 메시지 ID 추가
@@ -417,7 +425,7 @@ const sendMessage = async () => {
   console.log("🔍 전송할 채널 Seq:", channelSeq.value);
   console.log("🔍 전송 경로:", `/publish/${channelSeq.value}`);
   console.log("🔍 메시지 내용:", message);
-  
+
   stompClient.value.send(
     `/publish/${channelSeq.value}`,
     JSON.stringify(message),
@@ -481,24 +489,26 @@ const createChannel = () => {
 const loadMoreMessages = async (lastId = null) => {
   // 중복 로드 방지
   if (isLoadingMessages.value || !hasMoreMessages.value) return;
-  
+
   isLoadingMessages.value = true;
-  
+
   try {
     console.log("📥 이전 메시지 로드 시작 - lastId:", lastId);
-    
-    const url = `${import.meta.env.VITE_API_URL}/chat-service/chat/channels/${channelSeq.value}/messages${lastId ? `?lastId=${lastId}` : ''}`;
+
+    const url = `${import.meta.env.VITE_API_URL}/chat-service/chat/channels/${
+      channelSeq.value
+    }/messages${lastId ? `?lastId=${lastId}` : ""}`;
 
     const res = await axios.get(url, {
-      headers: { 
+      headers: {
         Authorization: `Bearer ${token.value}`,
-        "X-Member-Seq": memberSeq.value
-      }
+        "X-Member-Seq": memberSeq.value,
+      },
     });
 
     // 백엔드는 ResponseDto로 감싸져 있지 않을 수 있으므로 직접 배열인지 확인
     let loadedMessages = res.data;
-    
+
     // ResponseDto로 감싸진 경우 (res.data.data)
     if (res.data && res.data.data && Array.isArray(res.data.data)) {
       loadedMessages = res.data.data;
@@ -523,24 +533,24 @@ const loadMoreMessages = async (lastId = null) => {
     console.log("📨 로드된 메시지 개수:", loadedMessages.length);
 
     // 메시지 맵핑 → WebSocket 수신 형식과 동일하게 변환
-    const formatted = loadedMessages.map(m => ({
+    const formatted = loadedMessages.map((m) => ({
       id: m.chatMessageSeq,
       user: m.senderName,
       content: m.chatMessageText,
       time: new Date(m.createdAt).toLocaleTimeString("ko-KR", {
         hour: "2-digit",
-        minute: "2-digit"
+        minute: "2-digit",
       }),
       profileImageUrl: m.senderProfileImageUrl || null,
       senderSeq: m.senderSeq,
-      isOwn: m.senderSeq === memberSeq.value,
+      isOwn: Number(m.senderSeq) === Number(memberSeq.value), // ✅ 타입 변환 후 비교
       unread: 0,
       files: (m.chatMessageFileUrls || "")
         .split(",")
         .filter(Boolean)
-        .map(url => ({ name: url.split("/").pop(), url, type: "file" })),
+        .map((url) => ({ name: url.split("/").pop(), url, type: "file" })),
       messageType: m.messageType || "TEXT",
-      replyToSeq: m.replyToSeq || null
+      replyToSeq: m.replyToSeq || null,
     }));
 
     // ✅ 스크롤 위치 저장
@@ -552,8 +562,8 @@ const loadMoreMessages = async (lastId = null) => {
     messages.value = [...formatted.reverse(), ...messages.value];
 
     // ✅ 스크롤 위치 복원 (새로 추가된 메시지 높이만큼 아래로 이동)
-    await new Promise(resolve => setTimeout(resolve, 50)); // DOM 업데이트 대기
-    
+    await new Promise((resolve) => setTimeout(resolve, 50)); // DOM 업데이트 대기
+
     if (container) {
       const newScrollHeight = container.scrollHeight;
       const heightDifference = newScrollHeight - oldScrollHeight;
@@ -562,7 +572,6 @@ const loadMoreMessages = async (lastId = null) => {
     }
 
     if (!lastId) scrollToBottom();
-
   } catch (e) {
     console.error("❌ 메시지 로드 실패:", e);
     hasMoreMessages.value = false;
@@ -570,7 +579,6 @@ const loadMoreMessages = async (lastId = null) => {
     isLoadingMessages.value = false;
   }
 };
-
 
 // 채널 변경 시 WebSocket 재연결
 const changeChannel = async (channelId) => {
@@ -586,7 +594,7 @@ const changeChannel = async (channelId) => {
   currentChannel.value = channelId;
   channelSeq.value = parseInt(channelId); // 문자열을 숫자로 변환
   messages.value = [];
-  
+
   // 이전 메시지 로드 상태 리셋
   hasMoreMessages.value = true;
   isLoadingMessages.value = false;
@@ -689,7 +697,7 @@ const handleCreatePoll = (pollData) => {
 const handleAttachFiles = (files) => {
   const currentCount = attachedFiles.value.length;
   const newFilesCount = files.length;
-  
+
   // 20개 제한 체크
   if (currentCount + newFilesCount > MAX_FILES) {
     const availableSlots = MAX_FILES - currentCount;
@@ -708,7 +716,7 @@ const handleAttachFiles = (files) => {
     attachedFiles.value.push(...files);
     showToastNotification(`${files.length}개 파일이 첨부되었습니다.`);
   }
-  
+
   showAttachmentMenu.value = false;
 };
 
@@ -792,14 +800,17 @@ const cancelReply = () => {
 // ✅ Scroll 최상단 감지 후 이전 메시지 로드
 const handleScroll = async (e) => {
   const container = e.target;
-  
+
   // 로딩 중이거나 더 이상 메시지가 없으면 리턴
   if (isLoadingMessages.value || !hasMoreMessages.value) return;
-  
+
   // 스크롤이 최상단에 있고 메시지가 있을 때만 로드
   if (container.scrollTop === 0 && messages.value.length > 0) {
     const oldest = messages.value[0];
-    console.log("🔄 최상단 스크롤 감지 - 이전 메시지 로드 시작 - oldest.id:", oldest.id);
+    console.log(
+      "🔄 최상단 스크롤 감지 - 이전 메시지 로드 시작 - oldest.id:",
+      oldest.id
+    );
     await loadMoreMessages(oldest.id);
   }
 };
@@ -970,7 +981,7 @@ const showToastNotification = (message, type = "success") => {
   toastMessage.value = message;
   toastType.value = type;
   showToast.value = true;
-  
+
   // 3초 후 자동으로 사라짐
   setTimeout(() => {
     showToast.value = false;
@@ -1196,7 +1207,7 @@ onUnmounted(() => {
                 <div
                   class="message-bubble"
                   :class="{
-                    mentioned: isMentionedMessage(message)
+                    mentioned: isMentionedMessage(message),
                   }"
                 >
                   <div
@@ -1267,35 +1278,39 @@ onUnmounted(() => {
               <div class="attachment-desc">팀원들의 의견을 수집해보세요</div>
             </div>
           </div>
-           <div 
-             class="attachment-item" 
-             :class="{ disabled: !canAttachMore }"
-             @click="canAttachMore ? openFileModal() : showFileLimitAlert()"
-           >
+          <div
+            class="attachment-item"
+            :class="{ disabled: !canAttachMore }"
+            @click="canAttachMore ? openFileModal() : showFileLimitAlert()"
+          >
             <div class="attachment-icon file-icon">
               <v-icon>mdi-attachment</v-icon>
             </div>
             <div class="attachment-text">
               <div class="attachment-title">파일 첨부</div>
               <div class="attachment-desc">
-                문서, 이미지, 동영상을 공유하세요 ({{ attachedFilesCount }}/{{ MAX_FILES }})
+                문서, 이미지, 동영상을 공유하세요 ({{ attachedFilesCount }}/{{
+                  MAX_FILES
+                }})
               </div>
             </div>
           </div>
         </div>
 
-          <!-- 첨부된 파일들 표시 -->
-          <div v-if="attachedFiles.length > 0" class="attached-files">
-            <div class="attached-files-header">
-              <span class="files-count">첨부된 파일 ({{ attachedFilesCount }}/{{ MAX_FILES }})</span>
-              <v-chip 
-                v-if="attachedFilesCount >= MAX_FILES * 0.8" 
-                color="warning" 
-                size="small"
-              >
-                거의 가득참
-              </v-chip>
-            </div>
+        <!-- 첨부된 파일들 표시 -->
+        <div v-if="attachedFiles.length > 0" class="attached-files">
+          <div class="attached-files-header">
+            <span class="files-count"
+              >첨부된 파일 ({{ attachedFilesCount }}/{{ MAX_FILES }})</span
+            >
+            <v-chip
+              v-if="attachedFilesCount >= MAX_FILES * 0.8"
+              color="warning"
+              size="small"
+            >
+              거의 가득참
+            </v-chip>
+          </div>
           <div
             v-for="(file, index) in attachedFiles"
             :key="index"
@@ -1385,7 +1400,7 @@ onUnmounted(() => {
               auto-grow
               hide-details
               class="message-textarea"
-              style="width: 100%;"
+              style="width: 100%"
               no-resize
               @keypress="handleKeyPress"
               @focus="handleInputFocus"
@@ -1429,11 +1444,11 @@ onUnmounted(() => {
               <v-icon color="white" size="26">mdi-file-multiple</v-icon>
             </div>
           </div>
-          
+
           <div class="content-section">
             <h2 class="title">파일 첨부 제한</h2>
             <p class="description">{{ fileLimitMessage }}</p>
-            
+
             <div class="file-indicator">
               <div class="indicator-wrapper">
                 <span class="current">{{ attachedFilesCount }}</span>
@@ -1442,10 +1457,10 @@ onUnmounted(() => {
               </div>
             </div>
           </div>
-          
+
           <div class="action-section">
-            <v-btn 
-              color="primary" 
+            <v-btn
+              color="primary"
               variant="flat"
               block
               @click="closeFileLimitModal"
@@ -1468,11 +1483,13 @@ onUnmounted(() => {
       class="toast-notification"
     >
       <div class="toast-content">
-        <v-icon 
-          :color="toastType === 'success' ? 'white' : 'white'" 
+        <v-icon
+          :color="toastType === 'success' ? 'white' : 'white'"
           class="mr-2"
         >
-          {{ toastType === 'success' ? 'mdi-check-circle' : 'mdi-alert-circle' }}
+          {{
+            toastType === "success" ? "mdi-check-circle" : "mdi-alert-circle"
+          }}
         </v-icon>
         <span>{{ toastMessage }}</span>
       </div>
@@ -2264,7 +2281,12 @@ onUnmounted(() => {
   width: 80px;
   height: 80px;
   border-radius: 50%;
-  background: conic-gradient(#667eea 0deg, #667eea var(--progress, 0deg), #e2e8f0 var(--progress, 0deg), #e2e8f0 360deg);
+  background: conic-gradient(
+    #667eea 0deg,
+    #667eea var(--progress, 0deg),
+    #e2e8f0 var(--progress, 0deg),
+    #e2e8f0 360deg
+  );
   display: flex;
   align-items: center;
   justify-content: center;
@@ -2273,7 +2295,7 @@ onUnmounted(() => {
 }
 
 .progress-ring::before {
-  content: '';
+  content: "";
   position: absolute;
   width: 60px;
   height: 60px;
@@ -2312,7 +2334,12 @@ onUnmounted(() => {
   left: -100%;
   width: 100%;
   height: 100%;
-  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent);
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.3),
+    transparent
+  );
   transition: left 0.6s ease;
 }
 
@@ -2332,7 +2359,8 @@ onUnmounted(() => {
 
 /* 아름다운 애니메이션 */
 @keyframes iconFloat {
-  0%, 100% {
+  0%,
+  100% {
     transform: translateY(0);
   }
   50% {
@@ -2341,7 +2369,8 @@ onUnmounted(() => {
 }
 
 @keyframes iconPulse {
-  0%, 100% {
+  0%,
+  100% {
     transform: scale(1);
     opacity: 0.3;
   }
@@ -2352,7 +2381,8 @@ onUnmounted(() => {
 }
 
 @keyframes progressRotate {
-  0%, 100% {
+  0%,
+  100% {
     transform: rotate(0deg);
   }
   50% {
@@ -2380,7 +2410,11 @@ onUnmounted(() => {
   border-radius: 16px;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
   backdrop-filter: blur(20px);
-  background: linear-gradient(135deg, rgba(255, 255, 255, 0.95) 0%, rgba(248, 250, 252, 0.95) 100%);
+  background: linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.95) 0%,
+    rgba(248, 250, 252, 0.95) 100%
+  );
   border: 1px solid rgba(255, 255, 255, 0.3);
 }
 
@@ -2798,7 +2832,11 @@ onUnmounted(() => {
 
 /* ✅ 내가 멘션된 메시지 배경 하이라이트 (강조 버전) */
 .message-bubble.mentioned {
-  background: linear-gradient(135deg, #ede9fe, #ddd6fe) !important; /* 보라빛 그라데이션 */
+  background: linear-gradient(
+    135deg,
+    #ede9fe,
+    #ddd6fe
+  ) !important; /* 보라빛 그라데이션 */
   box-shadow: 0 0 10px rgba(124, 58, 237, 0.5) !important; /* 외곽광 */
   animation: mentionGlow 2s ease-in-out infinite alternate;
   transition: all 0.3s ease;
@@ -2817,8 +2855,7 @@ onUnmounted(() => {
   }
 }
 
-🟣 메시지 텍스트 색도 살짝 강조
-.message-bubble.mentioned .message-text {
+🟣 메시지 텍스트 색도 살짝 강조 .message-bubble.mentioned .message-text {
   color: #4c1d95 !important;
   font-weight: 600;
 }
