@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted, onUnmounted, nextTick } from "vue";
+import { ref, computed, onMounted, onUnmounted, nextTick, watch } from "vue";
 import { usePermissions, PERMISSIONS } from "@/composables/usePermissions";
 import { useWorkspaceStore } from "@/store/workspaceStore";
 import { useWorkspaceMemberStore } from "@/store/workspaceMemberStore";
@@ -44,6 +44,7 @@ const parseJwt = (token) => {
 
 const props = defineProps({
   currentChannel: String,
+  selectedChannel: String, // 하위 채널 ID
 });
 
 const { hasPermission, isManager, isSuper } = usePermissions();
@@ -785,7 +786,10 @@ const changeChannel = async (channelId) => {
   connectWebsocket();
 };
 
-// 하위 채널 선택 이벤트 처리
+// ✅ 로드 상태 플래그 - 중복 로드 방지
+const hasLoadedInitialChannel = ref(false);
+
+// 하위 채널 선택 이벤트 처리 (event bus용)
 const handleSubChannelSelect = ({ parentId, subChannelId }) => {
   console.log("📣 select-chat-channel 이벤트:", parentId, subChannelId);
   if (parentId === "chat") {
@@ -1226,23 +1230,27 @@ onMounted(async () => {
   // ✅ Store 초기화 대기
   await waitForStore();
 
-  // ✅ 첫 번째 채널을 기본으로 선택
-  if (channels.value.length > 0) {
-    currentChannel.value = channels.value[0].id;
-    channelSeq.value = parseInt(channels.value[0].id); // 문자열을 숫자로 변환
-    console.log("🔍 현재 채널 Seq:", channelSeq.value);
-    console.log("🔍 현재 채널 ID:", currentChannel.value);
-    console.log("🔍 채널 목록:", channels.value);
-    console.log("🔍 첫 번째 채널 데이터:", channels.value[0]);
-  } else {
+  // ✅ 채널 목록이 비어있으면 종료
+  if (channels.value.length === 0) {
     console.warn("⚠️ 채널 목록이 비어있습니다.");
     return;
   }
 
+  // ✅ 초기 채널 설정
+  const initialChannel = props.selectedChannel || channels.value[0].id;
+  currentChannel.value = initialChannel;
+  channelSeq.value = parseInt(initialChannel);
+  console.log("🔍 최초 채널 선택:", {
+    selectedChannel: props.selectedChannel,
+    initialChannel,
+    channelSeq: channelSeq.value,
+  });
+
   // ✅ 채널 참여 멤버 목록 초기화
   getChannelMembers().then(async () => {
-    // ✅ memberSeq가 유효할 때만 첫 채널 로드
+    // ✅ memberSeq가 유효할 때만 채널 로드
     if (memberSeq.value > 0 && currentChannel.value) {
+      hasLoadedInitialChannel.value = true;
       // ✅ 1. 마지막 읽은 이후의 새 메시지 로드 시도
       const newMessages = await loadMessagesAfterLastRead();
 
@@ -1302,6 +1310,30 @@ onMounted(async () => {
     container.addEventListener("scroll", handleScroll);
   }
 });
+
+// ✅ props.selectedChannel 변경 감지 - 채널 자동 전환
+watch(
+  () => props.selectedChannel,
+  (newChannelId) => {
+    console.log("🔔 selectedChannel props 변경 감지:", newChannelId);
+    if (!newChannelId) return;
+
+    if (currentChannel.value === newChannelId) {
+      console.log("🚫 같은 채널이므로 skip");
+      return;
+    }
+
+    // props로 다른 채널이 오면 전환
+    console.log(
+      "🔄 props에 따라 채널 전환:",
+      currentChannel.value,
+      "→",
+      newChannelId
+    );
+    changeChannel(newChannelId);
+  },
+  { immediate: false }
+);
 
 onUnmounted(() => {
   emitter.off("select-chat-channel", handleSubChannelSelect);
