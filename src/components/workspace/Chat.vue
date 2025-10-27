@@ -100,6 +100,12 @@ const channels = computed(() => {
 // 현재 채널
 const currentChannel = ref("general");
 
+// 현재 채널 이름 가져오기
+const currentChannelName = computed(() => {
+  const channel = channels.value.find((c) => c.id === currentChannel.value);
+  return channel ? channel.name : "채널";
+});
+
 // 실제 메시지 데이터 (WebSocket에서 받아온 메시지들)
 const messages = ref([]);
 
@@ -1354,27 +1360,7 @@ onUnmounted(() => {
       <div class="chat-header">
         <div class="channel-info">
           <v-icon>mdi-pound</v-icon>
-          <v-select
-            v-model="currentChannel"
-            :items="channels"
-            item-title="name"
-            item-value="id"
-            variant="plain"
-            density="compact"
-            hide-details
-            @update:model-value="changeChannel"
-            class="channel-select"
-          />
-        </div>
-        <div class="channel-actions">
-          <v-btn
-            v-if="hasPermission(PERMISSIONS.CREATE_CHANNEL)"
-            color="primary"
-            prepend-icon="mdi-plus"
-            @click="createChannel"
-          >
-            채널 생성
-          </v-btn>
+          <span class="channel-name">{{ currentChannelName }}</span>
         </div>
       </div>
 
@@ -1841,19 +1827,10 @@ onUnmounted(() => {
   color: rgb(var(--v-theme-on-surface));
 }
 
-.channel-select {
-  min-width: 120px;
-}
-
-.channel-select :deep(.v-field__input) {
+.channel-name {
   font-size: 16px;
   font-weight: 600;
   color: rgb(var(--v-theme-on-surface));
-}
-
-.channel-actions {
-  display: flex;
-  gap: 8px;
 }
 
 .messages-container {
