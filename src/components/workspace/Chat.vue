@@ -1127,8 +1127,11 @@ const handleMessageInput = (event) => {
 // ✅ 입력 내용에 따라 타이핑 시작/종료 이벤트 전송
   if (hasContent && channelSeq.value && memberSeq.value) {
     // 입력 내용이 있으면 → 타이핑 시작 이벤트 전송
-    console.log("⌨️ [타이핑] 입력 내용 있음 → 시작");
-    sendTypingStartEvent();
+    // 이미 인터벌이 실행 중이면 스킵
+    if (!typingInterval) {
+      console.log("⌨️ [타이핑] 입력 내용 있음 → 시작");
+      sendTypingStartEvent();
+    }
   } else {
     // 입력 내용이 없으면 → 타이핑 종료 이벤트 전송
     console.log("⌨️ [타이핑] 입력 내용 없음 → 종료");
@@ -1269,52 +1272,55 @@ const sendTypingStartEvent = () => {
     return;
   }
 
-  // 2. 기존 인터벌 클리어 (중복 방지)
-  if (typingInterval) {
-    clearInterval(typingInterval);
-    typingInterval = null;
-  }
+  // 2. 기존 인터벌은 유지 (재설정하지 않음)
+  if (!typingInterval) {
+    // // 2. 기존 인터벌 클리어 (중복 방지)
+    // if (typingInterval) {
+    //   clearInterval(typingInterval);
+    //   typingInterval = null;
+    // }
 
-  // 3. 현재 사용자 이름 가져오기
-  const currentUserName =
-    localStorage.getItem("memberName") ||
-    JSON.parse(localStorage.getItem("user") || "{}").name ||
-    JSON.parse(localStorage.getItem("user") || "{}").memberName ||
-    "사용자";
+    // 3. 현재 사용자 이름 가져오기
+    const currentUserName =
+      localStorage.getItem("memberName") ||
+      JSON.parse(localStorage.getItem("user") || "{}").name ||
+      JSON.parse(localStorage.getItem("user") || "{}").memberName ||
+      "사용자";
 
-  // 4. 기존 타이머 클리어
-  if (typingTimeout) {
-    clearTimeout(typingTimeout);
-    typingTimeout = null;
-  }
+    // // 4. 기존 타이머 클리어
+    // if (typingTimeout) {
+    //   clearTimeout(typingTimeout);
+    //   typingTimeout = null;
+    // }
 
-  // 5. 즉시 타이핑 시작 이벤트 전송
-  const sendTypingEvent = () => {
-    const typingEvent = {
-      action: "TYPING",
-      channelSeq: channelSeq.value,
-      senderSeq: memberSeq.value,
-      senderName: currentUserName,
-      typing: true
+    // 5. 즉시 타이핑 시작 이벤트 전송
+    const sendTypingEvent = () => {
+      const typingEvent = {
+        action: "TYPING",
+        channelSeq: channelSeq.value,
+        senderSeq: memberSeq.value,
+        senderName: currentUserName,
+        typing: true
+      };
+
+      stompClient.value.send(
+        `/publish/typing`,
+        JSON.stringify(typingEvent),
+        { Authorization: `Bearer ${token.value}` }
+      );
+
+      console.log("⌨️ [타이핑 중] 이벤트 전송");
+      // lastTypingSent = Date.now();
     };
 
-    stompClient.value.send(
-      `/publish/typing`,
-      JSON.stringify(typingEvent),
-      { Authorization: `Bearer ${token.value}` }
-    );
-
-    console.log("⌨️ [타이핑 중] 이벤트 전송");
-    lastTypingSent = Date.now();
-  };
-
-  // 즉시 전송
-  sendTypingEvent();
-
-  // 6. 3초마다 지속적으로 타이핑 이벤트 전송
-  typingInterval = setInterval(() => {
+    // 즉시 전송
     sendTypingEvent();
-  }, 3000);
+
+    // 6. 3초마다 지속적으로 타이핑 이벤트 전송
+    typingInterval = setInterval(() => {
+      sendTypingEvent();
+    }, 2000);
+  }
 };
 
 // ✅ 타이핑 종료 이벤트 전송 (입력 삭제 시)
@@ -1513,6 +1519,17 @@ watch(
 onUnmounted(() => {
   emitter.off("select-chat-channel", handleSubChannelSelect);
   window.removeEventListener("click", closeContextMenu);
+  
+  // ✅ 컴포넌트 종료 시 타이핑 종료 브로드캐스트
+  try {
+    if (isTyping.value || typingInterval) {
+      sendTypingStopEvent();
+      isTyping.value = false;
+    }
+  } catch (e) {
+    console.warn("타이핑 종료 이벤트 전송 실패", e);
+  }
+  
   disconnectWebsocket();
   const container = document.querySelector(".messages-container");
   if (container) {
