@@ -1235,6 +1235,17 @@ const getFileIcon = (fileType) => {
   return "mdi-file";
 };
 
+// URL 확장자로 이미지 여부 판단
+const isImageUrl = (url) => {
+  if (!url) return false;
+  try {
+    const lower = url.split('?')[0].toLowerCase();
+    return /(\.png|\.jpg|\.jpeg|\.gif|\.webp|\.bmp|\.svg)$/.test(lower);
+  } catch (e) {
+    return false;
+  }
+};
+
 const removeAttachedFile = (index) => {
   attachedFiles.value.splice(index, 1);
 };
@@ -1713,15 +1724,28 @@ onUnmounted(() => {
                         :key="i"
                         class="message-file-item"
                       >
-                        <v-icon class="mr-2">mdi-file</v-icon>
-                        <a
-                          :href="file.url"
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          class="file-name"
-                        >
-                          {{ file.name }}
-                        </a>
+                        <!-- 이미지면 썸네일, 아니면 아이콘+링크 -->
+                        <template v-if="isImageUrl(file.url)">
+                          <a
+                            :href="file.url"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            class="image-thumb-link"
+                          >
+                            <img :src="file.url" :alt="file.name" class="image-thumb" />
+                          </a>
+                        </template>
+                        <template v-else>
+                          <v-icon class="mr-2">mdi-file</v-icon>
+                          <a
+                            :href="file.url"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            class="file-name"
+                          >
+                            {{ file.name }}
+                          </a>
+                        </template>
                       </div>
                     </div>
                   </div>
@@ -2932,8 +2956,8 @@ onUnmounted(() => {
 /* 메시지 내 파일 표시 */
 .message-files {
   margin-top: 8px;
-  padding-top: 8px;
-  border-top: 1px solid rgba(var(--v-theme-on-surface), 0.1);
+  margin-bottom: 8px;
+  border-top: none;
 }
 
 .message-file-item {
@@ -2944,6 +2968,23 @@ onUnmounted(() => {
   border-radius: 6px;
   margin-bottom: 4px;
   font-size: 13px;
+}
+
+/* 이미지 썸네일 */
+.image-thumb-link {
+  display: inline-block;
+  border-radius: 8px;
+  overflow: hidden;
+  line-height: 0;
+}
+
+.image-thumb {
+  width: 160px;
+  height: 160px;
+  object-fit: cover;
+  display: block;
+  border-radius: 8px;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.12);
 }
 
 .message-file-item:last-child {
