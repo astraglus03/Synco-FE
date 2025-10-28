@@ -279,7 +279,7 @@ import { useProjectScheduleStore } from '../../store/projectScheduleStore.js'
 import { useWorkspaceStore } from '../../store/workspaceStore.js'
 import { useWorkspaceMemberStore } from '../../store/workspaceMemberStore.js'
 import { useAuthStore } from '../../store/authStore.js'
-import { getWorkspaceMembers } from '../../services/WorkspaceService.js'
+import { getWorkspaceMembers } from '@/api/workspace/workSpaceApi'
 import { getProjectTasks, getTaskDetail } from '../../api/schedule/scheduleApi.js'
 import TaskCreateModal from './TaskCreateModal.vue'
 import TaskDetailModal from './TaskDetailModal.vue'
@@ -320,6 +320,34 @@ const snackbar = ref({
   message: '',
   color: 'error'
 })
+
+// 워크스페이스 변경 감지하여 데이터 다시 로드
+watch(() => workspaceStore.currentWorkspace, async (newWorkspace, oldWorkspace) => {
+  if (newWorkspace && newWorkspace !== oldWorkspace && oldWorkspace) {
+    console.log('🔄 [Schedule] 워크스페이스 변경 감지:', oldWorkspace, '→', newWorkspace)
+    
+    // 1. 먼저 스토어 데이터 초기화
+    projectScheduleStore.clearStoreData()
+    selectedFilter.value = null
+    workspaceMembers.value = []
+    
+    // 2. 새로운 워크스페이스 데이터 로드
+    try {
+      const currentWorkspace = workspaceStore.currentWorkspaceInfo
+      if (currentWorkspace && currentWorkspace.workSpaceSeq) {
+        await Promise.all([
+          projectScheduleStore.loadProjectTasks(),
+          loadWorkspaceMembers(),
+          workspaceMemberStore.loadWorkspaceMembers(currentWorkspace.workSpaceSeq),
+          workspaceMemberStore.loadChannels(currentWorkspace.workSpaceSeq)
+        ])
+        console.log('✅ [Schedule] 워크스페이스 데이터 로드 완료')
+      }
+    } catch (error) {
+      console.error('❌ [Schedule] 데이터 로딩 실패:', error)
+    }
+  }
+}, { immediate: false })
 
 // API 데이터 로딩
 onMounted(async () => {
@@ -422,18 +450,23 @@ const refreshTasks = async () => {
     const currentWorkspace = workspaceStore.currentWorkspaceInfo
     const projectId = currentWorkspace.workSpaceSeq
     
-    if (selectedFilter.value) {
-      const response = await getProjectTasks(projectId, selectedFilter.value)
-      projectScheduleStore.taskData = response.data
-    } else {
-      const response = await getProjectTasks(projectId)
-      projectScheduleStore.taskData = response.data
-    }
+    console.log('🔄 태스크 새로고침 시작:', { projectId, selectedFilter: selectedFilter.value })
+    
+    const response = selectedFilter.value 
+      ? await getProjectTasks(projectId, selectedFilter.value)
+      : await getProjectTasks(projectId)
+    
+    console.log('📦 받은 응답:', response)
+    
+    // 백엔드 응답 구조 처리: { success, data } 또는 직접 배열
+    const taskData = response?.data || response
+    projectScheduleStore.taskData = Array.isArray(taskData) ? taskData : []
+    console.log('✅ 태스크 데이터 저장:', projectScheduleStore.taskData)
     
     // 에러 상태 초기화
     projectScheduleStore.error = null
   } catch (error) {
-    console.error('태스크 새로고침 실패:', error)
+    console.error('❌ 태스크 새로고침 실패:', error)
     // 에러가 발생해도 화면에 표시하지 않음
   }
 }
@@ -547,21 +580,42 @@ watch(isTaskModalOpen, (newValue) => {
   }
 })
 
+// 상세 모달이 닫힐 때 데이터 새로고침
+watch(isTaskDetailModalOpen, async (newVal, oldVal) => {
+  // 모달이 열림 → 닫힘 상태로 변경될 때
+  if (oldVal === true && newVal === false) {
+    console.log('🔄 상세 모달 닫힘 - 데이터 새로고침')
+    // 데이터 새로고침
+    await refreshTasks()
+    selectedTaskData.value = {}
+  }
+})
+
 // Task 수정
 const editTask = async (task) => {
   try {
+    console.log('✏️ 태스크 수정 클릭:', task)
+    
     // 태스크 상세 정보 조회
+    console.log('📡 태스크 상세 조회 시작:', task.id)
     const response = await getTaskDetail(task.id)
-    if (response.success) {
+    console.log('📦 받은 응답:', response)
+    
+    // 백엔드 응답 구조 처리: { success, data } 또는 직접 객체
+    const taskDetail = response?.data || response
+    
+    if (taskDetail) {
       // 수정 모드로 설정하고 모달 열기
-      editTaskData.value = response.data
+      editTaskData.value = taskDetail
       isEditMode.value = true
       isTaskModalOpen.value = true
+      console.log('✅ 태스크 수정 모달 열기')
     } else {
+      console.error('❌ 태스크 정보가 없습니다.')
       alert('태스크 정보를 불러오는데 실패했습니다.')
     }
   } catch (error) {
-    console.error('태스크 상세 조회 실패:', error)
+    console.error('❌ 태스크 상세 조회 실패:', error)
     alert('태스크 정보를 불러오는데 실패했습니다.')
   }
 }
@@ -569,16 +623,26 @@ const editTask = async (task) => {
 // Task 상세 열기
 const openTaskDetail = async (task) => {
   try {
+    console.log('🖱️ 태스크 더블클릭:', task)
+    
     // 태스크 상세 정보 조회
+    console.log('📡 태스크 상세 조회 시작:', task.id)
     const response = await getTaskDetail(task.id)
-    if (response.success) {
-      selectedTaskData.value = response.data
+    console.log('📦 받은 응답:', response)
+    
+    // 백엔드 응답 구조 처리: { success, data } 또는 직접 객체
+    const taskDetail = response?.data || response
+    
+    if (taskDetail) {
+      selectedTaskData.value = taskDetail
       isTaskDetailModalOpen.value = true
+      console.log('✅ 태스크 상세 모달 열기')
     } else {
+      console.error('❌ 태스크 정보가 없습니다.')
       alert('태스크 정보를 불러오는데 실패했습니다.')
     }
   } catch (error) {
-    console.error('태스크 상세 조회 실패:', error)
+    console.error('❌ 태스크 상세 조회 실패:', error)
     alert('태스크 정보를 불러오는데 실패했습니다.')
   }
 }

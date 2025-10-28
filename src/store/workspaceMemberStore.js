@@ -8,7 +8,7 @@ import {
   changeChatChannelAuthority,
   changeScheduleChannelAuthority,
   changeMeetingChannelAuthority
-} from '@/services/WorkspaceService'
+} from '@/api/workspace/workSpaceApi'
 import { Authority } from '@/models/workspace/WorkspaceModels'
 
 export const useWorkspaceMemberStore = defineStore('workspaceMember', () => {
@@ -80,8 +80,11 @@ export const useWorkspaceMemberStore = defineStore('workspaceMember', () => {
       
       const memberData = await getWorkspaceMembers(workSpaceSeq)
       
-      members.value = memberData || []
+      // 반응성을 확실하게 트리거하기 위해 새 배열로 할당
+      members.value = Array.isArray(memberData) ? [...memberData] : []
       currentWorkspaceSeq.value = workSpaceSeq
+      
+      console.log('🔄 워크스페이스 멤버 스토어 업데이트:', members.value.length, '명')
       
     } catch (error) {
       console.error('워크스페이스 멤버 로드 실패:', error)
