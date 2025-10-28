@@ -75,22 +75,33 @@ export function useSearch(options = {}) {
     searchQuery.value = ''
   }
   
+  // ID에서 접두사 제거 (workspace_4 → 4, chat_8 → 8)
+  const extractId = (fullId) => {
+    if (!fullId) return fullId
+    const match = fullId.match(/_(\d+)$/)
+    if (match) {
+      return match[1]
+    }
+    return fullId
+  }
+  
   // 결과로 네비게이션
   const navigateToResult = (result) => {
     const currentWorkspace = workspaceStore.currentWorkspaceInfo
+    const cleanWorkspaceId = extractId(currentWorkspace.id)
     
     switch (result.type) {
       case 'message':
-        router.push(`/workspace/${currentWorkspace.id}/chat?messageId=${result.id}`)
+        router.push(`/workspaces/${cleanWorkspaceId}/chats?messageId=${result.id}`)
         break
       case 'file':
-        router.push(`/workspace/${currentWorkspace.id}/drive?fileId=${result.id}`)
+        router.push(`/workspaces/${cleanWorkspaceId}/drive?fileId=${result.id}`)
         break
       case 'user':
-        router.push(`/workspace/${currentWorkspace.id}/friends?userId=${result.id}`)
+        router.push(`/workspaces/${cleanWorkspaceId}/friends?userId=${result.id}`)
         break
       case 'channel':
-        router.push(`/workspace/${currentWorkspace.id}/${result.id}`)
+        router.push(`/workspaces/${cleanWorkspaceId}/${result.id}`)
         break
       default:
         console.log('알 수 없는 결과 타입:', result.type)

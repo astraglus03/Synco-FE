@@ -1,19 +1,20 @@
 <script setup>
-import { computed, ref, onMounted, onUnmounted } from "vue";
-import { useUIStore } from "@/store/uiStore";
+import { computed, ref, onMounted, onUnmounted } from 'vue'
+import { useUIStore } from '@/store/uiStore'
 import { emitter } from "@/eventBus";
-import PersonalDashboard from "@/components/workspace/PersonalDashboard.vue";
-import PersonalFriends from "@/components/workspace/PersonalFriends.vue";
-import PersonalDrive from "@/components/workspace/PersonalDrive.vue";
-import PersonalCalendar from "@/components/workspace/PersonalCalendar.vue";
-import PersonalProfile from "@/components/workspace/PersonalProfile.vue";
-import PersonalChat from "@/components/workspace/PersonalChat.vue";
-import Dashboard from "@/components/workspace/Dashboard.vue";
-import Chat from "@/components/workspace/Chat.vue";
-import Schedule from "@/components/workspace/Schedule.vue";
-import ProjectDrive from "@/components/workspace/ProjectDrive.vue";
-import TeamMeeting from "@/components/workspace/TeamMeeting.vue";
-import MemberSidebar from "./MemberSidebar.vue";
+import PersonalDashboard from '@/components/workspace/PersonalDashboard.vue'
+import PersonalFriends from '@/components/workspace/PersonalFriends.vue'
+import PersonalDrive from '@/components/workspace/PersonalDrive.vue'
+import PersonalCalendar from '@/components/workspace/PersonalCalendar.vue'
+import PersonalSchedule from '@/components/workspace/PersonalSchedule.vue'
+import PersonalProfile from '@/components/workspace/PersonalProfile.vue'
+import PersonalChat from '@/components/workspace/PersonalChat.vue'
+import Dashboard from '@/components/workspace/Dashboard.vue'
+import Chat from '@/components/workspace/Chat.vue'
+import Schedule from '@/components/workspace/Schedule.vue'
+import ProjectDrive from '@/components/workspace/ProjectDrive.vue'
+import TeamMeeting from '@/components/workspace/TeamMeeting.vue'
+import MemberSidebar from './MemberSidebar.vue'
 
 const props = defineProps({
   workspaceType: String, // 'personal' 또는 'project'
@@ -29,19 +30,31 @@ const uiStore = useUIStore();
 
 // 멤버 사이드바 닫기
 const closeMemberSidebar = () => {
-  uiStore.memberSidebarVisible = false;
-};
+  uiStore.memberSidebarVisible = false
+}
+
+// 멤버 사이드바 토글
+const toggleMemberSidebar = () => {
+  uiStore.toggleMemberSidebar()
+}
 
 // 선택된 일정 정보
-const selectedSchedule = ref("general-schedule");
+const selectedSchedule = ref('team-schedule')
 
 // 선택된 채널 정보
 const selectedChannel = ref("");
 
 // 일정 선택 이벤트 리스너
 const handleScheduleSelect = (event) => {
-  selectedSchedule.value = event.detail.subChannelId;
-};
+  selectedSchedule.value = event.detail.subChannelId
+}
+
+// 하위 채널 선택 이벤트 리스너
+const handleSubChannelSelect = (parentId, subChannelId) => {
+  if (parentId === 'schedule') {
+    selectedSchedule.value = subChannelId
+  }
+}
 
 // 채널 선택 이벤트 리스너 (meeting 전용)
 const handleChannelSelect = (event) => {
@@ -89,18 +102,18 @@ const currentComponent = computed(() => {
     }
   } else {
     switch (props.currentChannel) {
-      case "dashboard":
-        return Dashboard;
-      case "chat":
-        return Chat;
-      case "schedule":
-        return Schedule;
-      case "drive":
-        return ProjectDrive;
-      case "meeting":
-        return TeamMeeting;
-      default:
-        return Dashboard;
+      case 'dashboard': return Dashboard
+      case 'chat': return Chat
+      case 'schedule': 
+        // 일정관리 하위 메뉴에 따라 다른 컴포넌트 반환
+        if (selectedSchedule.value === 'personal-schedule') {
+          return PersonalSchedule
+        } else {
+          return Schedule
+        }
+      case 'drive': return ProjectDrive
+      case 'meeting': return TeamMeeting
+      default: return Dashboard
     }
   }
 });
@@ -136,6 +149,7 @@ const contentStyle = computed(() => {
       :selected-schedule="selectedSchedule"
       :selected-channel="selectedChannel"
       :navigate-to-personal-drive="navigateToPersonalDrive"
+      @toggle-member-sidebar="toggleMemberSidebar"
     />
 
     <!-- 멤버 사이드바 (프로젝트 워크스페이스일 때만 표시) -->
