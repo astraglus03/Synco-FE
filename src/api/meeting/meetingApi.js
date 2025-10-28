@@ -9,7 +9,6 @@ const API_ENDPOINTS = {
   SEND_MESSAGE: (roomId) => `/task-service/rooms/${roomId}/messages`,
   GET_MESSAGES: (roomId) => `/task-service/rooms/${roomId}/messages`,
   START_RECORDING: (roomId) => `/task-service/rooms/${roomId}/recording/start`,
-  STOP_RECORDING: (roomId) => `/task-service/rooms/${roomId}/recording/stop`,
   
   // 가상회의 채널 관련 (VirtualMeetingController)
   CREATE_BASIC_CHANNEL: '/task-service/virtual-meeting/createBasicChannel',
@@ -181,21 +180,6 @@ export const meetingApi = {
       return response.data
     } catch (error) {
       console.error('녹화 시작 실패:', error)
-      throw error
-    }
-  },
-
-  // 녹화 중지
-  async stopRecording(memberSeq, roomId) {
-    try {
-      const response = await axios.post(API_ENDPOINTS.STOP_RECORDING(roomId), {}, {
-        headers: {
-          'X-Member-Seq': memberSeq
-        }
-      })
-      return response.data
-    } catch (error) {
-      console.error('녹화 중지 실패:', error)
       throw error
     }
   },

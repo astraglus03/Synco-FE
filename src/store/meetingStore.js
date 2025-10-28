@@ -156,7 +156,9 @@ export const useMeetingStore = defineStore('meeting', () => {
         roomId: roomSession.roomId,
         roomName: roomName,
         description: description,
-        isHost: true
+        isHost: true,
+        livekitToken: roomSession.livekitToken,
+        livekitRoomName: roomSession.livekitRoomName
       }
       
       // LiveKit 토큰 저장
@@ -189,11 +191,16 @@ export const useMeetingStore = defineStore('meeting', () => {
       const response = await meetingApi.joinRoom(currentMemberSeq.value, roomId)
       const roomSession = new RoomSessionResDto(response.data)
       
+      // 호스트 여부 확인 (백엔드 응답 또는 현재 사용자와 hostId 비교)
+      const isHost = roomSession.isHost || 
+                      (roomSession.hostId?.toString() === currentMemberSeq.value?.toString())
+      
       // 현재 미팅 상태 설정
       isCurrentlyInMeeting.value = true
       currentMeetingData.value = {
         roomId: roomSession.roomId,
-        isHost: false
+        roomName: roomSession.roomName || `미팅 ${roomSession.roomId}`,
+        isHost: isHost
       }
       
       // LiveKit 토큰 저장
@@ -203,9 +210,10 @@ export const useMeetingStore = defineStore('meeting', () => {
       // 새 탭에서 미팅 참여
       openMeetingInNewTab({
         roomId: roomSession.roomId,
+        roomName: roomSession.roomName || `미팅 ${roomSession.roomId}`,
         livekitToken: roomSession.livekitToken,
         livekitRoomName: roomSession.livekitRoomName,
-        isHost: false
+        isHost: isHost
       })
       
       return roomSession

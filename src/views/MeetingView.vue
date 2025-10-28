@@ -7,6 +7,18 @@
         <p class="call-duration">{{ callDuration }}</p>
       </div>
       <div class="call-controls">
+        <!-- 녹화 버튼 (호스트만) -->
+        <v-btn
+          v-if="meetingData?.isHost && !isRecording"
+          icon="mdi-record"
+          color="grey-darken-1"
+          @click="handleRecording"
+        />
+        <!-- 녹화 중 표시 -->
+        <div v-if="isRecording" class="recording-status">
+          🔴 녹화 중
+        </div>
+        
         <v-btn
           icon="mdi-microphone"
           :color="isMuted ? 'error' : 'success'"
@@ -141,6 +153,8 @@ const callDuration = ref('00:00')
 const chatMessages = ref([])
 const newMessage = ref('')
 const showChat = ref(true)
+const isRecording = ref(false)
+const isEndingCall = ref(false) // 종료 중 플래그
 
 // LiveKit refs
 const room = ref(null)
@@ -181,7 +195,19 @@ const meetingData = computed(() => {
     }
   }
 
-  // 3) 최후 fallback
+  // 3) sessionStorage에서 읽기 (페이지 새로고침 시)
+  const storedIsHost = sessionStorage.getItem('meetingIsHost')
+  if (storedIsHost) {
+    return {
+      roomId: props.roomId || 'unknown',
+      roomName: `미팅 ${props.roomId || 'Unknown'}`,
+      isHost: storedIsHost === 'true',
+      livekitToken: null,
+      livekitRoomName: props.roomId?.toString() || 'unknown',
+    }
+  }
+
+  // 4) 최후 fallback
   return {
     roomId: props.roomId || 'unknown',
     roomName: `미팅 ${props.roomId || 'Unknown'}`,
@@ -249,7 +275,7 @@ const initializeLiveKitRoom = async () => {
     })
 
     // WS 시그널링 URL (WebSocket은 ws:// 프로토콜 사용)
-    let wsUrl = import.meta.env.VITE_LIVEKIT_API_URL || 'ws://localhost:7880'
+    let wsUrl = 'ws://'+import.meta.env.VITE_LIVEKIT_API_URL
     
     // http://로 시작하면 ws://로 변환
     if (wsUrl.startsWith('http://')) {
@@ -337,6 +363,7 @@ const setupRoomEventListeners = () => {
       p => p.identity !== participant.identity
     )
     detachAllTracksOfParticipant(participant)
+    
   })
 
   // 원격 트랙 구독됨
@@ -521,10 +548,63 @@ const handleChatMessage = (data, participant) => {
   }, 100)
 }
 
+// 녹화 처리
+const handleRecording = async () => {
+  if (!meetingData.value?.isHost) {
+    console.warn('❌ 호스트가 아닙니다. 녹화 권한이 없습니다.')
+    return
+  }
+
+  if (isRecording.value) {
+    // 녹화 중에는 버튼이 숨겨지므로 여기서는 실행 안 됨
+    return
+  }
+
+  // 녹화 시작 확인
+  const confirmMessage = `모든 참여자가 나가면 녹화본을 요약해서 제공합니다.\n녹화를 시작하시겠습니까?`
+  const confirmed = confirm(confirmMessage)
+  
+  if (confirmed) {
+    await startRecording()
+  }
+}
+
+// 녹화 시작
+const startRecording = async () => {
+  try {
+    console.log('🎬 녹화 시작 시도:', {
+      memberSeq: authStore.memberSeq,
+      roomId: props.roomId
+    })
+    
+    const response = await meetingApi.startRecording(authStore.memberSeq, props.roomId)
+    console.log('✅ 녹화 시작 성공:', response)
+    
+    isRecording.value = true
+    
+    console.log('📊 녹화 상태 업데이트: isRecording =', isRecording.value)
+  } catch (err) {
+    console.error('❌ 녹화 시작 실패:', err)
+    alert('녹화 시작에 실패했습니다: ' + (err.message || err))
+  }
+}
+
+// 모든 참여자가 나갔는지 확인
+
 // 콜 종료
 const endCall = async () => {
+  // 이미 종료 중이면 중복 호출 방지
+  if (isEndingCall.value) {
+    console.log('⚠️ 이미 종료 중입니다.')
+    return
+  }
+  
+  isEndingCall.value = true
+  
   try {
+    // LiveKit 방 나가기 (Webhook이 자동으로 회의 종료 처리함)
     if (room.value) {
+      console.log('📞 LiveKit 방 나가기...')
       await room.value.disconnect()
       room.value = null
     }
@@ -640,7 +720,7 @@ const loadChatMessages = async () => {
             minute: '2-digit',
           }),
         }
-      })
+      }).reverse();
       
       chatMessages.value = messages
       console.log('✅ 채팅 메시지 로드 완료:', messages.length, '개')
@@ -739,8 +819,13 @@ const startCallTimer = () => {
   }, 1000)
 }
 
-// 라이프사이클
+    // 라이프사이클
 onMounted(() => {
+  // isHost 정보를 sessionStorage에 저장 (페이지 새로고침 시 유지용)
+  if (meetingData.value?.isHost !== undefined) {
+    sessionStorage.setItem('meetingIsHost', meetingData.value.isHost.toString())
+  }
+  
   initializeLiveKitRoom()
 })
 
@@ -809,6 +894,20 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   gap: 12px;
+}
+
+.recording-status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  background: rgba(244, 67, 54, 0.1);
+  border: 1px solid rgba(244, 67, 54, 0.3);
+  border-radius: 20px;
+  color: #ff5252;
+  font-size: 14px;
+  font-weight: 600;
+  white-space: nowrap;
 }
 
 /* 메인 컨테이너 */

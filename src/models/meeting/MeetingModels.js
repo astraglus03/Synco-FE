@@ -97,6 +97,9 @@ export class RoomSessionResDto {
   constructor(data) {
     this.roomId = data.roomId
     this.token = data.token
+    this.isHost = data.isHost !== undefined ? data.isHost : false
+    this.hostId = data.hostId
+    this.roomName = data.roomName
   }
 
   get livekitToken() {
