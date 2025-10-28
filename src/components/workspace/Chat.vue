@@ -79,6 +79,10 @@ const token = ref("");
 const channelSeq = ref(null);
 const memberSeq = ref(0);
 
+// 타이핑 인디케이터 관련
+let typingTimeout = null;  // 타이핑 종료 타이머
+let lastTypingSent = 0;     // 마지막 전송 시간
+
 // 채널 목록 (Store에서 가져오기)
 const channels = computed(() => {
   const channelList =
@@ -119,6 +123,7 @@ const showAttachmentMenu = ref(false);
 const isTyping = ref(false);
 const messageInputFocused = ref(false);
 const otherTyping = ref(false);
+const typingUserName = ref("");
 
 // 모달 관련
 const showPollModal = ref(false);
@@ -186,6 +191,30 @@ const connectWebsocket = () => {
           try {
             const parsed = JSON.parse(message.body);
             console.log("📩 메시지 수신:", parsed);
+
+            // ✅ TYPING 이벤트 처리
+            if (parsed.action === "TYPING") {
+              console.log("⌨️ 타이핑 이벤트 수신:", parsed);
+              
+              // 자신의 타이핑 이벤트는 무시
+              if (Number(parsed.senderSeq) === Number(memberSeq.value)) {
+                return;
+              }
+              
+              // ✅ 타이핑 중인 사용자 이름 저장
+              typingUserName.value = parsed.senderName || "사용자";
+              otherTyping.value = parsed.typing;
+              
+              // 타이핑 종료 시 자동으로 숨김
+              if (!parsed.typing) {
+                setTimeout(() => {
+                  otherTyping.value = false;
+                  typingUserName.value = ""; // ✅ 이름도 초기화
+                }, 3000);
+              }
+              
+              return;
+            }
 
             // ✅ 삭제 이벤트 처리 추가 (190줄 위치에 추가!)
             if (parsed.action === "DELETE") {
@@ -1072,6 +1101,17 @@ const handleMessageInput = (event) => {
   } else {
     showMentionDropdown.value = false;
   }
+
+  // ✅ 타이핑 상태 업데이트
+  isTyping.value = value.length > 0;
+  
+  // ✅ 타이핑 이벤트 전송 (입력 중일 때만)
+  if (isTyping.value && channelSeq.value && memberSeq.value) {
+    console.log("⌨️ [타이핑 인디케이터] 사용자 입력 감지, 이벤트 전송 시작");
+    sendTypingEvent();
+  } else {
+    console.log("⌨️ [타이핑 인디케이터] 입력 없음 또는 조건 불충족");
+  }
 };
 
 // 입력창 클릭 시 포커스
@@ -1199,9 +1239,81 @@ const handleInputBlur = () => {
   messageInputFocused.value = false;
 };
 
+// ✅ 타이핑 이벤트 전송 함수 
+const sendTypingEvent = () => {
+  // 1. WebSocket 연결 체크
+  if (!stompClient.value || !stompClient.value.connected) {
+    console.warn("⚠️ WebSocket 미연결 - 타이핑 이벤트 전송 불가");
+    return;
+  }
+
+  // 2. 중복 전송 방지 (2초 이내 중복 방지)
+  const now = Date.now();
+  if (lastTypingSent && (now - lastTypingSent) < 2000) {
+    console.log("🚫 타이핑 이벤트 중복 전송 방지 (마지막 전송 후 2초 미경과)");
+    return;
+  }
+  lastTypingSent = now;
+
+  // ✅ 현재 사용자 이름 가져오기 (메시지 전송과 동일한 로직)
+  const currentUserName =
+    localStorage.getItem("memberName") ||
+    JSON.parse(localStorage.getItem("user") || "{}").name ||
+    JSON.parse(localStorage.getItem("user") || "{}").memberName ||
+    "사용자";
+
+  // 2. 타이핑 시작 이벤트 전송
+  const typingEvent = {
+    action: "TYPING",
+    channelSeq: channelSeq.value,
+    senderSeq: memberSeq.value,
+    senderName: currentUserName || "사용자",
+    typing: true  // ✅ 타이핑 중: true
+  };
+  
+  // 3. WebSocket으로 서버에 전송
+  stompClient.value.send(
+    `/publish/typing`,
+    JSON.stringify(typingEvent),
+    { Authorization: `Bearer ${token.value}` }
+  );
+  
+  console.log("⌨️ 타이핑 이벤트 전송:", typingEvent);
+
+  // 5. 이전 타이머 클리어
+  if (typingTimeout) {
+    clearTimeout(typingTimeout);
+  }
+  
+  // 6. 3초 후 자동으로 타이핑 종료 이벤트 전송
+  typingTimeout = setTimeout(() => {
+    const stopEvent = {
+      action: "TYPING",
+      channelSeq: channelSeq.value,
+      senderSeq: memberSeq.value,
+      senderName: currentUserName || "사용자",
+      typing: false
+    };
+    
+    stompClient.value.send(
+      `/publish/typing`,
+      JSON.stringify(stopEvent),
+      { Authorization: `Bearer ${token.value}` }
+    );
+    
+    console.log("⌨️ [타이핑 전송] 종료 이벤트 전송 (자동 3초 후)");
+    lastTypingSent = 0;
+  }, 1000);
+};
+
 // 메시지 입력 변화 감지
 const handleInputChange = () => {
   isTyping.value = newMessage.value.length > 0;
+
+  // ✅ 사용자가 입력 중일 때 타이핑 이벤트 전송
+  if (isTyping.value && channelSeq.value && memberSeq.value) {
+    sendTypingEvent();
+  }
 };
 
 // ✅ 구분선 표시 여부 판단 (비활성화)
@@ -1547,7 +1659,7 @@ onUnmounted(() => {
           <span></span>
           <span></span>
         </div>
-        <span class="typing-text">김민수님이 입력 중...</span>
+        <span class="typing-text">{{ typingUserName }}님이 입력 중입니다...</span>
       </div>
 
       <!-- 메시지 입력 -->
