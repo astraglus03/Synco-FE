@@ -229,10 +229,9 @@ const handleNavigateToChannel = (channelId) => {
         @navigate-to-channel="handleNavigateToChannel"
       />
 
-      <!-- 사용자 상태 (개인 워크스페이스일 때만 표시) -->
+      <!-- 사용자 상태 (워크스페이스 사이드바와 연동, 개인 워크스페이스는 항상 펼침) -->
       <UserStatus 
-        v-if="workspaceStore.currentWorkspaceInfo?.type === 'personal'"
-        :collapsed="uiStore.workspaceSidebarCollapsed"
+        :collapsed="workspaceStore.currentWorkspaceInfo?.type === 'personal' ? false : uiStore.workspaceSidebarCollapsed"
       />
     </v-main>
   </v-app>

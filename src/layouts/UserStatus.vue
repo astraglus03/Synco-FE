@@ -109,8 +109,8 @@ onMounted(() => {
     <v-menu 
       v-model="statusMenuOpen"
       :close-on-content-click="false"
-      location="top"
-      offset="8"
+      :location="collapsed ? 'right' : 'top'"
+      :offset="collapsed ? 8 : 8"
     >
       <template v-slot:activator="{ props: menuProps }">
         <div 
@@ -118,7 +118,7 @@ onMounted(() => {
           v-bind="menuProps"
         >
           <div class="avatar-wrapper">
-            <v-avatar size="40" color="primary">
+            <v-avatar :size="collapsed ? 48 : 40" color="primary">
               <v-img 
                 v-if="displayProfileImage" 
                 :src="displayProfileImage"
@@ -132,7 +132,7 @@ onMounted(() => {
             />
           </div>
           
-          <div class="user-details">
+          <div v-if="!collapsed" class="user-details">
             <div class="user-name">{{ displayName }}</div>
             <div class="user-status-text">{{ currentStatus.label }}</div>
           </div>
@@ -182,11 +182,21 @@ onMounted(() => {
   padding: 16px;
   z-index: 101;
   height: 80px;
-  transition: transform 0.3s ease;
+  transition: all 0.3s ease;
 }
 
 .user-status.collapsed {
-  transform: translateX(-260px);
+  width: 72px;
+  left: 72px;
+  padding: 8px;
+}
+
+.user-status.collapsed .user-info {
+  justify-content: center;
+}
+
+.user-status.collapsed .avatar-wrapper {
+  margin: 0 auto;
 }
 
 .user-info {
