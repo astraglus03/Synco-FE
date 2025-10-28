@@ -2101,15 +2101,13 @@ onUnmounted(() => {
 }
 
 .message-group {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
   position: relative;
-  flex: 1; /* 남은 공간을 모두 차지하도록 */
-  min-width: 0; /* flex item이 축소될 수 있도록 */
+  padding-right: 70px; /* 기본: 오른쪽에 공간 확보 (메타 폭 + 여유) */
 }
 
 .message-item.own-message .message-group {
+  padding-right: 0;
+  padding-left: 60px;
   align-items: flex-end;
 }
 
@@ -2181,13 +2179,15 @@ onUnmounted(() => {
   gap: 2px;
   margin-top: 4px;
   position: absolute;
-  right: -50px;
+  right: 0;
   bottom: 0;
+  width: 56px;
 }
 
 .message-item.own-message .message-meta {
-  left: -50px;
+  left: 0;
   right: auto;
+  text-align: left;
 }
 
 .message-time {
