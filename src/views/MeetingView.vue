@@ -35,8 +35,23 @@
     <div class="main-container">
       <!-- 비디오 영역 -->
       <div class="video-container" :class="{ 'full-width': !showChat }">
-        <!-- LiveKit 참가자 비디오/오디오가 여기 append -->
-        <div ref="roomContainer" class="livekit-room"></div>
+        <div class="participants-video">
+          <!-- 내 비디오 -->
+          <div v-if="localParticipantIdentity" class="participant-video my-video">
+            <video :id="`video-${localParticipantIdentity}`" autoplay muted playsinline class="video-element"></video>
+            <div class="video-label">나</div>
+          </div>
+          
+          <!-- 원격 참여자들 -->
+          <div
+            v-for="participant in remoteParticipants"
+            :key="participant.identity"
+            class="participant-video"
+          >
+            <video :id="`video-${participant.identity}`" autoplay playsinline class="video-element"></video>
+            <div class="video-label">{{ participant.name || participant.identity }}</div>
+          </div>
+        </div>
       </div>
 
       <!-- 채팅 토글 버튼 -->
@@ -94,18 +109,24 @@
 
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { useRoute } from 'vue-router'
 import { useMeetingStore } from '@/store/meetingStore'
 import { useAuthStore } from '@/store/authStore'
+import { meetingApi } from '@/api/meeting/meetingApi'
 import {
   Room,
   RoomEvent,
   Track,
+  createLocalTracks,
 } from 'livekit-client'
 
 // props
 const props = defineProps({
   roomId: String,
 })
+
+// route
+const route = useRoute()
 
 // store
 const meetingStore = useMeetingStore()
@@ -126,25 +147,28 @@ const room = ref(null)
 const roomContainer = ref(null)
 const chatMessagesRef = ref(null)
 const callTimer = ref(null)
+const remoteParticipants = ref([])
+const localParticipantIdentity = ref(null)
 
 // meetingData
 const meetingData = computed(() => {
-  const token = sessionStorage.getItem('meetingToken')
-  const roomName = sessionStorage.getItem('meetingRoomName')
-  const storedRoomId = sessionStorage.getItem('meetingRoomId')
-  const roomNameAlt = sessionStorage.getItem('meetingRoomName_alt')
-  const isHost = sessionStorage.getItem('meetingIsHost') === 'true'
+  // 1) URL 쿼리에서 우선 읽는다 (새 탭 시나리오)
+  const qToken = route.query.token
+  const qRoomName = route.query.roomName // 이건 livekitRoomName (실제 roomName)
+  const qDisplayName = route.query.displayName // 사람이 보는 회의 이름
+  const qIsHost = route.query.isHost === 'true'
 
-  if (token && roomName && storedRoomId) {
+  if (qToken && qRoomName && props.roomId) {
     return {
-      roomId: storedRoomId,
-      roomName: roomNameAlt || `미팅 ${storedRoomId}`,
-      isHost,
-      livekitToken: token,
-      livekitRoomName: roomName,
+      roomId: props.roomId,
+      roomName: qDisplayName || `미팅 ${props.roomId}`,
+      isHost: qIsHost,
+      livekitToken: qToken,
+      livekitRoomName: qRoomName,
     }
   }
 
+  // 2) 같은 탭 안에서 바로 라우터로 이동하는 경우 (fallback)
   if (meetingStore.currentMeetingData) {
     return {
       roomId: meetingStore.currentMeetingData.roomId,
@@ -157,6 +181,7 @@ const meetingData = computed(() => {
     }
   }
 
+  // 3) 최후 fallback
   return {
     roomId: props.roomId || 'unknown',
     roomName: `미팅 ${props.roomId || 'Unknown'}`,
@@ -170,8 +195,16 @@ const meetingData = computed(() => {
 const initializeExistingTracks = () => {
   if (!room.value) return
 
+  console.log('🔍 기존 참가자 수:', room.value.remoteParticipants.size)
+
   // 원격 참가자들
   room.value.remoteParticipants.forEach((participant) => {
+    console.log('📹 기존 원격 참가자 추가:', participant.identity)
+    // 참가자를 배열에 추가
+    remoteParticipants.value.push({
+      identity: participant.identity,
+      name: participant.name || participant.identity,
+    })
     setupParticipantEvents(participant)
     participant.trackPublications.forEach((pub) => {
       if (pub.track) {
@@ -186,29 +219,27 @@ const initializeExistingTracks = () => {
       attachTrack(pub.track, room.value.localParticipant)
     }
   })
+  
+  console.log('✅ 초기 트랙 붙이기 완료, remoteParticipants:', remoteParticipants.value.length)
 }
 
 // LiveKit Room 초기화
 const initializeLiveKitRoom = async () => {
   try {
-    // 토큰 / 룸 이름 확보
-    let token = meetingData.value.livekitToken
-    let lkRoomName = meetingData.value.livekitRoomName
+    const token = meetingData.value.livekitToken
+    const lkRoomName = meetingData.value.livekitRoomName
 
-    if (!token || !lkRoomName) {
-      token =
-        sessionStorage.getItem('meetingToken') || meetingStore.livekitToken
-      lkRoomName =
-        sessionStorage.getItem('meetingRoomName') ||
-        meetingStore.livekitRoomName ||
-        meetingData.value.roomId?.toString()
-    }
+    console.log('[LiveKit connect try]', {
+      wsUrl: import.meta.env.VITE_LIVEKIT_API_URL,
+      tokenPreview: token?.substring?.(0, 20) + '...',
+      lkRoomName,
+    })
 
     if (!token || !lkRoomName) {
       throw new Error('LiveKit 토큰 또는 룸 이름이 없습니다.')
     }
 
-    // Room 인스턴스 생성 (순수 literal)
+    // Room 인스턴스 생성
     room.value = new Room({
       adaptiveStream: true,
       dynacast: true,
@@ -217,13 +248,25 @@ const initializeLiveKitRoom = async () => {
       },
     })
 
-    // WS 시그널링 URL (http:// 아님)
-    const wsUrl =
-      import.meta.env.VITE_LIVEKIT_API_URL ||
-      'ws://localhost:7880'
+    // WS 시그널링 URL (WebSocket은 ws:// 프로토콜 사용)
+    let wsUrl = import.meta.env.VITE_LIVEKIT_API_URL || 'ws://localhost:7880'
+    
+    // http://로 시작하면 ws://로 변환
+    if (wsUrl.startsWith('http://')) {
+      wsUrl = wsUrl.replace('http://', 'ws://')
+    } else if (wsUrl.startsWith('https://')) {
+      wsUrl = wsUrl.replace('https://', 'wss://')
+    }
+
+    console.log('[LiveKit] WebSocket URL:', wsUrl)
+    console.log('[LiveKit] Token preview:', token?.substring?.(0, 50))
 
     // 방 연결
     await room.value.connect(wsUrl, token)
+
+    // 로컬 참가자 identity 저장
+    localParticipantIdentity.value = room.value.localParticipant.identity
+    console.log('로컬 참가자 identity:', localParticipantIdentity.value)
 
     // 이벤트 리스너 등록 (connect 이후)
     setupRoomEventListeners()
@@ -231,11 +274,42 @@ const initializeLiveKitRoom = async () => {
     // 현재 방에 있는 참가자/트랙 DOM 부착
     initializeExistingTracks()
 
+    // 카메라와 마이크 트랙 생성 및 publish
+    try {
+      console.log('🎥 카메라/마이크 트랙 생성 시작...')
+      const tracks = await createLocalTracks({
+        video: true,
+        audio: true,
+      })
+      
+      console.log('📹 트랙 생성됨:', tracks.length, '개')
+      
+      for (const track of tracks) {
+        console.log('📤 트랙 publish 중:', track.kind)
+        await room.value.localParticipant.publishTrack(track)
+        console.log('✅ 트랙 publish 완료:', track.kind)
+        
+        // 트랙을 바로 DOM에 붙이기
+        attachTrack(track, room.value.localParticipant)
+      }
+      
+      isVideoOn.value = true
+      isMuted.value = false
+      
+      console.log('✅ 카메라/마이크 트랙 생성 및 publish 완료')
+      console.log('📺 현재 DOM 비디오 요소:', document.querySelectorAll('video').length)
+    } catch (err) {
+      console.error('❌ 카메라/마이크 권한 요청 실패:', err)
+    }
+
     // 통화 타이머 시작
     callStartTime.value = new Date()
     startCallTimer()
 
-    console.log('LiveKit Room 연결 성공 (카메라/마이크는 아직 비활성)')
+    // 기존 채팅 메시지 불러오기
+    await loadChatMessages()
+
+    console.log('LiveKit Room 연결 성공')
   } catch (error) {
     console.error('LiveKit Room 초기화 실패:', error)
     alert('화상회의 연결에 실패했습니다.')
@@ -249,12 +323,19 @@ const setupRoomEventListeners = () => {
   // 새 참가자 입장
   room.value.on(RoomEvent.ParticipantConnected, (participant) => {
     console.log('참여자 연결:', participant.identity)
+    remoteParticipants.value.push({
+      identity: participant.identity,
+      name: participant.name || participant.identity,
+    })
     setupParticipantEvents(participant)
   })
 
   // 참가자 퇴장
   room.value.on(RoomEvent.ParticipantDisconnected, (participant) => {
     console.log('참여자 연결 해제:', participant.identity)
+    remoteParticipants.value = remoteParticipants.value.filter(
+      p => p.identity !== participant.identity
+    )
     detachAllTracksOfParticipant(participant)
   })
 
@@ -317,6 +398,8 @@ const setupParticipantEvents = (participant) => {
 
 // 참가자 전체 트랙 제거
 const detachAllTracksOfParticipant = (participant) => {
+  if (!participant || !participant.tracks) return
+  
   participant.tracks.forEach((pub) => {
     if (pub.track) {
       detachTrack(pub.track, participant)
@@ -326,22 +409,31 @@ const detachAllTracksOfParticipant = (participant) => {
 
 // 트랙을 DOM에 붙이기
 const attachTrack = (track, participant) => {
-  if (!roomContainer.value) return
-
   const pid = participant.identity || 'unknown'
 
   if (track.kind === Track.Kind.Video) {
-    let videoElement = document.getElementById(`video-${pid}`)
-    if (!videoElement) {
-      videoElement = createVideoElement(pid)
-      roomContainer.value.appendChild(videoElement)
+    const videoElement = document.getElementById(`video-${pid}`)
+    if (videoElement) {
+      track.attach(videoElement)
+      console.log('✅ 비디오 트랙 attach됨:', pid)
+    } else {
+      console.warn('⚠️ 비디오 element 찾을 수 없음, 재시도:', `video-${pid}`)
+      // Vue의 반응형 시스템이 DOM을 업데이트할 때까지 기다림
+      setTimeout(() => {
+        const retryElement = document.getElementById(`video-${pid}`)
+        if (retryElement) {
+          track.attach(retryElement)
+          console.log('✅ 재시도 성공 - 비디오 트랙 attach됨:', pid)
+        } else {
+          console.error('❌ 재시도 실패 - 여전히 element 못 찾음:', `video-${pid}`)
+        }
+      }, 100)
     }
-    track.attach(videoElement)
   } else if (track.kind === Track.Kind.Audio) {
     let audioElement = document.getElementById(`audio-${pid}`)
     if (!audioElement) {
       audioElement = createAudioElement(pid)
-      roomContainer.value.appendChild(audioElement)
+      document.body.appendChild(audioElement)
     }
     track.attach(audioElement)
   }
@@ -355,7 +447,7 @@ const detachTrack = (track, participant) => {
     const videoElement = document.getElementById(`video-${pid}`)
     if (videoElement) {
       track.detach(videoElement)
-      videoElement.remove()
+      // template에 있는 요소는 remove하지 않음
     }
   } else if (track.kind === Track.Kind.Audio) {
     const audioElement = document.getElementById(`audio-${pid}`)
@@ -394,16 +486,23 @@ const createAudioElement = (participantIdentity) => {
 
 // 채팅 메시지 처리
 const handleChatMessage = (data, participant) => {
+  const senderId = participant?.identity || data?.senderId || 'unknown'
   const senderName =
     participant?.name ||
     participant?.identity ||
     data?.name ||
     '알 수 없음'
 
+  // senderId가 현재 사용자이면 "나"로 표시
+  const displayName = 
+    senderId?.toString() === authStore.memberSeq?.toString() 
+      ? '나' 
+      : senderName
+
   const message = {
     id: Date.now(),
-    senderId: participant?.identity || data?.senderId || 'unknown',
-    name: senderName,
+    senderId: senderId,
+    name: displayName,
     content: data.content,
     createdAt: new Date().toISOString(),
     timeOnly: new Date().toLocaleTimeString('ko-KR', {
@@ -503,15 +602,79 @@ const toggleChat = () => {
   showChat.value = !showChat.value
 }
 
+// 채팅 메시지 불러오기
+const loadChatMessages = async () => {
+  try {
+    const response = await meetingApi.getMessages(
+      authStore.memberSeq,
+      props.roomId,
+      0, // 첫 페이지
+      50 // 최근 50개 메시지
+    )
+    
+    console.log('📨 채팅 메시지 응답 구조:', response)
+    
+    // ResponseDto 구조: { success, code, message, data }
+    // data가 Page 객체: { content: [...], totalElements: ... }
+    const pageData = response.data || response
+    const messagesArray = pageData.content || []
+    
+    console.log('📋 파싱된 메시지 배열:', messagesArray.length, '개')
+    
+    if (Array.isArray(messagesArray) && messagesArray.length > 0) {
+      const messages = messagesArray.map((msg) => {
+        // senderId가 현재 사용자이면 "나"로 표시, 아니면 senderId 표시
+        const displayName = 
+          msg.senderId?.toString() === authStore.memberSeq?.toString() 
+            ? '나' 
+            : (msg.senderId?.toString() || '알 수 없음')
+        
+        return {
+          id: msg.id,
+          senderId: msg.senderId,
+          name: displayName,
+          content: msg.content,
+          createdAt: msg.createdAt,
+          timeOnly: new Date(msg.createdAt).toLocaleTimeString('ko-KR', {
+            hour: '2-digit',
+            minute: '2-digit',
+          }),
+        }
+      })
+      
+      chatMessages.value = messages
+      console.log('✅ 채팅 메시지 로드 완료:', messages.length, '개')
+      
+      // 채팅 스크롤을 맨 아래로
+      setTimeout(() => {
+        if (chatMessagesRef.value) {
+          chatMessagesRef.value.scrollTop = chatMessagesRef.value.scrollHeight
+        }
+      }, 100)
+    } else {
+      console.log('📭 채팅 메시지 없음')
+      chatMessages.value = []
+    }
+  } catch (err) {
+    console.error('❌ 채팅 메시지 로드 실패:', err)
+    chatMessages.value = []
+  }
+}
+
 // 채팅 보내기
 const sendMessage = async () => {
   if (!newMessage.value.trim() || !room.value) return
+  
+  const content = newMessage.value.trim()
+  const messageText = content
+  
   try {
+    // 1. LiveKit으로 실시간 전송 (다른 참여자들에게 즉시 전달)
     const payload = {
       type: 'chat',
       senderId: authStore.memberSeq?.toString() || 'me',
       name: authStore.memberName || '나',
-      content: newMessage.value.trim(),
+      content: messageText,
     }
 
     await room.value.localParticipant.publishData(
@@ -519,11 +682,27 @@ const sendMessage = async () => {
       { reliable: true },
     )
 
+    // 2. 백엔드 API로 DB 저장 (예외 처리로 실패해도 LiveKit은 이미 보냄)
+    try {
+      await meetingApi.sendMessage(
+        authStore.memberSeq,
+        props.roomId,
+        {
+          senderId: authStore.memberSeq?.toString(),
+          name: authStore.memberName || '나',
+          content: messageText,
+        }
+      )
+    } catch (apiErr) {
+      console.warn('백엔드 채팅 저장 실패 (LiveKit은 전송됨):', apiErr)
+    }
+
+    // 3. 내 메시지를 UI에 즉시 표시
     const message = {
       id: Date.now(),
       senderId: authStore.memberSeq?.toString() || 'me',
       name: authStore.memberName || '나',
-      content: newMessage.value.trim(),
+      content: messageText,
       createdAt: new Date().toISOString(),
       timeOnly: new Date().toLocaleTimeString('ko-KR', {
         hour: '2-digit',
@@ -534,10 +713,10 @@ const sendMessage = async () => {
     chatMessages.value.push(message)
     newMessage.value = ''
 
+    // 채팅 스크롤을 맨 아래로
     setTimeout(() => {
       if (chatMessagesRef.value) {
-        chatMessagesRef.value.scrollTop =
-          chatMessagesRef.value.scrollHeight
+        chatMessagesRef.value.scrollTop = chatMessagesRef.value.scrollHeight
       }
     }, 100)
   } catch (err) {
@@ -655,7 +834,7 @@ onUnmounted(() => {
   width: 100%;
 }
 
-.livekit-room {
+.participants-video {
   flex: 1;
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
@@ -678,6 +857,28 @@ onUnmounted(() => {
   overflow: hidden;
   background: #333;
   border: 2px solid rgba(255, 255, 255, 0.2);
+}
+
+.my-video {
+  border: 2px solid rgba(255, 255, 255, 0.3);
+}
+
+.video-element {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.video-label {
+  position: absolute;
+  bottom: 8px;
+  left: 8px;
+  background: rgba(0, 0, 0, 0.7);
+  color: white;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 500;
 }
 
 .participant-audio {
