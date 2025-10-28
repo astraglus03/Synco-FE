@@ -491,6 +491,16 @@ const sendMessage = async () => {
     { Authorization: `Bearer ${token.value}` }
   );
 
+  // ✅ 전송 직후 타이핑 종료 브로드캐스트
+  try {
+    sendTypingStopEvent();
+  } catch (e) {
+    console.warn("타이핑 종료 이벤트 전송 실패", e);
+  }
+
+  // 로컬 상태도 종료
+  isTyping.value = false;
+
   // 4️⃣ 입력창 초기화
   newMessage.value = "";
   attachedFiles.value = [];
@@ -912,6 +922,13 @@ const handleCreatePoll = (pollData) => {
       JSON.stringify(message),
       { Authorization: `Bearer ${token.value}` }
     );
+  }
+
+  // ✅ 투표 전송 후에도 타이핑 종료 브로드캐스트
+  try {
+    sendTypingStopEvent();
+  } catch (e) {
+    console.warn("타이핑 종료 이벤트 전송 실패", e);
   }
 
   newMessage.value = "";
