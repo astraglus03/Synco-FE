@@ -5,9 +5,24 @@
       <h1>팀 일정</h1>
       <div class="header-actions">
         <div class="header-icons">
-          <v-icon size="20" color="grey">mdi-view-grid</v-icon>
-          <v-icon size="20" color="grey">mdi-timeline</v-icon>
-          <v-icon size="20" color="grey">mdi-calendar</v-icon>
+          <v-icon 
+            :size="20" 
+            :color="currentView === 'board' ? 'primary' : 'grey'"
+            @click="currentView = 'board'"
+            style="cursor: pointer;"
+          >mdi-view-grid</v-icon>
+          <v-icon 
+            :size="20" 
+            :color="currentView === 'timeline' ? 'primary' : 'grey'"
+            @click="currentView = 'timeline'"
+            style="cursor: pointer;"
+          >mdi-timeline</v-icon>
+          <v-icon 
+            :size="20" 
+            :color="currentView === 'calendar' ? 'primary' : 'grey'"
+            @click="currentView = 'calendar'"
+            style="cursor: pointer;"
+          >mdi-calendar</v-icon>
         </div>
         <v-btn 
           v-if="canCreateTask"
@@ -27,7 +42,8 @@
         <input placeholder="일정 검색..." class="search-input" />
       </div>
       <div class="filter-section">
-        <div class="member-avatars">
+        <!-- 보드 뷰: 프로필 아바타 -->
+        <div v-if="currentView === 'board'" class="member-avatars">
           <div 
             v-for="member in workspaceMembers" 
             :key="member.memberSeq"
@@ -41,9 +57,35 @@
             {{ getMemberInitial(member.name) }}
           </div>
         </div>
+        <!-- 타임라인/캘린더 뷰: 필터 버튼 -->
+        <v-btn
+          v-else
+          :variant="hasActiveFilters ? 'flat' : 'outlined'"
+          :color="hasActiveFilters ? 'primary' : undefined"
+          size="small"
+          @click="showFilterModal = !showFilterModal"
+          class="multi-filter-btn"
+          :class="{ 'active': showFilterModal, 'filtered': hasActiveFilters }"
+        >
+          <v-icon>mdi-tune</v-icon>
+          <span class="filter-text">필터</span>
+          <v-chip
+            v-if="hasActiveFilters"
+            size="x-small"
+            color="white"
+            class="filter-count-chip"
+          >
+            {{ activeFilterCount }}
+          </v-chip>
+          <v-icon v-if="showFilterModal" size="16">mdi-chevron-up</v-icon>
+          <v-icon v-else size="16">mdi-chevron-down</v-icon>
+        </v-btn>
       </div>
     </div>
 
+    <!-- 뷰 전환 -->
+    <!-- 보드 뷰 -->
+    <div v-if="currentView === 'board'">
     <!-- 칸반보드 -->
     <div class="kanban-board">
       <!-- 할 일 컬럼 -->
@@ -235,6 +277,26 @@
         </div>
       </div>
     </div>
+    </div>
+    <!-- 보드 뷰 끝 -->
+
+    <!-- 타임라인 뷰 -->
+    <div v-else-if="currentView === 'timeline'">
+      <ScheduleTimeline 
+        :kanban-tasks="filteredKanbanTasks"
+        :workspace-members="workspaceMembers"
+        @open-task-detail="openTaskDetail"
+      />
+    </div>
+
+    <!-- 캘린더 뷰 -->
+    <div v-else-if="currentView === 'calendar'">
+      <ScheduleCalendar 
+        :kanban-tasks="kanbanTasks"
+        :workspace-members="workspaceMembers"
+        @open-task-detail="openTaskDetail"
+      />
+    </div>
 
     <!-- Task 생성/수정 모달 -->
     <TaskCreateModal
@@ -270,6 +332,131 @@
         </v-btn>
       </template>
     </v-snackbar>
+
+    <!-- 필터 모달 -->
+    <div v-if="showFilterModal" class="filter-modal-overlay" @click.self="showFilterModal = false">
+      <div class="multi-filter-dropdown">
+        <div class="filter-dropdown-content">
+          <!-- 필터 헤더 -->
+          <div class="filter-header">
+            <div class="header-left">
+              <v-icon color="primary" size="20">mdi-tune</v-icon>
+              <h3>필터 옵션</h3>
+            </div>
+            <v-btn
+              icon
+              size="small"
+              variant="text"
+              @click="showFilterModal = false"
+              class="close-filter-btn"
+            >
+              <v-icon>mdi-close</v-icon>
+            </v-btn>
+          </div>
+
+          <!-- 선택된 필터 표시 -->
+          <div v-if="hasActiveFilters" class="active-filters">
+            <div class="active-filters-header">
+              <v-icon size="16">mdi-check-circle</v-icon>
+              <span>선택된 필터</span>
+            </div>
+            <div class="active-filter-tags">
+              <v-chip
+                v-for="status in selectedFilters.statuses"
+                :key="`status-${status}`"
+                size="small"
+                color="primary"
+                closable
+                @click:close="removeStatusFilter(status)"
+                class="active-filter-chip"
+              >
+                <v-icon start size="14">mdi-folder</v-icon>
+                {{ getStatusLabel(status) }}
+              </v-chip>
+              <v-chip
+                v-for="memberSeq in selectedFilters.assignees"
+                :key="`member-${memberSeq}`"
+                size="small"
+                color="info"
+                closable
+                @click:close="removeAssigneeFilter(memberSeq)"
+                class="active-filter-chip"
+              >
+                <v-icon start size="14">mdi-account</v-icon>
+                {{ getMemberName(memberSeq) }}
+              </v-chip>
+            </div>
+          </div>
+
+          <!-- 필터 옵션 -->
+          <div class="filter-options-simple">
+            <!-- 보드 필터 -->
+            <div class="filter-section-simple">
+              <div class="filter-section-header-simple">
+                <v-icon color="primary" size="18">mdi-folder</v-icon>
+                <span class="section-title-simple">보드</span>
+              </div>
+              <div class="filter-options-list">
+                <div
+                  v-for="status in statusOptions"
+                  :key="status.value"
+                  class="filter-option-simple"
+                  :class="{ 'selected': selectedFilters.statuses.includes(status.value) }"
+                  @click="toggleFilterStatus(status.value)"
+                >
+                  <div class="option-color-simple" :style="{ backgroundColor: status.color }"></div>
+                  <span class="option-label-simple">{{ status.label }}</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- 담당자 필터 -->
+            <div class="filter-section-simple">
+              <div class="filter-section-header-simple">
+                <v-icon color="info" size="18">mdi-account-group</v-icon>
+                <span class="section-title-simple">담당자</span>
+              </div>
+              <div class="filter-options-list">
+                <div
+                  v-for="member in workspaceMembers"
+                  :key="member.memberSeq"
+                  class="filter-option-simple"
+                  :class="{ 'selected': selectedFilters.assignees.includes(member.memberSeq) }"
+                  @click="toggleFilterAssignee(member.memberSeq)"
+                >
+                  <div class="option-avatar-simple" :style="{ backgroundColor: getMemberColor(member.memberSeq) }">
+                    <span class="text-white text-caption">{{ getMemberInitial(member.name) }}</span>
+                  </div>
+                  <span class="option-label-simple">{{ member.name }}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+          
+          <!-- 필터 액션 -->
+          <div class="filter-actions">
+            <v-btn
+              variant="outlined"
+              size="small"
+              @click="resetFilterModal"
+              class="clear-filters-btn"
+            >
+              <v-icon left size="16">mdi-refresh</v-icon>
+              초기화
+            </v-btn>
+            <v-btn
+              color="primary"
+              size="small"
+              @click="applyFilterModal"
+              class="apply-filters-btn"
+            >
+              <v-icon left size="16">mdi-check</v-icon>
+              적용
+            </v-btn>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -283,15 +470,47 @@ import { getWorkspaceMembers } from '@/api/workspace/workSpaceApi'
 import { getProjectTasks, getTaskDetail } from '../../api/schedule/scheduleApi.js'
 import TaskCreateModal from './TaskCreateModal.vue'
 import TaskDetailModal from './TaskDetailModal.vue'
+import ScheduleTimeline from './ScheduleTimeline.vue'
+import ScheduleCalendar from './ScheduleCalendar.vue'
 
 const props = defineProps({
   selectedSchedule: String
 })
 
+// 뷰 전환 상태
+const currentView = ref('board')
+
 const projectScheduleStore = useProjectScheduleStore()
 const workspaceStore = useWorkspaceStore()
 const workspaceMemberStore = useWorkspaceMemberStore()
 const authStore = useAuthStore()
+
+// 필터 모달
+const showFilterModal = ref(false)
+const selectedFilters = ref({
+  statuses: [],
+  assignees: []
+})
+
+// 필터 모달이 열릴 때 현재 선택된 담당자로 초기화
+watch(showFilterModal, (isOpen) => {
+  if (isOpen) {
+    // 현재 선택된 담당자가 있으면 필터에 추가 (한 명만)
+    if (selectedFilter.value) {
+      selectedFilters.value.assignees = [selectedFilter.value]
+    } else {
+      selectedFilters.value.assignees = []
+    }
+  }
+  // 모달이 닫혀도 selectedFilters는 유지 (필터 적용을 위해)
+})
+
+// 상태 옵션
+const statusOptions = [
+  { value: 'TODO', label: '할 일', color: '#e3f2fd' },
+  { value: 'IN_PROGRESS', label: '진행중', color: '#fff3e0' },
+  { value: 'COMPLETED', label: '완료', color: '#e8f5e8' }
+]
 
 // 워크스페이스 멤버 데이터
 const workspaceMembers = ref([])
@@ -382,6 +601,28 @@ const loadWorkspaceMembers = async () => {
 
 // 칸반보드 데이터
 const kanbanTasks = computed(() => projectScheduleStore.getKanbanTasks())
+
+// 보드(상태) 필터 적용된 칸반보드 데이터 (타임라인용)
+const filteredKanbanTasks = computed(() => {
+  const tasks = kanbanTasks.value
+  
+  // 보드(상태) 필터가 없으면 그대로 반환
+  if (selectedFilters.value.statuses.length === 0) {
+    return tasks
+  }
+  
+  // 필터링된 태스크 객체 생성
+  const filtered = {}
+  
+  // 선택된 상태만 포함
+  selectedFilters.value.statuses.forEach(status => {
+    if (tasks[status]) {
+      filtered[status] = tasks[status]
+    }
+  })
+  
+  return filtered
+})
 
 // 로딩 상태
 const isLoading = computed(() => projectScheduleStore.isLoading)
@@ -667,6 +908,136 @@ const deleteTask = async (task) => {
       }
     }
   }
+}
+
+// 필터 모달 함수들
+const toggleFilterStatus = (status) => {
+  const index = selectedFilters.value.statuses.indexOf(status)
+  if (index === -1) {
+    selectedFilters.value.statuses.push(status)
+  } else {
+    selectedFilters.value.statuses.splice(index, 1)
+  }
+}
+
+const toggleFilterAssignee = (memberSeq) => {
+  const index = selectedFilters.value.assignees.indexOf(memberSeq)
+  if (index === -1) {
+    // 한 명만 선택 가능 (라디오 버튼처럼 동작)
+    selectedFilters.value.assignees = [memberSeq]
+  } else {
+    // 클릭하면 선택 해제
+    selectedFilters.value.assignees.splice(index, 1)
+  }
+}
+
+const resetFilterModal = async () => {
+  selectedFilters.value.statuses = []
+  selectedFilters.value.assignees = []
+  
+  // 필터 해제 - 기존 로직 사용
+  if (selectedFilter.value !== null) {
+    selectedFilter.value = null
+    projectScheduleStore.selectedFilterMember = null
+    await refreshTasks()
+  }
+  
+  // 모달은 닫지 않고 필터만 초기화
+}
+
+const applyFilterModal = async () => {
+  // 필터 적용 로직 - 기존 toggleFilter 함수 사용
+  console.log('적용된 필터:', selectedFilters.value)
+  
+  // 보드(상태) 필터는 프론트엔드에서 자동으로 적용됨 (computed로 처리)
+  
+  // 담당자 필터링 (보드 뷰와 동일하게)
+  if (selectedFilters.value.assignees.length > 0) {
+    // 첫 번째 담당자만 필터로 적용
+    const firstAssignee = selectedFilters.value.assignees[0]
+    
+    // 기존 필터와 다르면 적용, 같으면 필터 해제
+    if (selectedFilter.value !== firstAssignee) {
+      await toggleFilter(firstAssignee)
+    }
+  } else {
+    // 필터 해제
+    if (selectedFilter.value !== null) {
+      // 프로필 아바타 상태 유지를 위해 selectedFilter만 초기화
+      selectedFilter.value = null
+      projectScheduleStore.selectedFilterMember = null
+      await refreshTasks()
+    }
+  }
+  
+  showFilterModal.value = false
+}
+
+// 활성 필터 확인
+const hasActiveFilters = computed(() => {
+  // 담당자 필터가 활성화되어 있는지 확인 (보드에서 적용된 필터)
+  const isAssigneeFilterActive = selectedFilter.value !== null
+  // 모달에서 선택된 담당자가 있는지 확인
+  const isModalAssigneeActive = selectedFilters.value.assignees.length > 0
+  // 상태 필터가 있는지 확인
+  const isStatusFilterActive = selectedFilters.value.statuses.length > 0
+  
+  return isAssigneeFilterActive || isModalAssigneeActive || isStatusFilterActive
+})
+
+// 활성 필터 개수
+const activeFilterCount = computed(() => {
+  let count = 0
+  
+  // 보드에서 적용된 담당자 필터가 있으면 1 추가
+  if (selectedFilter.value !== null) {
+    count++
+  }
+  
+  // 모달에서 선택된 상태 필터 개수 추가
+  count += selectedFilters.value.statuses.length
+  
+  return count
+})
+
+// 선택된 필터 제거
+const removeStatusFilter = (status) => {
+  const index = selectedFilters.value.statuses.indexOf(status)
+  if (index > -1) {
+    selectedFilters.value.statuses.splice(index, 1)
+  }
+}
+
+const removeAssigneeFilter = async (memberSeq) => {
+  const index = selectedFilters.value.assignees.indexOf(memberSeq)
+  if (index > -1) {
+    selectedFilters.value.assignees.splice(index, 1)
+  }
+  
+  // 마지막 담당자가 제거되면 필터 해제
+  if (selectedFilters.value.assignees.length === 0) {
+    if (selectedFilter.value !== null) {
+      selectedFilter.value = null
+      projectScheduleStore.selectedFilterMember = null
+      await refreshTasks()
+    }
+  }
+}
+
+// 상태 라벨
+const getStatusLabel = (status) => {
+  const labels = {
+    'TODO': '할 일',
+    'IN_PROGRESS': '진행중',
+    'COMPLETED': '완료'
+  }
+  return labels[status] || status
+}
+
+// 멤버 이름
+const getMemberName = (memberSeq) => {
+  const member = workspaceMembers.value.find(m => m.memberSeq === memberSeq)
+  return member ? member.name : '미지정'
 }
 </script>
 
@@ -1095,5 +1466,294 @@ const deleteTask = async (task) => {
   border-radius: 4px;
   white-space: nowrap;
   flex-shrink: 0;
+}
+
+/* 필터 버튼 (타임라인/캘린더 뷰용) */
+.multi-filter-btn {
+  border-radius: 8px;
+  text-transform: none;
+  font-weight: 500;
+  padding: 18px 16px;
+  gap: 6px;
+  min-width: 100px;
+  height: 36px;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.multi-filter-btn :deep(.v-btn__content) {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.multi-filter-btn.filtered {
+  background: #1976d2 !important;
+  color: white !important;
+  box-shadow: 0 2px 8px rgba(25, 118, 210, 0.3);
+}
+
+.multi-filter-btn.active {
+  background: #f8f9fa !important;
+  color: #1976d2 !important;
+  border-color: #1976d2 !important;
+  box-shadow: 0 2px 8px rgba(25, 118, 210, 0.2);
+}
+
+.multi-filter-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 3px 12px rgba(0, 0, 0, 0.15);
+}
+
+.multi-filter-btn.filtered:hover {
+  box-shadow: 0 3px 12px rgba(25, 118, 210, 0.4);
+}
+
+.filter-text {
+  font-weight: 500;
+}
+
+.filter-count-chip {
+  background: rgba(255, 255, 255, 0.9) !important;
+  color: #1976d2 !important;
+  font-weight: 600;
+  font-size: 11px;
+  min-width: 18px;
+  height: 18px;
+  border-radius: 9px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.15);
+  margin: 0 !important;
+  align-self: center !important;
+}
+
+.multi-filter-btn.filtered .filter-count-chip {
+  color: #1976d2 !important;
+}
+
+/* 정렬 수정 */
+.multi-filter-btn :deep(.v-chip__content) {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* 필터 모달 스타일 */
+.filter-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.multi-filter-dropdown {
+  min-width: 600px;
+  max-width: 800px;
+  width: 70vw;
+}
+
+.filter-dropdown-content {
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+  border: 1px solid #e0e0e0;
+  overflow: hidden;
+  animation: slideDown 0.2s ease-out;
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* 필터 헤더 */
+.filter-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px 24px;
+  background: #f8f9fa;
+  border-bottom: 1px solid #e1e5e9;
+}
+
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.filter-header h3 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: #172b4d;
+}
+
+.close-filter-btn {
+  color: #6b778c !important;
+}
+
+.close-filter-btn:hover {
+  background: #e9ecef !important;
+  color: #172b4d !important;
+}
+
+/* 선택된 필터 표시 */
+.active-filters {
+  padding: 16px 24px;
+  background: #f0f8ff;
+  border-bottom: 1px solid #e1e5e9;
+}
+
+.active-filters-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #1976d2;
+}
+
+.active-filter-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.active-filter-chip {
+  border-radius: 6px !important;
+  font-weight: 500;
+}
+
+/* 필터 옵션들 */
+.filter-options-simple {
+  display: flex;
+  gap: 30px;
+  align-items: flex-start;
+  padding: 20px 30px;
+}
+
+.filter-section-simple {
+  flex: 1;
+  min-width: 0;
+}
+
+.filter-section-header-simple {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  padding-bottom: 6px;
+  border-bottom: 2px solid #e1e5e9;
+}
+
+.section-title-simple {
+  font-size: 14px;
+  font-weight: 600;
+  color: #172b4d;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.filter-options-list {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+
+.filter-option-simple {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: #f8f9fa;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+}
+
+.filter-option-simple:hover {
+  background: #e3f2fd;
+  border-color: #2196f3;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 6px rgba(33, 150, 243, 0.15);
+}
+
+.filter-option-simple.selected {
+  background: #e3f2fd;
+  border-color: #1976d2;
+  box-shadow: 0 2px 6px rgba(25, 118, 210, 0.2);
+}
+
+.option-color-simple {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+}
+
+.option-avatar-simple {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.15);
+}
+
+.option-label-simple {
+  font-size: 12px;
+  font-weight: 500;
+  color: #172b4d;
+  white-space: nowrap;
+}
+
+/* 필터 액션 */
+.filter-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 24px;
+  background: #f8f9fa;
+  border-top: 1px solid #e1e5e9;
+  gap: 12px;
+}
+
+.clear-filters-btn,
+.apply-filters-btn {
+  border-radius: 6px;
+  text-transform: none;
+  font-weight: 500;
+}
+
+.clear-filters-btn {
+  color: #6b778c !important;
+  border-color: #e1e5e9 !important;
+}
+
+.apply-filters-btn {
+  background: #1976d2 !important;
+  color: white !important;
 }
 </style>
