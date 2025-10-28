@@ -82,6 +82,7 @@ const memberSeq = ref(0);
 // 타이핑 인디케이터 관련
 let typingTimeout = null;  // 타이핑 종료 타이머
 let lastTypingSent = 0;     // 마지막 전송 시간
+let typingInterval = null;  // 타이핑 지속 알림 인터벌
 
 // 채널 목록 (Store에서 가져오기)
 const channels = computed(() => {
@@ -1267,13 +1268,12 @@ const sendTypingStartEvent = () => {
     console.warn("⚠️ WebSocket 미연결");
     return;
   }
-  // 2. 중복 전송 방지 (2초 이내)
-  const now = Date.now();
-  if (lastTypingSent && (now - lastTypingSent) < 2000) {
-    console.log("🚫 중복 전송 방지");
-    return;
+
+  // 2. 기존 인터벌 클리어 (중복 방지)
+  if (typingInterval) {
+    clearInterval(typingInterval);
+    typingInterval = null;
   }
-  lastTypingSent = now;
 
   // 3. 현재 사용자 이름 가져오기
   const currentUserName =
@@ -1288,46 +1288,62 @@ const sendTypingStartEvent = () => {
     typingTimeout = null;
   }
 
-// 5. 타이핑 시작 이벤트 생성
-  const typingEvent = {
-    action: "TYPING",
-    channelSeq: channelSeq.value,
-    senderSeq: memberSeq.value,
-    senderName: currentUserName,
-    typing: true
+  // 5. 즉시 타이핑 시작 이벤트 전송
+  const sendTypingEvent = () => {
+    const typingEvent = {
+      action: "TYPING",
+      channelSeq: channelSeq.value,
+      senderSeq: memberSeq.value,
+      senderName: currentUserName,
+      typing: true
+    };
+
+    stompClient.value.send(
+      `/publish/typing`,
+      JSON.stringify(typingEvent),
+      { Authorization: `Bearer ${token.value}` }
+    );
+
+    console.log("⌨️ [타이핑 중] 이벤트 전송");
+    lastTypingSent = Date.now();
   };
 
-  // 6. WebSocket 전송
-  stompClient.value.send(
-    `/publish/typing`,
-    JSON.stringify(typingEvent),
-    { Authorization: `Bearer ${token.value}` }
-  );
+  // 즉시 전송
+  sendTypingEvent();
 
-  console.log("⌨️ [시작] 이벤트:", typingEvent);
+  // 6. 3초마다 지속적으로 타이핑 이벤트 전송
+  typingInterval = setInterval(() => {
+    sendTypingEvent();
+  }, 3000);
 };
 
 // ✅ 타이핑 종료 이벤트 전송 (입력 삭제 시)
 const sendTypingStopEvent = () => {
-  // 1. WebSocket 연결 체크
+  // 1. 인터벌 클리어
+  if (typingInterval) {
+    clearInterval(typingInterval);
+    typingInterval = null;
+  }
+
+  // 2. WebSocket 연결 체크
   if (!stompClient.value || !stompClient.value.connected) {
     return;
   }
 
-  // 2. 타이머 클리어
+  // 3. 타이머 클리어
   if (typingTimeout) {
     clearTimeout(typingTimeout);
     typingTimeout = null;
   }
 
-  // 3. 현재 사용자 이름 가져오기
+  // 4. 현재 사용자 이름 가져오기
   const currentUserName =
     localStorage.getItem("memberName") ||
     JSON.parse(localStorage.getItem("user") || "{}").name ||
     JSON.parse(localStorage.getItem("user") || "{}").memberName ||
     "사용자";
 
-  // 4. 타이핑 종료 이벤트 생성
+  // 5. 타이핑 종료 이벤트 생성
   const stopEvent = {
     action: "TYPING",
     channelSeq: channelSeq.value,
@@ -1336,7 +1352,7 @@ const sendTypingStopEvent = () => {
     typing: false
   };
 
-  // 5. WebSocket 전송
+  // 6. WebSocket 전송
   stompClient.value.send(
     `/publish/typing`,
     JSON.stringify(stopEvent),
@@ -1501,6 +1517,16 @@ onUnmounted(() => {
   const container = document.querySelector(".messages-container");
   if (container) {
     container.removeEventListener("scroll", handleScroll);
+  }
+  
+  // ✅ 타이핑 인터벌 정리
+  if (typingInterval) {
+    clearInterval(typingInterval);
+    typingInterval = null;
+  }
+  if (typingTimeout) {
+    clearTimeout(typingTimeout);
+    typingTimeout = null;
   }
 });
 </script>
