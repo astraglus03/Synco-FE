@@ -145,6 +145,9 @@ const remainingSlots = computed(() => MAX_FILES - attachedFilesCount.value);
 const replyToMessage = ref(null);
 const showReplyInput = ref(false);
 
+// 메시지 전송 중복 방지
+const isSending = ref(false);
+
 // 이전 메시지 로드 관련 상태
 const isLoadingMessages = ref(false);
 const hasMoreMessages = ref(true);
@@ -409,6 +412,13 @@ const uploadFilesToS3 = async () => {
 // ✅ 메시지 전송
 const sendMessage = async () => {
   console.log("============= 메시지 전송 ===============", memberSeq.value);
+  
+  // 중복 전송 방지
+  if (isSending.value) {
+    console.warn("이미 전송 중입니다. 잠시만 기다려주세요.");
+    return;
+  }
+  
   if (!stompClient.value || !stompClient.value.connected) {
     console.error("WebSocket 연결이 없습니다!");
     return;
@@ -416,14 +426,17 @@ const sendMessage = async () => {
 
   if (newMessage.value.trim() === "" && attachedFiles.value.length === 0)
     return;
+  
+  // 전송 시작
+  isSending.value = true;
 
-  let uploadedUrls = [];
-  if (attachedFiles.value.length > 0) {
-    uploadedUrls = await uploadFilesToS3(); // 🔹 S3 업로드 먼저 실행
-  }
+  try {
+    let uploadedUrls = [];
+    if (attachedFiles.value.length > 0) {
+      uploadedUrls = await uploadFilesToS3(); // 🔹 S3 업로드 먼저 실행
+    }
 
   // 1️⃣ 전송할 메시지 데이터 생성 (사용자 정보 포함)
-  // const currentUserName = localStorage.getItem("memberName") || "사용자";
   const currentUserName =
     localStorage.getItem("memberName") ||
     JSON.parse(localStorage.getItem("user") || "{}").name ||
@@ -433,7 +446,7 @@ const sendMessage = async () => {
     localStorage.getItem("profileImageUrl") || null;
 
   // ✅ MessageType enum 기반 메시지 타입 동적 결정
-  // TEXT, FILE, REPLY, VOTE
+  // TEXT, FILE, REPLY
   let messageType = "TEXT";
   if (replyToMessage.value) {
     messageType = "REPLY"; // 답장 메시지
@@ -513,7 +526,11 @@ const sendMessage = async () => {
     showReplyInput.value = false;
   }
 
-  scrollToBottom();
+    scrollToBottom();
+  } finally {
+    // 전송 완료/실패 무관하게 플래그 해제
+    isSending.value = false;
+  }
 };
 
 // ✅ 메시지 삭제 (하드 삭제)
@@ -1875,7 +1892,7 @@ onUnmounted(() => {
               icon
               class="send-btn"
               @click="sendMessage"
-              :disabled="!newMessage.trim() && attachedFiles.length === 0"
+              :disabled="isSending || (!newMessage.trim() && attachedFiles.length === 0)"
             >
               <v-icon>mdi-send</v-icon>
             </v-btn>
