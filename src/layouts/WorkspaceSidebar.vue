@@ -1,5 +1,6 @@
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import { 
   getChatChannels, 
   getMeetingChannels, 
@@ -10,12 +11,15 @@ import {
   renameChatChannel,
   renameMeetingChannel,
   createChatChannel,
-  deleteChatChannel
-} from '@/services/WorkspaceService'
+  deleteChatChannel,
+  leaveWorkspace
+} from '@/api/workspace/workSpaceApi'
 import { useAuthStore } from '@/store/authStore'
 import { useWorkspaceStore } from '@/store/workspaceStore'
 import { useWorkspaceMemberStore } from '@/store/workspaceMemberStore'
 import { Authority } from '@/models/workspace/WorkspaceModels'
+
+const router = useRouter()
 
 const props = defineProps({
   collapsed: Boolean,
@@ -35,9 +39,12 @@ const newChannelName = ref('')
 const showCreateMeetingModal = ref(false)
 const newMeetingName = ref('')
 
-// 팀 일정 생성 모달 상태
-const showCreateScheduleModal = ref(false)
-const newScheduleName = ref('')
+// 워크스페이스 탈퇴 확인 다이얼로그 상태
+const showLeaveConfirmDialog = ref(false)
+
+// 탈퇴 성공 토스트 상태
+const showLeaveSuccessToast = ref(false)
+const leaveSuccessMessage = ref('')
 
 // 채널 설정 모달 상태
 const showChannelSettingsModal = ref(false)
@@ -100,6 +107,11 @@ const hoveredChannel = ref(null)
 const authStore = useAuthStore()
 const workspaceStore = useWorkspaceStore()
 const workspaceMemberStore = useWorkspaceMemberStore()
+
+// 워크스페이스에서 현재 사용자가 SUPER 권한인지 확인
+const isWorkspaceSuper = computed(() => {
+  return workspaceMemberStore.isCurrentUserSuper(authStore)
+})
 
 // 채널 접기/펼치기 상태
 const chatExpanded = ref(true)  // 기본값: 펼침
@@ -190,6 +202,47 @@ const personalChannels = ref([
   { id: 'profile', name: '마이페이지', icon: 'mdi-account-cog', type: 'main' }
 ])
 
+// 프로젝트 워크스페이스 채널 목록
+const projectChannels = ref([
+  { id: 'dashboard', name: '프로젝트 대시보드', icon: 'mdi-view-dashboard', type: 'main' },
+  { 
+    id: 'chat', 
+    name: '프로젝트 채팅', 
+    icon: 'mdi-chat', 
+    type: 'main',
+    expanded: true,  // 기본값: 펼침
+    subChannels: [
+      { id: 'general', name: '일반', type: 'text', unread: 3 },
+      { id: 'marketing', name: '마케팅', type: 'text', unread: 0 },
+      { id: 'development', name: '개발', type: 'text', unread: 1 }
+    ]
+  },
+  { 
+    id: 'schedule', 
+    name: '프로젝트 일정관리', 
+    icon: 'mdi-calendar-check', 
+    type: 'main',
+    expanded: false,
+    subChannels: [
+      { id: 'team-schedule', name: '팀 일정관리', type: 'schedule' },
+      { id: 'personal-schedule', name: '개인 일정관리', type: 'schedule' }
+    ]
+  },
+  { id: 'drive', name: '드라이브', icon: 'mdi-folder', type: 'main' },
+  { 
+    id: 'meeting', 
+    name: '화상회의', 
+    icon: 'mdi-video', 
+    type: 'main',
+    expanded: false,
+    subChannels: [
+      { id: 'general-meeting', name: '일반 회의실', type: 'video', isActive: false },
+      { id: 'project-meeting', name: '프로젝트 회의실', type: 'video', isActive: true },
+      { id: 'brainstorming', name: '브레인스토밍', type: 'video', isActive: false }
+    ]
+  }
+])
+
 // 1:1 채팅 목록 (개인 워크스페이스일 때만)
 const directMessages = ref([
   { id: 'kim_minsu', name: '김민수', status: 'online', lastMessage: '안녕하세요!', time: '5분 전', unread: 2 },
@@ -243,6 +296,10 @@ const currentChannels = computed(() => {
       icon: 'mdi-calendar-check', 
       type: 'main',
       expanded: scheduleExpanded.value,
+      subChannels: [
+        { id: 'team-schedule', name: '팀 일정관리', type: 'schedule' },
+        { id: 'personal-schedule', name: '개인 일정관리', type: 'schedule' }
+      ],
       scheduleData: workspaceMemberStore.scheduleChannels // 멤버 정보를 위한 데이터
     },
     { id: 'drive', name: '드라이브', icon: 'mdi-folder', type: 'main' },
@@ -484,6 +541,45 @@ const loadChannels = async () => {
   }
 }
 
+// 워크스페이스 탈퇴 확인 다이얼로그 열기
+const handleLeaveWorkspace = () => {
+  if (!props.currentWorkspaceData?.workSpaceSeq) return
+  showLeaveConfirmDialog.value = true
+}
+
+// 워크스페이스 탈퇴 실행
+const confirmLeaveWorkspace = async () => {
+  if (!props.currentWorkspaceData?.workSpaceSeq) return
+  
+  try {
+    const workspaceName = props.currentWorkspaceData.name
+    await leaveWorkspace(props.currentWorkspaceData.workSpaceSeq)
+    
+    // 다이얼로그 닫기
+    showLeaveConfirmDialog.value = false
+    
+    // 워크스페이스 목록 새로고침
+    await workspaceStore.loadMyWorkspaces()
+    
+    // 개인 대시보드로 이동
+    await router.push('/workspaces/personal/dashboard')
+    
+    // 성공 토스트 표시 (이동 후)
+    setTimeout(() => {
+      leaveSuccessMessage.value = `${workspaceName} 워크스페이스에서 탈퇴했습니다.`
+      showLeaveSuccessToast.value = true
+      
+      // 5초 후 자동으로 닫기
+      setTimeout(() => {
+        showLeaveSuccessToast.value = false
+      }, 5000)
+    }, 300)
+  } catch (error) {
+    console.error('워크스페이스 탈퇴 실패:', error)
+    alert('워크스페이스 탈퇴에 실패했습니다: ' + (error.message || error))
+  }
+}
+
 // 채널별 멤버 권한 확인 함수들
 const getChannelMemberAuthority = (channelType, memberSeq) => {
   let memberList = []
@@ -588,7 +684,7 @@ const createSchedule = () => {
   }
   
   // 프로젝트 일정관리의 하위 채널에 추가
-  const scheduleChannel = currentChannels.value.find(ch => ch.id === 'schedule')
+  const scheduleChannel = projectChannels.value.find(ch => ch.id === 'schedule')
   if (scheduleChannel && scheduleChannel.subChannels) {
     scheduleChannel.subChannels.push(newSchedule)
   }
@@ -683,6 +779,18 @@ const getStatusColor = (status) => {
           <v-icon>{{ collapsed ? 'mdi-chevron-right' : 'mdi-chevron-left' }}</v-icon>
         </div>
         <span v-if="!collapsed" class="project-name">{{ currentWorkspaceData.name }}</span>
+        <!-- 나가기 버튼 (SUPER가 아닌 경우에만 표시) -->
+        <v-btn
+          v-if="!collapsed && !isWorkspaceSuper"
+          icon
+          size="small"
+          variant="text"
+          class="leave-button"
+          @click="handleLeaveWorkspace"
+          title="워크스페이스 탈퇴"
+        >
+          <v-icon size="20">mdi-logout</v-icon>
+        </v-btn>
       </div>
       
       <div class="section-title">
@@ -774,16 +882,9 @@ const getStatusColor = (status) => {
             </v-icon>
             
             
-            <!-- 프로젝트 일정 생성 버튼 (프로젝트 일정관리일 때만) -->
-            <v-icon 
-              v-if="channel.id === 'schedule' && workspaceType === 'project' && (!collapsed || workspaceType === 'personal')"
-              class="create-channel-btn"
-              @click.stop="showCreateScheduleModal = true"
-            >
-              mdi-plus
-            </v-icon>
             
             <!-- 채널 설정 버튼 (채팅, 일정관리, 화상회의만 최상위에 표시, 드라이브 제외) -->
+            <!-- 모든 멤버가 권한 목록을 조회할 수 있도록 톱니바퀴 표시 -->
             <v-icon 
               v-if="(channel.id === 'chat' || channel.id === 'schedule' || channel.id === 'meeting') && 
                     channel.id !== 'drive' && 
@@ -823,7 +924,7 @@ const getStatusColor = (status) => {
               @mouseleave="hoveredChannel = null"
             >
               <v-icon class="subchannel-icon">
-                {{ subChannel.type === 'video' ? 'mdi-video' : subChannel.type === 'schedule' ? 'mdi-calendar' : 'mdi-pound' }}
+                {{ subChannel.type === 'video' ? 'mdi-video' : subChannel.type === 'schedule' ? 'mdi-pound' : 'mdi-pound' }}
               </v-icon>
               <span class="subchannel-name">{{ subChannel.name }}</span>
               
@@ -1064,53 +1165,75 @@ const getStatusColor = (status) => {
     </v-card>
   </v-dialog>
 
-  <!-- 팀 일정 생성 모달 -->
-  <v-dialog v-model="showCreateScheduleModal" max-width="400">
-    <v-card class="create-schedule-modal">
-      <div class="modal-header">
-        <div class="header-content">
-          <v-icon class="header-icon">mdi-calendar-plus</v-icon>
-          <h3 class="modal-title">새 일정 만들기</h3>
-        </div>
-        <v-btn
-          icon="mdi-close"
-          variant="text"
-          size="small"
-          @click="closeCreateScheduleModal"
-        />
-      </div>
+  <!-- 워크스페이스 탈퇴 확인 다이얼로그 -->
+  <v-dialog v-model="showLeaveConfirmDialog" max-width="500" persistent>
+    <v-card class="leave-confirm-dialog">
+      <v-card-title class="leave-dialog-header">
+        <v-icon color="error" size="32" class="mr-3">mdi-alert-circle</v-icon>
+        <span class="leave-dialog-title">워크스페이스 탈퇴</span>
+      </v-card-title>
       
-      <div class="modal-body">
-        <div class="input-group">
-          <label class="input-label">일정 이름</label>
-          <v-text-field
-            v-model="newScheduleName"
-            placeholder="예: 프로젝트 일정"
-            variant="outlined"
-            density="compact"
-            hide-details
-            @keyup.enter="createSchedule"
-          />
+      <v-card-text class="leave-dialog-content">
+        <div class="warning-message">
+          <p class="workspace-name">
+            <strong>{{ currentWorkspaceData?.name }}</strong> 워크스페이스를 정말 탈퇴하시겠습니까?
+          </p>
+          
+          <div class="warning-box">
+            <v-icon color="warning" size="20" class="mr-2">mdi-alert</v-icon>
+            <div class="warning-text">
+              <p class="warning-title">주의사항</p>
+              <ul class="warning-list">
+                <li>워크스페이스 내 내 모든 정보가 삭제됩니다</li>
+                <li>작성한 메시지와 파일은 유지되지만 접근할 수 없습니다</li>
+                <li>다시 참여하려면 재초대가 필요합니다</li>
+              </ul>
+            </div>
+          </div>
         </div>
-      </div>
+      </v-card-text>
       
-      <div class="modal-actions">
+      <v-card-actions class="leave-dialog-actions">
         <v-btn
           variant="text"
-          @click="closeCreateScheduleModal"
+          @click="showLeaveConfirmDialog = false"
+          size="large"
         >
           취소
         </v-btn>
         <v-btn
-          color="primary"
-          :disabled="!newScheduleName.trim()"
-          @click="createSchedule"
+          color="error"
+          variant="flat"
+          @click="confirmLeaveWorkspace"
+          size="large"
         >
-          만들기
+          탈퇴하기
         </v-btn>
-      </div>
+      </v-card-actions>
     </v-card>
   </v-dialog>
+
+  <!-- 탈퇴 성공 토스트 -->
+  <div v-if="showLeaveSuccessToast" class="leave-success-toast">
+    <div class="toast-content">
+      <div class="toast-icon">
+        <v-icon color="white" size="24">mdi-check-circle</v-icon>
+      </div>
+      <div class="toast-message">
+        <p class="toast-title">탈퇴 완료</p>
+        <p class="toast-text">{{ leaveSuccessMessage }}</p>
+      </div>
+      <v-btn
+        icon
+        size="small"
+        variant="text"
+        class="toast-close"
+        @click="showLeaveSuccessToast = false"
+      >
+        <v-icon color="white" size="20">mdi-close</v-icon>
+      </v-btn>
+    </div>
+  </div>
 
   <!-- 채널 설정 모달 -->
   <v-dialog v-model="showChannelSettingsModal" max-width="600" scrollable>
@@ -1315,6 +1438,26 @@ const getStatusColor = (status) => {
   font-size: 14px;
   font-weight: 600;
   color: rgb(var(--v-theme-primary));
+  flex: 1;
+}
+
+.leave-button {
+  margin-left: auto;
+  margin-right: 0;
+  color: rgb(var(--v-theme-on-surface)) !important;
+  opacity: 0.7;
+  transition: all 0.2s ease;
+}
+
+.leave-button:hover {
+  color: #ef4444 !important;
+  background: rgba(239, 68, 68, 0.1) !important;
+  opacity: 1;
+  transform: scale(1.05);
+}
+
+.leave-button .v-icon {
+  transition: color 0.2s ease;
 }
 
 .section-title {
@@ -1572,8 +1715,7 @@ const getStatusColor = (status) => {
 
 /* 채널 생성 모달 */
 .create-channel-modal,
-.create-meeting-modal,
-.create-schedule-modal {
+.create-meeting-modal {
   background: rgb(var(--v-theme-surface));
 }
 
@@ -2018,5 +2160,476 @@ const getStatusColor = (status) => {
 
 .loading-text {
   font-size: 14px;
+}
+
+/* 워크스페이스 탈퇴 확인 다이얼로그 */
+.leave-confirm-dialog {
+  border-radius: 16px !important;
+  overflow: hidden;
+  box-shadow: 0 20px 60px rgba(239, 68, 68, 0.15) !important;
+  animation: dialogSlideIn 0.3s ease-out;
+}
+
+@keyframes dialogSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(-20px) scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.leave-dialog-header {
+  background: linear-gradient(135deg, 
+    rgba(239, 68, 68, 0.15) 0%, 
+    rgba(220, 38, 38, 0.08) 50%,
+    rgba(239, 68, 68, 0.12) 100%);
+  background-size: 200% 200%;
+  animation: gradientShift 3s ease infinite;
+  padding: 24px !important;
+  display: flex;
+  align-items: center;
+  border-bottom: 1px solid rgba(239, 68, 68, 0.2);
+  position: relative;
+  overflow: hidden;
+}
+
+.leave-dialog-header::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, 
+    transparent, 
+    rgba(255, 255, 255, 0.1), 
+    transparent);
+  animation: shimmer 2s infinite;
+}
+
+@keyframes gradientShift {
+  0%, 100% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+}
+
+@keyframes shimmer {
+  0% {
+    left: -100%;
+  }
+  100% {
+    left: 100%;
+  }
+}
+
+.leave-dialog-header .v-icon {
+  animation: pulse 2s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.1);
+    opacity: 0.8;
+  }
+}
+
+.leave-dialog-title {
+  font-size: 20px;
+  font-weight: 700;
+  color: rgb(var(--v-theme-on-surface));
+  animation: fadeInRight 0.4s ease-out 0.1s both;
+}
+
+@keyframes fadeInRight {
+  from {
+    opacity: 0;
+    transform: translateX(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.leave-dialog-content {
+  padding: 32px 24px !important;
+  animation: fadeIn 0.5s ease-out 0.2s both;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.warning-message {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.workspace-name {
+  font-size: 16px;
+  line-height: 1.5;
+  color: rgb(var(--v-theme-on-surface));
+  margin: 0;
+  animation: fadeInUp 0.5s ease-out 0.3s both;
+}
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.workspace-name strong {
+  color: rgb(var(--v-theme-primary));
+  font-weight: 700;
+  background: linear-gradient(135deg, 
+    rgb(var(--v-theme-primary)), 
+    rgba(var(--v-theme-primary), 0.7));
+  background-clip: text;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-size: 200% 200%;
+  animation: textGradient 3s ease infinite;
+}
+
+@keyframes textGradient {
+  0%, 100% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+}
+
+.warning-box {
+  display: flex;
+  gap: 12px;
+  padding: 16px;
+  background: linear-gradient(135deg, 
+    rgba(251, 191, 36, 0.12) 0%, 
+    rgba(251, 191, 36, 0.08) 50%,
+    rgba(251, 191, 36, 0.10) 100%);
+  background-size: 200% 200%;
+  animation: warningGlow 3s ease infinite, fadeInUp 0.5s ease-out 0.4s both;
+  border: 1px solid rgba(251, 191, 36, 0.3);
+  border-radius: 12px;
+  align-items: flex-start;
+  position: relative;
+  overflow: hidden;
+}
+
+.warning-box::before {
+  content: '';
+  position: absolute;
+  top: -50%;
+  left: -50%;
+  width: 200%;
+  height: 200%;
+  background: radial-gradient(circle, 
+    rgba(251, 191, 36, 0.1) 0%, 
+    transparent 70%);
+  animation: rotate 4s linear infinite;
+}
+
+@keyframes warningGlow {
+  0%, 100% {
+    background-position: 0% 50%;
+    box-shadow: 0 0 0 rgba(251, 191, 36, 0);
+  }
+  50% {
+    background-position: 100% 50%;
+    box-shadow: 0 0 20px rgba(251, 191, 36, 0.2);
+  }
+}
+
+@keyframes rotate {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.warning-text {
+  flex: 1;
+  position: relative;
+  z-index: 1;
+}
+
+.warning-box .v-icon {
+  position: relative;
+  z-index: 1;
+  animation: bounce 2s ease-in-out infinite;
+}
+
+@keyframes bounce {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-5px);
+  }
+}
+
+.warning-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: rgb(var(--v-theme-on-surface));
+  margin: 0 0 12px 0;
+}
+
+.warning-list {
+  margin: 0;
+  padding-left: 20px;
+  list-style: disc;
+}
+
+.warning-list li {
+  font-size: 14px;
+  line-height: 1.6;
+  color: rgba(var(--v-theme-on-surface), 0.8);
+  margin-bottom: 8px;
+  animation: slideInLeft 0.5s ease-out both;
+}
+
+.warning-list li:nth-child(1) {
+  animation-delay: 0.5s;
+}
+
+.warning-list li:nth-child(2) {
+  animation-delay: 0.6s;
+}
+
+.warning-list li:nth-child(3) {
+  animation-delay: 0.7s;
+}
+
+@keyframes slideInLeft {
+  from {
+    opacity: 0;
+    transform: translateX(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.warning-list li:last-child {
+  margin-bottom: 0;
+}
+
+.leave-dialog-actions {
+  padding: 16px 24px !important;
+  background: rgba(var(--v-theme-on-surface), 0.02);
+  border-top: 1px solid rgba(var(--v-theme-on-surface), 0.1);
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  animation: fadeIn 0.5s ease-out 0.6s both;
+}
+
+.leave-dialog-actions .v-btn {
+  text-transform: none;
+  font-weight: 600;
+  letter-spacing: 0;
+  min-width: 100px;
+  transition: all 0.3s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.leave-dialog-actions .v-btn::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 0;
+  height: 0;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.3);
+  transform: translate(-50%, -50%);
+  transition: width 0.6s, height 0.6s;
+}
+
+.leave-dialog-actions .v-btn:hover::before {
+  width: 300px;
+  height: 300px;
+}
+
+.leave-dialog-actions .v-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.15);
+}
+
+.leave-dialog-actions .v-btn:active {
+  transform: translateY(0);
+}
+
+/* 탈퇴 성공 토스트 */
+.leave-success-toast {
+  position: fixed;
+  bottom: 32px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 9999;
+  animation: slideUpToast 0.5s cubic-bezier(0.68, -0.55, 0.265, 1.55) both;
+}
+
+@keyframes slideUpToast {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(100px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+}
+
+.toast-content {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 16px 20px;
+  background: linear-gradient(135deg, 
+    #10b981 0%, 
+    #059669 50%,
+    #047857 100%);
+  background-size: 200% 200%;
+  animation: toastGradient 3s ease infinite;
+  border-radius: 16px;
+  box-shadow: 0 10px 40px rgba(16, 185, 129, 0.4);
+  min-width: 400px;
+  max-width: 600px;
+  position: relative;
+  overflow: hidden;
+}
+
+.toast-content::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, 
+    transparent, 
+    rgba(255, 255, 255, 0.2), 
+    transparent);
+  animation: toastShimmer 2s infinite;
+}
+
+@keyframes toastGradient {
+  0%, 100% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+}
+
+@keyframes toastShimmer {
+  0% {
+    left: -100%;
+  }
+  100% {
+    left: 100%;
+  }
+}
+
+.toast-icon {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 50%;
+  position: relative;
+  z-index: 1;
+  animation: toastIconPulse 2s ease-in-out infinite;
+}
+
+@keyframes toastIconPulse {
+  0%, 100% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(255, 255, 255, 0.4);
+  }
+  50% {
+    transform: scale(1.05);
+    box-shadow: 0 0 0 10px rgba(255, 255, 255, 0);
+  }
+}
+
+.toast-message {
+  flex: 1;
+  position: relative;
+  z-index: 1;
+}
+
+.toast-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: white;
+  margin: 0 0 4px 0;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.toast-text {
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.95);
+  margin: 0;
+  line-height: 1.4;
+}
+
+.toast-close {
+  flex-shrink: 0;
+  position: relative;
+  z-index: 1;
+  opacity: 0.8;
+  transition: all 0.2s ease;
+}
+
+.toast-close:hover {
+  opacity: 1;
+  transform: rotate(90deg);
+  background: rgba(255, 255, 255, 0.1) !important;
+}
+
+/* 토스트 자동 닫기 효과 */
+.leave-success-toast {
+  animation: slideUpToast 0.5s cubic-bezier(0.68, -0.55, 0.265, 1.55) both,
+             fadeOutToast 0.3s ease 4.7s both;
+}
+
+@keyframes fadeOutToast {
+  to {
+    opacity: 0;
+    transform: translateX(-50%) translateY(20px);
+  }
 }
 </style>

@@ -26,7 +26,30 @@ export const createWorkspace = async (workSpaceName, workSpaceThumbnailImage, me
 }
 
 // ----------------------
-// 내 워크스페이스 목록 조회 API
+// 개인 워크스페이스 조회 API
+// ----------------------
+export const getPersonalWorkspace = async () => {
+  try {
+    const res = await apiGet('/workspace-service/workspace/personal')
+    console.log('📦 [개인WS API] 응답:', res)
+    
+    // 응답이 객체인 경우 DTO로 변환
+    if (res && typeof res === 'object') {
+      const dto = WorkSpaceInfoResDto.fromJson(res)
+      console.log('✅ [개인WS API] Seq:', dto.workSpaceSeq)
+      return dto
+    }
+    
+    console.warn('⚠️ [개인WS API] 응답이 객체가 아닙니다')
+    return null
+  } catch (error) {
+    console.error('❌ [개인WS API] 조회 실패:', error.response?.data || error.message)
+    throw error
+  }
+}
+
+// ----------------------
+// 내 워크스페이스 목록 조회 API (프로젝트 워크스페이스)
 // ----------------------
 export const getMyWorkspaces = async () => {
   const res = await apiGet('/workspace-service/workspace/me')
@@ -63,6 +86,47 @@ export const updateWorkspace = async (workSpaceSeq, workSpaceName, workSpaceThum
   
   const res = await apiPatchFormData('/workspace-service/workspace/edit', formData)
   return WorkSpaceResDto.fromJson(res)
+}
+
+// ----------------------
+// 워크스페이스 삭제 API
+// ----------------------
+export const deleteWorkspace = async (workSpaceSeq) => {
+  const res = await apiDelete(`/workspace-service/workspace/${workSpaceSeq}`)
+  return res
+}
+
+// ----------------------
+// 워크스페이스 멤버 초대 API
+// ----------------------
+export const inviteWorkspaceMembers = async (workSpaceSeq, memberList, channelSeq = null) => {
+  const reqDto = {
+    channelSeq: channelSeq,
+    workSpaceSeq: workSpaceSeq,
+    memberList: memberList
+  }
+  const res = await apiPost('/workspace-service/workspace/invite', reqDto)
+  return res
+}
+
+// ----------------------
+// 워크스페이스 멤버 강제 탈퇴 API
+// ----------------------
+export const kickWorkspaceMember = async (workSpaceSeq, memberSeq) => {
+  const reqDto = {
+    workSpaceSeq: workSpaceSeq,
+    memberSeq: memberSeq
+  }
+  const res = await apiDelete('/workspace-service/workspace/kick', reqDto)
+  return res
+}
+
+// ----------------------
+// 워크스페이스 탈퇴 API
+// ----------------------
+export const leaveWorkspace = async (workSpaceSeq) => {
+  const res = await apiDelete(`/workspace-service/workspace/leave/${workSpaceSeq}`)
+  return res
 }
 
 // ----------------------
@@ -154,4 +218,3 @@ export const deleteChatChannel = async (channelSeq) => {
 // 친구 목록, 회원 검색 API는 friend.js에서 import하여 사용
 // ----------------------
 export { getFriendList, searchMembers } from '@/api/friend/friend'
-

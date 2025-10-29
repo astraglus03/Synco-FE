@@ -724,17 +724,13 @@ const doLogout = async () => {
     // authStore 초기화
     authStore.logout()
     
-    showSnackbar('로그아웃 되었습니다.')
-    
     // 랜딩 페이지로 이동
-    setTimeout(() => {
-      router.push('/')
-    }, 1000)
+    window.location.href = '/'
   } catch (error) {
     console.error('로그아웃 실패:', error)
     // 실패해도 로컬 로그아웃 처리
     authStore.logout()
-    router.push('/')
+    window.location.href = '/'
   } finally {
     loading.value = false
   }
