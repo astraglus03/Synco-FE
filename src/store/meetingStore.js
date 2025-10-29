@@ -8,6 +8,8 @@ import {
   ChatMessageReq,
   RoomSessionResDto,
   RoomActiveListDto,
+  RoomEndedListDto,
+  RoomDetailDto,
   ChatMessageRes,
   ChannelInfoResDto,
   MemberInfoDto,
@@ -19,11 +21,13 @@ export const useMeetingStore = defineStore('meeting', () => {
   // 상태
   const channels = ref([])
   const activeRooms = ref([])
+  const endedRooms = ref([])
   const currentChannel = ref(null)
   const currentRoom = ref(null)
   const channelMembers = ref([])
   const workSpaceMembers = ref([])
   const chatMessages = ref([])
+  const currentRoomDetail = ref(null)
   
   // 현재 미팅 상태
   const isCurrentlyInMeeting = ref(false)
@@ -73,10 +77,8 @@ export const useMeetingStore = defineStore('meeting', () => {
   })
   
   const activeRoomsInCurrentChannel = computed(() => {
-    if (!currentChannel.value) return []
-    return activeRooms.value.filter(room => 
-      room.channelSeq === currentChannel.value.channelSeq
-    )
+    // 이미 특정 채널의 활성 회의만 가져오므로 필터링 불필요
+    return activeRooms.value
   })
 
   // 액션
@@ -103,16 +105,22 @@ export const useMeetingStore = defineStore('meeting', () => {
     }
   }
 
-  const loadActiveRooms = async (channelSeq) => {
+  const loadActiveRooms = async (workSpaceSeq) => {
     try {
       isLoading.value = true
       error.value = null
       
-      const response = await meetingApi.getActiveRooms(channelSeq, currentMemberSeq.value)
+      console.log('📋 loadActiveRooms 호출:')
+      console.log('  - workSpaceSeq:', workSpaceSeq)
+      console.log('  - currentMemberSeq.value:', currentMemberSeq.value)
+      
+      const response = await meetingApi.getActiveRooms(workSpaceSeq, currentMemberSeq.value)
       activeRooms.value = response.data.content.map(room => new RoomActiveListDto(room))
       
+      console.log('📋 활성 회의 목록 업데이트:', activeRooms.value)
       return activeRooms.value
     } catch (err) {
+      console.error('📋 loadActiveRooms 실패:', err)
       error.value = err.message || '활성 회의 목록을 불러오는데 실패했습니다.'
       throw err
     } finally {
@@ -137,12 +145,12 @@ export const useMeetingStore = defineStore('meeting', () => {
     }
   }
 
-  const createRoom = async (roomName, description = '', alarmMemberList = []) => {
+  const createRoom = async (workSpaceSeq, roomName, description = '', alarmMemberList = []) => {
     try {
       isCreating.value = true
       error.value = null
       
-      const roomCreateReqDto = new RoomCreateReqDto(roomName, description, alarmMemberList)
+      const roomCreateReqDto = new RoomCreateReqDto(workSpaceSeq,roomName, description, alarmMemberList)
       const response = await meetingApi.createRoom(currentMemberSeq.value, roomCreateReqDto)
       const roomSession = new RoomSessionResDto(response.data)
       
@@ -152,7 +160,9 @@ export const useMeetingStore = defineStore('meeting', () => {
         roomId: roomSession.roomId,
         roomName: roomName,
         description: description,
-        isHost: true
+        isHost: true,
+        livekitToken: roomSession.livekitToken,
+        livekitRoomName: roomSession.livekitRoomName
       }
       
       // LiveKit 토큰 저장
@@ -170,7 +180,22 @@ export const useMeetingStore = defineStore('meeting', () => {
       
       return roomSession
     } catch (err) {
-      error.value = err.message || '화상회의 생성에 실패했습니다.'
+      // 백엔드 에러 메시지 추출
+      let errorMessage = '화상회의 생성에 실패했습니다.'
+      
+      if (err.response?.data) {
+        // 백엔드에서 던진 에러 메시지 추출
+        errorMessage = err.response.data.message || err.response.data.error || err.response.data
+        // 메시지가 객체인 경우 처리
+        if (typeof errorMessage === 'object') {
+          errorMessage = err.response.data.message || '화상회의 생성에 실패했습니다.'
+        }
+      } else if (err.message) {
+        errorMessage = err.message
+      }
+      
+      error.value = errorMessage
+      console.error('❌ 회의 생성 에러:', errorMessage)
       throw err
     } finally {
       isCreating.value = false
@@ -185,11 +210,16 @@ export const useMeetingStore = defineStore('meeting', () => {
       const response = await meetingApi.joinRoom(currentMemberSeq.value, roomId)
       const roomSession = new RoomSessionResDto(response.data)
       
+      // 호스트 여부 확인 (백엔드 응답 또는 현재 사용자와 hostId 비교)
+      const isHost = roomSession.isHost || 
+                      (roomSession.hostId?.toString() === currentMemberSeq.value?.toString())
+      
       // 현재 미팅 상태 설정
       isCurrentlyInMeeting.value = true
       currentMeetingData.value = {
         roomId: roomSession.roomId,
-        isHost: false
+        roomName: roomSession.roomName || `미팅 ${roomSession.roomId}`,
+        isHost: isHost
       }
       
       // LiveKit 토큰 저장
@@ -199,14 +229,30 @@ export const useMeetingStore = defineStore('meeting', () => {
       // 새 탭에서 미팅 참여
       openMeetingInNewTab({
         roomId: roomSession.roomId,
+        roomName: roomSession.roomName || `미팅 ${roomSession.roomId}`,
         livekitToken: roomSession.livekitToken,
         livekitRoomName: roomSession.livekitRoomName,
-        isHost: false
+        isHost: isHost
       })
       
       return roomSession
     } catch (err) {
-      error.value = err.message || '화상회의 참여에 실패했습니다.'
+      // 백엔드 에러 메시지 추출
+      let errorMessage = '화상회의 참여에 실패했습니다.'
+      
+      if (err.response?.data) {
+        // 백엔드에서 던진 에러 메시지 추출
+        errorMessage = err.response.data.message || err.response.data.error || err.response.data
+        // 메시지가 객체인 경우 처리
+        if (typeof errorMessage === 'object') {
+          errorMessage = err.response.data.message || '화상회의 참여에 실패했습니다.'
+        }
+      } else if (err.message) {
+        errorMessage = err.message
+      }
+      
+      error.value = errorMessage
+      console.error('❌ 회의 참여 에러:', errorMessage)
       throw err
     } finally {
       isJoining.value = false
@@ -363,7 +409,13 @@ export const useMeetingStore = defineStore('meeting', () => {
 
   // 새 탭에서 미팅 열기
   const openMeetingInNewTab = (meetingData) => {
+    // 쿼리스트링으로 전송 (sessionStorage는 탭 간 공유 안 됨)
     const meetingUrl = `/meeting/${meetingData.roomId}`
+      + `?token=${encodeURIComponent(meetingData.livekitToken)}`
+      + `&roomName=${encodeURIComponent(meetingData.livekitRoomName)}`
+      + `&displayName=${encodeURIComponent(meetingData.roomName || '')}`
+      + `&isHost=${meetingData.isHost ? 'true' : 'false'}`
+    
     const newWindow = window.open(meetingUrl, '_blank', 'width=1200,height=800')
     
     if (!newWindow) {
@@ -372,6 +424,43 @@ export const useMeetingStore = defineStore('meeting', () => {
     }
     
     return true
+  }
+
+  const loadEndedRooms = async (workSpaceSeq, page = 0, size = 10) => {
+    try {
+      isLoading.value = true
+      error.value = null
+      
+      const response = await meetingApi.getEndedRooms(workSpaceSeq, currentMemberSeq.value, page, size)
+      endedRooms.value = response.data.content.map(room => new RoomEndedListDto(room))
+      
+      console.log('📋 종료된 회의 목록 업데이트:', endedRooms.value)
+      return endedRooms.value
+    } catch (err) {
+      console.error('📋 loadEndedRooms 실패:', err)
+      error.value = err.message || '종료된 회의 목록을 불러오는데 실패했습니다.'
+      throw err
+    } finally {
+      isLoading.value = false
+    }
+  }
+
+  const loadRoomDetail = async (roomSeq) => {
+    try {
+      isLoading.value = true
+      error.value = null
+      
+      const response = await meetingApi.getRoomDetail(roomSeq, currentMemberSeq.value)
+      currentRoomDetail.value = new RoomDetailDto(response.data)
+      
+      return currentRoomDetail.value
+    } catch (err) {
+      console.error('📋 loadRoomDetail 실패:', err)
+      error.value = err.message || '회의 상세 정보를 불러오는데 실패했습니다.'
+      throw err
+    } finally {
+      isLoading.value = false
+    }
   }
 
   // 미팅 종료 (Store에서만 호출)
@@ -385,10 +474,6 @@ export const useMeetingStore = defineStore('meeting', () => {
   // 채널 선택
   const selectChannel = (channel) => {
     currentChannel.value = channel
-    // 활성 회의 목록 로드
-    if (channel) {
-      loadActiveRooms(channel.channelSeq)
-    }
   }
 
   // 에러 초기화
@@ -400,11 +485,13 @@ export const useMeetingStore = defineStore('meeting', () => {
   const reset = () => {
     channels.value = []
     activeRooms.value = []
+    endedRooms.value = []
     currentChannel.value = null
     currentRoom.value = null
     channelMembers.value = []
     workSpaceMembers.value = []
     chatMessages.value = []
+    currentRoomDetail.value = null
     isCurrentlyInMeeting.value = false
     currentMeetingData.value = null
     livekitToken.value = null
@@ -422,11 +509,13 @@ export const useMeetingStore = defineStore('meeting', () => {
     // 상태
     channels,
     activeRooms,
+    endedRooms,
     currentChannel,
     currentRoom,
     channelMembers,
     workSpaceMembers,
     chatMessages,
+    currentRoomDetail,
     isCurrentlyInMeeting,
     currentMeetingData,
     livekitToken,
@@ -452,6 +541,8 @@ export const useMeetingStore = defineStore('meeting', () => {
     setCurrentUser,
     loadChannels,
     loadActiveRooms,
+    loadEndedRooms,
+    loadRoomDetail,
     loadWorkSpaceMembers,
     createRoom,
     joinRoom,
