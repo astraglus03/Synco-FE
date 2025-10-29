@@ -2707,6 +2707,10 @@ watch(() => workspaceStore.currentWorkspace, () => {
   right: 8px;
   opacity: 0;
   transition: opacity 0.2s ease;
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 2px;
+  max-width: 100%;
 }
 
 .grid-item:hover .item-actions {
@@ -2716,6 +2720,10 @@ watch(() => workspaceStore.currentWorkspace, () => {
 .action-btn {
   color: rgba(var(--v-theme-on-surface), 0.6);
   transition: all 0.2s ease;
+  flex-shrink: 0;
+  min-width: auto;
+  width: auto;
+  padding: 4px;
 }
 
 .action-btn:hover {

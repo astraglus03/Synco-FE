@@ -121,38 +121,70 @@
       </div>
     </div>
 
-    <!-- 공유 문서로 변환 모달 -->
-    <v-dialog v-model="showShareModal" max-width="600px">
-      <v-card>
-        <v-card-title>
-          <span>공유 문서로 변환</span>
-          <v-spacer></v-spacer>
+    <!-- 프로젝트로 이동 모달 -->
+    <v-dialog v-model="showShareModal" max-width="600px" max-height="90vh" @click:outside="showShareModal = false">
+      <v-card class="move-to-project-modal">
+        <v-card-title class="modal-header">
+          <div class="header-content">
+            <v-icon class="header-icon" color="primary">mdi-share-variant</v-icon>
+            <h3 class="modal-title">프로젝트로 이동</h3>
+          </div>
           <v-btn icon="mdi-close" variant="text" @click="showShareModal = false"></v-btn>
         </v-card-title>
         
-        <v-card-text>
-          <v-text-field
-            v-model="shareDocTitle"
-            label="공유 문서 제목"
-            placeholder="공유 문서 제목을 입력하세요"
-            variant="outlined"
-            class="mb-4"
-          />
+        <v-card-text class="modal-body">
+          <div class="move-item-info mb-4">
+            <v-icon class="mr-2" color="#4caf50">mdi-file-document</v-icon>
+            <span class="text-body-1 font-weight-medium">{{ documentName || '문서' }}</span>
+          </div>
           
-          <v-alert type="info" variant="tonal" class="mb-4">
-            개인 문서를 공유 문서로 변환하면 실시간 협업 기능을 사용할 수 있습니다.
-          </v-alert>
+          <!-- 새 문서 이름 (선택사항) -->
+          <div class="mb-4">
+            <v-text-field
+              v-model="newDocumentName"
+              label="새 문서 이름 (선택사항)"
+              placeholder="비워두면 원본 이름 사용"
+              variant="outlined"
+            />
+          </div>
+          
+          <!-- 프로젝트 드라이브 선택 -->
+          <div class="project-selection mb-4">
+            <label class="input-label">프로젝트 드라이브</label>
+            <div class="project-list">
+              <!-- 프로젝트 없음 -->
+              <div v-if="projectWorkspaces.length === 0" class="empty-state">
+                <v-icon size="48" color="grey">mdi-folder-off</v-icon>
+                <p>이동할 프로젝트 드라이브가 없습니다</p>
+              </div>
+              
+              <!-- 프로젝트 목록 -->
+              <div 
+                v-for="workspace in projectWorkspaces" 
+                :key="workspace.workSpaceSeq"
+                class="project-item"
+                :class="{ 'selected': selectedProjectDriveChannel === workspace.workSpaceSeq }"
+                @click="selectedProjectDriveChannel = workspace.workSpaceSeq"
+              >
+                <v-icon class="project-icon" color="#4caf50">mdi-folder-account</v-icon>
+                <span class="project-name">{{ workspace.name }}</span>
+                <span v-if="selectedProjectDriveChannel === workspace.workSpaceSeq" class="selected-indicator">
+                  <v-icon color="primary" size="16">mdi-check</v-icon>
+                </span>
+              </div>
+            </div>
+          </div>
         </v-card-text>
         
-        <v-card-actions>
+        <v-card-actions class="modal-actions">
           <v-spacer></v-spacer>
           <v-btn variant="text" @click="showShareModal = false">취소</v-btn>
           <v-btn 
             color="primary" 
             @click="confirmShare"
-            :disabled="!shareDocTitle.trim()"
+            :disabled="!selectedProjectDriveChannel"
           >
-            변환하기
+            이동하기
           </v-btn>
         </v-card-actions>
       </v-card>
@@ -171,6 +203,7 @@ import StarterKit from '@tiptap/starter-kit';
 import { usePersonalDriveStore } from '@/store/drive/personalDriveStore';
 import { personalDriveApi } from '@/api/drive/driveApi';
 import { useAuthStore } from '@/store/authStore';
+import { useWorkspaceStore } from '@/store/workspaceStore';
 
 // Props 정의
 const props = defineProps({
@@ -193,6 +226,7 @@ const router = useRouter();
 // Store
 const driveStore = usePersonalDriveStore();
 const authStore = useAuthStore();
+const workspaceStore = useWorkspaceStore();
 
 // 반응형 변수
 const editor = ref(null);
@@ -205,9 +239,15 @@ const typingTimer = ref(null);
 const previousNodesById = ref(new Map());
 const changesQueue = ref([]);
 
-// 공유 모달
+// 프로젝트로 이동 상태
 const showShareModal = ref(false);
-const shareDocTitle = ref('');
+const newDocumentName = ref('');
+const selectedProjectDriveChannel = ref(null);
+
+// 프로젝트 워크스페이스 목록 필터링
+const projectWorkspaces = computed(() => {
+  return workspaceStore.workspaces.filter(w => w.type === 'project' && w.workSpaceSeq)
+})
 
 // 툴바 상태
 const selectedFormat = ref(null);
@@ -544,27 +584,67 @@ const sendBatchChanges = async () => {
   isModified.value = false;
 };
 
-// 공유 문서로 변환
+// 공유 문서로 변환 (프로젝트로 이동 모달 열기)
 const shareToProjectDrive = () => {
-  shareDocTitle.value = documentName.value || '공유 문서';
-  showShareModal.value = true;
-};
+  newDocumentName.value = ''
+  selectedProjectDriveChannel.value = null
+  showShareModal.value = true
+  
+  // 워크스페이스 목록이 없으면 로드
+  if (workspaceStore.workspaces.length === 0) {
+    workspaceStore.loadMyWorkspaces()
+  }
+}
 
-// 공유 문서 변환 확인
+// 프로젝트로 이동
 const confirmShare = async () => {
-  if (!shareDocTitle.value.trim()) {
-    return;
-  }
-
+  if (!selectedProjectDriveChannel.value) return
+  
   try {
-    // TODO: 백엔드 API 확인 필요
-    alert('공유 문서로 변환 기능은 아직 구현 중입니다. 프로젝트 드라이브에서 직접 공유 문서를 생성해주세요.');
-    showShareModal.value = false;
+    const projectWorkspace = workspaceStore.workspaces.find(
+      w => w.type === 'project' && w.workSpaceSeq === selectedProjectDriveChannel.value
+    )
+    
+    if (!projectWorkspace) {
+      alert('선택한 프로젝트 드라이브를 찾을 수 없습니다.')
+      return
+    }
+    
+    const driveChannelSeq = Number(props.driveChannelSeq)
+    const documentSeq = Number(props.documentSeq)
+    
+    // 이동할 문서 이름 저장 (성공 메시지용)
+    const originalDocumentName = documentName.value
+    
+    const result = await personalDriveApi.movePersonalToProject(
+      driveChannelSeq,
+      documentSeq,
+      selectedProjectDriveChannel.value,
+      newDocumentName.value.trim() || null
+    )
+    
+    if (result.success) {
+      const successName = newDocumentName.value.trim() || originalDocumentName
+      
+      newDocumentName.value = ''
+      selectedProjectDriveChannel.value = null
+      showShareModal.value = false
+      
+      alert(`"${successName}"이(가) 프로젝트 드라이브로 이동되었습니다.`)
+      
+      // 모달 닫기
+      emit('close')
+      
+      // 목록 새로고침을 위해 이벤트 emit
+      emit('document-shared', result.data)
+    } else {
+      alert(result.error || '프로젝트로 이동 중 오류가 발생했습니다.')
+    }
   } catch (error) {
-    console.error('공유 문서 변환 중 오류:', error);
-    alert('공유 문서 변환 중 오류가 발생했습니다.');
+    console.error('프로젝트로 이동 실패:', error)
+    alert('프로젝트로 이동 중 오류가 발생했습니다.')
   }
-};
+}
 
 // 라이프사이클
 onMounted(async () => {
@@ -844,5 +924,127 @@ onBeforeUnmount(() => {
 
 :deep(.ProseMirror li) {
   margin: 4px 0;
+}
+
+.move-to-project-modal {
+  display: flex;
+  flex-direction: column;
+}
+
+.move-to-project-modal .modal-body {
+  min-height: auto;
+  max-height: 70vh;
+  overflow-y: auto;
+  padding: 24px;
+  transition: max-height 0.3s ease;
+}
+
+.move-item-info {
+  display: flex;
+  align-items: center;
+  padding: 12px;
+  background: rgba(var(--v-theme-surface), 0.5);
+  border-radius: 8px;
+}
+
+.project-selection {
+  margin-top: 16px;
+}
+
+.input-label {
+  display: block;
+  font-weight: 500;
+  margin-bottom: 12px;
+  color: rgba(var(--v-theme-on-surface), 0.87);
+}
+
+.project-list {
+  max-height: 400px;
+  overflow-y: auto;
+  border: 1px solid rgba(var(--v-theme-on-surface), 0.12);
+  border-radius: 8px;
+  background: rgb(var(--v-theme-surface));
+}
+
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 48px 24px;
+  text-align: center;
+  color: rgba(var(--v-theme-on-surface), 0.6);
+}
+
+.empty-state p {
+  margin-top: 16px;
+  font-size: 14px;
+}
+
+.project-item {
+  display: flex;
+  align-items: center;
+  padding: 12px 16px;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+  border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.05);
+}
+
+.project-item:last-child {
+  border-bottom: none;
+}
+
+.project-item:hover {
+  background: rgba(var(--v-theme-primary), 0.05);
+}
+
+.project-item.selected {
+  background: rgba(var(--v-theme-primary), 0.1);
+}
+
+.project-icon {
+  margin-right: 12px;
+  flex-shrink: 0;
+}
+
+.project-name {
+  flex: 1;
+  font-weight: 500;
+  color: rgba(var(--v-theme-on-surface), 0.87);
+}
+
+.selected-indicator {
+  margin-left: 8px;
+  flex-shrink: 0;
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 24px;
+  border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.12);
+}
+
+.header-content {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.header-icon {
+  margin-right: 8px;
+}
+
+.modal-title {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 500;
+}
+
+.modal-actions {
+  flex-shrink: 0;
+  padding: 16px 24px;
+  border-top: 1px solid rgba(var(--v-theme-on-surface), 0.1);
 }
 </style>

@@ -4,6 +4,7 @@ import { usePermissions, PERMISSIONS } from '@/composables/usePermissions'
 import { usePersonalDriveStore } from '@/store/drive/personalDriveStore'
 import { useWorkspaceStore } from '@/store/workspaceStore'
 import { useDraggable, useDropZone } from '@vueuse/core'
+import { personalDriveApi } from '@/api/drive/driveApi'
 import PersonalTextEditor from './PersonalTextEditor.vue'
 
 const props = defineProps({
@@ -75,7 +76,6 @@ const newFolderName = ref('')
 const uploadFiles = ref([])
 const sharedDocTitle = ref('')
 const sharedDocLocation = ref(null)
-const sharedDocIsLocked = ref(false)
 const showFolderSelector = ref(false)
 const showDocEditor = ref(false)
 const currentDocument = ref(null)
@@ -89,6 +89,12 @@ const moveItemTarget = ref(null) // 이동할 아이템
 const moveItemLocation = ref(null) // 이동할 폴더 ID
 const showMoveFolderSelector = ref(false)
 const showUploadFolderSelector = ref(false)
+
+// 프로젝트로 이동 상태
+const showMoveToProjectModal = ref(false)
+const moveToProjectTarget = ref(null) // 이동할 공유문서
+const selectedProjectDriveChannel = ref(null) // 선택된 프로젝트 드라이브 채널
+const newDocumentName = ref('') // 새 문서 이름 (선택사항)
 
 // 폴더 생성 부모 폴더 선택 상태
 const newFolderParentLocation = ref(null)
@@ -207,13 +213,6 @@ const handleDocumentShared = (data) => {
   driveStore.loadItems(currentDriveChannelSeq.value, driveStore.currentParentId)
 }
 
-// 공유문서 잠금 해제/잠금
-const toggleDocumentLock = async (docId) => {
-  const result = await driveStore.toggleDocumentLock(docId)
-  if (!result.success) {
-    console.error('잠금 상태 변경 실패:', result.error)
-  }
-}
 
 // 홈으로
 const goHome = () => {
@@ -607,6 +606,80 @@ const moveableFolders = computed(() => {
   return flattenedFolders.value.filter(folder => !excludeIds.has(folder.id))
 })
 
+// 프로젝트로 이동 모달 열기
+const openMoveToProjectModal = (item) => {
+  if (item.type !== 'shared-doc') return
+  
+  moveToProjectTarget.value = item
+  selectedProjectDriveChannel.value = null
+  newDocumentName.value = ''
+  showMoveToProjectModal.value = true
+  
+  // 워크스페이스 목록이 없으면 로드
+  if (workspaceStore.workspaces.length === 0) {
+    workspaceStore.loadMyWorkspaces()
+  }
+}
+
+// 프로젝트로 이동
+const moveToProject = async () => {
+  if (!moveToProjectTarget.value || !selectedProjectDriveChannel.value) return
+  
+  try {
+    const projectWorkspace = workspaceStore.workspaces.find(
+      w => w.type === 'project' && w.workSpaceSeq === selectedProjectDriveChannel.value
+    )
+    
+    if (!projectWorkspace) {
+      showError('이동 실패', '선택한 프로젝트 드라이브를 찾을 수 없습니다.')
+      return
+    }
+    
+    // 이동할 문서 이름 저장 (성공 메시지용)
+    const documentName = moveToProjectTarget.value.name
+    
+    const result = await personalDriveApi.movePersonalToProject(
+      currentDriveChannelSeq.value,
+      moveToProjectTarget.value.id,
+      selectedProjectDriveChannel.value,
+      newDocumentName.value.trim() || null
+    )
+    
+    if (result.success) {
+      // 이동 성공 후 목록 갱신
+      await driveStore.loadItems(currentDriveChannelSeq.value, driveStore.currentParentId)
+      
+      const successName = newDocumentName.value.trim() || documentName
+      moveToProjectTarget.value = null
+      selectedProjectDriveChannel.value = null
+      newDocumentName.value = ''
+      showMoveToProjectModal.value = false
+      
+      alert(`"${successName}"이(가) 프로젝트 드라이브로 이동되었습니다.`)
+    } else {
+      showError('이동 실패', result.error || '프로젝트로 이동 중 오류가 발생했습니다.')
+    }
+  } catch (error) {
+    console.error('프로젝트로 이동 실패:', error)
+    showError('이동 실패', '프로젝트로 이동 중 오류가 발생했습니다.')
+  }
+}
+
+// 프로젝트 워크스페이스 목록 필터링
+const projectWorkspaces = computed(() => {
+  return workspaceStore.workspaces.filter(w => w.type === 'project' && w.workSpaceSeq)
+})
+
+// 선택된 프로젝트 워크스페이스 이름
+const selectedProjectWorkspaceName = computed(() => {
+  if (!selectedProjectDriveChannel.value) return '프로젝트를 선택하세요'
+  
+  const workspace = workspaceStore.workspaces.find(
+    w => w.type === 'project' && w.workSpaceSeq === selectedProjectDriveChannel.value
+  )
+  return workspace ? workspace.name : '알 수 없는 프로젝트'
+})
+
 // 아이템 삭제
 const deleteItem = async (item) => {
   if (!confirm(`"${item.name}"을(를) 삭제하시겠습니까?`)) {
@@ -897,12 +970,11 @@ const createSharedDoc = async () => {
   // 선택한 폴더 위치를 사용
   const parentFolderId = sharedDocLocation.value
   
-  const result = await driveStore.createSharedDocument(sharedDocTitle.value.trim(), parentFolderId, sharedDocIsLocked.value)
+  const result = await driveStore.createSharedDocument(sharedDocTitle.value.trim(), parentFolderId, false)
   if (result.success) {
     // 폼 초기화
     sharedDocTitle.value = ''
     sharedDocLocation.value = null
-    sharedDocIsLocked.value = false
     showSharedDocModal.value = false
     showFolderSelector.value = false
     // 스토어에서 이미 현재 폴더에 생성된 경우 자동으로 추가되므로 API 재호출 불필요
@@ -983,6 +1055,7 @@ const closeModals = () => {
   showNewFolderModal.value = false
   showSharedDocModal.value = false
   showMoveModal.value = false
+  showMoveToProjectModal.value = false
   showFolderSelector.value = false
   showUploadFolderSelector.value = false
   showNewFolderParentSelector.value = false
@@ -993,7 +1066,9 @@ const closeModals = () => {
   sharedDocLocation.value = null
   moveItemTarget.value = null
   moveItemLocation.value = null
-  sharedDocIsLocked.value = false
+  moveToProjectTarget.value = null
+  selectedProjectDriveChannel.value = null
+  newDocumentName.value = ''
   uploadFolderLocation.value = null
   newFolderParentLocation.value = null
 }
@@ -1257,13 +1332,6 @@ watch(() => workspaceStore.currentWorkspace, () => {
                 {{ item.name }}
                 <div v-if="item.type === 'shared-doc'" class="shared-doc-icons">
                   <v-icon 
-                    v-if="item.isLocked"
-                    class="lock-icon"
-                    size="14"
-                  >
-                    mdi-lock
-                  </v-icon>
-                  <v-icon 
                     class="shared-icon"
                     size="16"
                   >
@@ -1343,19 +1411,6 @@ watch(() => workspaceStore.currentWorkspace, () => {
                 <v-icon size="16">mdi-pencil</v-icon>
               </v-btn>
               
-              <!-- 공유문서 잠금 해제 버튼 -->
-              <v-btn
-                v-if="item.type === 'shared-doc'"
-                :icon="item.isLocked ? 'mdi-lock-open' : 'mdi-lock'"
-                size="small"
-                variant="text"
-                class="action-btn"
-                @click.stop="toggleDocumentLock(item.id)"
-                :title="item.isLocked ? '잠금 해제' : '잠금'"
-              >
-                <v-icon size="16">{{ item.isLocked ? 'mdi-lock-open' : 'mdi-lock' }}</v-icon>
-              </v-btn>
-              
               <!-- 이동 버튼 -->
               <v-btn
                 icon="mdi-folder-move"
@@ -1366,6 +1421,19 @@ watch(() => workspaceStore.currentWorkspace, () => {
                 title="이동"
               >
                 <v-icon size="16">mdi-folder-move</v-icon>
+              </v-btn>
+              
+              <!-- 프로젝트로 이동 버튼 (공유문서만) -->
+              <v-btn
+                v-if="item.type === 'shared-doc'"
+                icon="mdi-share-variant"
+                size="small"
+                variant="text"
+                class="action-btn"
+                @click.stop="openMoveToProjectModal(item)"
+                title="프로젝트로 이동"
+              >
+                <v-icon size="16">mdi-share-variant</v-icon>
               </v-btn>
               
               <!-- 삭제 버튼 -->
@@ -1415,13 +1483,6 @@ watch(() => workspaceStore.currentWorkspace, () => {
               <v-icon :color="item.color" size="20" class="item-icon">{{ item.icon }}</v-icon>
               <span class="item-name">{{ item.name }}</span>
               <div v-if="item.type === 'shared-doc'" class="shared-doc-icons">
-                <v-icon 
-                  v-if="item.isLocked"
-                  class="lock-icon"
-                  size="14"
-                >
-                  mdi-lock
-                </v-icon>
                 <v-icon 
                   class="shared-icon"
                   size="16"
@@ -1495,19 +1556,6 @@ watch(() => workspaceStore.currentWorkspace, () => {
                 <v-icon size="16">mdi-pencil</v-icon>
               </v-btn>
               
-              <!-- 공유문서 잠금 해제 버튼 -->
-              <v-btn
-                v-if="item.type === 'shared-doc'"
-                :icon="item.isLocked ? 'mdi-lock-open' : 'mdi-lock'"
-                size="small"
-                variant="text"
-                class="action-btn"
-                @click.stop="toggleDocumentLock(item.id)"
-                :title="item.isLocked ? '잠금 해제' : '잠금'"
-              >
-                <v-icon size="16">{{ item.isLocked ? 'mdi-lock-open' : 'mdi-lock' }}</v-icon>
-              </v-btn>
-              
               <!-- 이동 버튼 -->
               <v-btn
                 icon="mdi-folder-move"
@@ -1518,6 +1566,19 @@ watch(() => workspaceStore.currentWorkspace, () => {
                 title="이동"
               >
                 <v-icon size="16">mdi-folder-move</v-icon>
+              </v-btn>
+              
+              <!-- 프로젝트로 이동 버튼 (공유문서만) -->
+              <v-btn
+                v-if="item.type === 'shared-doc'"
+                icon="mdi-share-variant"
+                size="small"
+                variant="text"
+                class="action-btn"
+                @click.stop="openMoveToProjectModal(item)"
+                title="프로젝트로 이동"
+              >
+                <v-icon size="16">mdi-share-variant</v-icon>
               </v-btn>
               
               <!-- 삭제 버튼 -->
@@ -1652,15 +1713,6 @@ watch(() => workspaceStore.currentWorkspace, () => {
             </div>
           </div>
           
-          <!-- 잠금 설정 -->
-          <div class="lock-setting">
-            <v-checkbox
-              v-model="sharedDocIsLocked"
-              label="문서 잠금 (편집 권한 제한)"
-              color="primary"
-              hide-details
-            />
-          </div>
         </v-card-text>
         
         <v-card-actions class="modal-actions">
@@ -2019,6 +2071,75 @@ watch(() => workspaceStore.currentWorkspace, () => {
             color="primary" 
             @click="moveItem"
             :disabled="moveItemLocation === undefined"
+          >
+            이동하기
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
+    <!-- 프로젝트로 이동 모달 -->
+    <v-dialog v-model="showMoveToProjectModal" max-width="600px" max-height="90vh" @click:outside="closeModals">
+      <v-card class="move-to-project-modal">
+        <v-card-title class="modal-header">
+          <div class="header-content">
+            <v-icon class="header-icon" color="primary">mdi-share-variant</v-icon>
+            <h3 class="modal-title">프로젝트로 이동</h3>
+          </div>
+          <v-btn icon="mdi-close" variant="text" @click="closeModals"></v-btn>
+        </v-card-title>
+        
+        <v-card-text class="modal-body">
+          <div class="move-item-info mb-4">
+            <v-icon class="mr-2" :color="moveToProjectTarget?.color">{{ moveToProjectTarget?.icon }}</v-icon>
+            <span class="text-body-1 font-weight-medium">{{ moveToProjectTarget?.name }}</span>
+          </div>
+          
+          <!-- 새 문서 이름 (선택사항) -->
+          <div class="mb-4">
+            <v-text-field
+              v-model="newDocumentName"
+              label="새 문서 이름 (선택사항)"
+              placeholder="비워두면 원본 이름 사용"
+              variant="outlined"
+            />
+          </div>
+          
+          <!-- 프로젝트 드라이브 선택 -->
+          <div class="project-selection mb-4">
+            <label class="input-label">프로젝트 드라이브</label>
+            <div class="project-list">
+              <!-- 프로젝트 없음 -->
+              <div v-if="projectWorkspaces.length === 0" class="empty-state">
+                <v-icon size="48" color="grey">mdi-folder-off</v-icon>
+                <p>이동할 프로젝트 드라이브가 없습니다</p>
+              </div>
+              
+              <!-- 프로젝트 목록 -->
+              <div 
+                v-for="workspace in projectWorkspaces" 
+                :key="workspace.workSpaceSeq"
+                class="project-item"
+                :class="{ 'selected': selectedProjectDriveChannel === workspace.workSpaceSeq }"
+                @click="selectedProjectDriveChannel = workspace.workSpaceSeq"
+              >
+                <v-icon class="project-icon" color="#4caf50">mdi-folder-account</v-icon>
+                <span class="project-name">{{ workspace.name }}</span>
+                <span v-if="selectedProjectDriveChannel === workspace.workSpaceSeq" class="selected-indicator">
+                  <v-icon color="primary" size="16">mdi-check</v-icon>
+                </span>
+              </div>
+            </div>
+          </div>
+        </v-card-text>
+        
+        <v-card-actions class="modal-actions">
+          <v-spacer></v-spacer>
+          <v-btn variant="text" @click="closeModals">취소</v-btn>
+          <v-btn 
+            color="primary" 
+            @click="moveToProject"
+            :disabled="!selectedProjectDriveChannel"
           >
             이동하기
           </v-btn>
@@ -2685,6 +2806,10 @@ watch(() => workspaceStore.currentWorkspace, () => {
   right: 8px;
   opacity: 0;
   transition: opacity 0.2s ease;
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 2px;
+  max-width: 100%;
 }
 
 .grid-item:hover .item-actions {
@@ -2694,6 +2819,10 @@ watch(() => workspaceStore.currentWorkspace, () => {
 .action-btn {
   color: rgba(var(--v-theme-on-surface), 0.6);
   transition: all 0.2s ease;
+  flex-shrink: 0;
+  min-width: auto;
+  width: auto;
+  padding: 4px;
 }
 
 .action-btn:hover {
@@ -2928,6 +3057,98 @@ watch(() => workspaceStore.currentWorkspace, () => {
   overflow-y: auto;
   padding: 24px;
   transition: max-height 0.3s ease;
+}
+
+.move-to-project-modal {
+  display: flex;
+  flex-direction: column;
+}
+
+.move-to-project-modal .modal-body {
+  min-height: auto;
+  max-height: 70vh;
+  overflow-y: auto;
+  padding: 24px;
+  transition: max-height 0.3s ease;
+}
+
+.move-item-info {
+  display: flex;
+  align-items: center;
+  padding: 12px;
+  background: rgba(var(--v-theme-surface), 0.5);
+  border-radius: 8px;
+}
+
+.project-selection {
+  margin-top: 16px;
+}
+
+.input-label {
+  display: block;
+  font-weight: 500;
+  margin-bottom: 12px;
+  color: rgba(var(--v-theme-on-surface), 0.87);
+}
+
+.project-list {
+  max-height: 400px;
+  overflow-y: auto;
+  border: 1px solid rgba(var(--v-theme-on-surface), 0.12);
+  border-radius: 8px;
+  background: rgb(var(--v-theme-surface));
+}
+
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 48px 24px;
+  text-align: center;
+  color: rgba(var(--v-theme-on-surface), 0.6);
+}
+
+.empty-state p {
+  margin-top: 16px;
+  font-size: 14px;
+}
+
+.project-item {
+  display: flex;
+  align-items: center;
+  padding: 12px 16px;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+  border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.05);
+}
+
+.project-item:last-child {
+  border-bottom: none;
+}
+
+.project-item:hover {
+  background: rgba(var(--v-theme-primary), 0.05);
+}
+
+.project-item.selected {
+  background: rgba(var(--v-theme-primary), 0.1);
+}
+
+.project-icon {
+  margin-right: 12px;
+  flex-shrink: 0;
+}
+
+.project-name {
+  flex: 1;
+  font-weight: 500;
+  color: rgba(var(--v-theme-on-surface), 0.87);
+}
+
+.selected-indicator {
+  margin-left: 8px;
+  flex-shrink: 0;
 }
 
 .move-item-modal .modal-actions {

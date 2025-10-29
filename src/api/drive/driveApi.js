@@ -36,6 +36,7 @@ const API_ENDPOINTS = {
   PERSONAL_DOCUMENT_LOCK: '/drive-service/drive/personal/documents/lock',
   PERSONAL_DOCUMENT_DOWNLOAD: (channelSeq, docSeq) => `/drive-service/drive/personal/${channelSeq}/documents/${docSeq}/download`,
   PERSONAL_ALL_FOLDERS: (channelSeq) => `/drive-service/drive/personal/${channelSeq}/folders/tree`,
+  PERSONAL_MOVE_TO_PROJECT: '/drive-service/drive/personal/move-to-project',
   
   // 개인 드라이브 라인 관리
   PERSONAL_DOCUMENT_LINES: (channelSeq, docSeq) => `/drive-service/drive/personal/${channelSeq}/documents/${docSeq}/lines`,
@@ -127,6 +128,7 @@ class DriveApiBase {
       documentLock: API_ENDPOINTS.PERSONAL_DOCUMENT_LOCK,
       documentDownload: API_ENDPOINTS.PERSONAL_DOCUMENT_DOWNLOAD,
       allFolders: API_ENDPOINTS.PERSONAL_ALL_FOLDERS,
+      moveToProject: API_ENDPOINTS.PERSONAL_MOVE_TO_PROJECT,
       documentLines: API_ENDPOINTS.PERSONAL_DOCUMENT_LINES,
       lineCreate: API_ENDPOINTS.PERSONAL_LINE_CREATE,
       lineUpdate: API_ENDPOINTS.PERSONAL_LINE_UPDATE,
@@ -504,6 +506,33 @@ class DriveApiBase {
       return createApiResponse(true, convertFolderTree(response.data.data, driveChannelSeq, this.isPersonal))
     } catch (error) {
       return handleApiError(error, '폴더 목록 조회에 실패했습니다.')
+    }
+  }
+
+  // 개인 공유문서를 프로젝트로 이동
+  async movePersonalToProject(personalDriveChannelSeq, personalDocumentSeq, projectDriveChannelSeq, newDocumentName = null) {
+    try {
+      if (!this.isPersonal) {
+        return createApiResponse(false, null, '개인 드라이브에서만 사용 가능합니다.')
+      }
+
+      const response = await axios.post(
+        this.endpoints.moveToProject,
+        {
+          personalDocumentSeq,
+          personalDriveChannelSeq,
+          projectDriveChannelSeq,
+          newDocumentName
+        }
+      )
+      
+      return createApiResponse(true, DriveItem.fromApiFormat({
+        ...response.data.data,
+        driveChannelSeq: projectDriveChannelSeq,
+        isPersonal: false
+      }))
+    } catch (error) {
+      return handleApiError(error, '프로젝트로 이동에 실패했습니다.')
     }
   }
 
