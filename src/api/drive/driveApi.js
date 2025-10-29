@@ -36,6 +36,15 @@ const API_ENDPOINTS = {
   PERSONAL_DOCUMENT_LOCK: '/drive-service/drive/personal/documents/lock',
   PERSONAL_DOCUMENT_DOWNLOAD: (channelSeq, docSeq) => `/drive-service/drive/personal/${channelSeq}/documents/${docSeq}/download`,
   PERSONAL_ALL_FOLDERS: (channelSeq) => `/drive-service/drive/personal/${channelSeq}/folders/tree`,
+  
+  // 개인 드라이브 라인 관리
+  PERSONAL_DOCUMENT_LINES: (channelSeq, docSeq) => `/drive-service/drive/personal/${channelSeq}/documents/${docSeq}/lines`,
+  PERSONAL_LINE_CREATE: (channelSeq) => `/drive-service/drive/personal/${channelSeq}/documents/lines/create`,
+  PERSONAL_LINE_UPDATE: (channelSeq) => `/drive-service/drive/personal/${channelSeq}/documents/lines/update`,
+  PERSONAL_LINE_DELETE: (channelSeq) => `/drive-service/drive/personal/${channelSeq}/documents/lines/delete`,
+  PERSONAL_LINE_BATCH_CREATE: (channelSeq) => `/drive-service/drive/personal/${channelSeq}/documents/lines/batch-create`,
+  PERSONAL_LINE_BATCH_UPDATE: (channelSeq) => `/drive-service/drive/personal/${channelSeq}/documents/lines/batch-update`,
+  PERSONAL_LINE_BATCH_DELETE: (channelSeq) => `/drive-service/drive/personal/${channelSeq}/documents/lines/batch-delete`,
 }
 
 // 허용된 파일 확장자 목록
@@ -118,6 +127,13 @@ class DriveApiBase {
       documentLock: API_ENDPOINTS.PERSONAL_DOCUMENT_LOCK,
       documentDownload: API_ENDPOINTS.PERSONAL_DOCUMENT_DOWNLOAD,
       allFolders: API_ENDPOINTS.PERSONAL_ALL_FOLDERS,
+      documentLines: API_ENDPOINTS.PERSONAL_DOCUMENT_LINES,
+      lineCreate: API_ENDPOINTS.PERSONAL_LINE_CREATE,
+      lineUpdate: API_ENDPOINTS.PERSONAL_LINE_UPDATE,
+      lineDelete: API_ENDPOINTS.PERSONAL_LINE_DELETE,
+      lineBatchCreate: API_ENDPOINTS.PERSONAL_LINE_BATCH_CREATE,
+      lineBatchUpdate: API_ENDPOINTS.PERSONAL_LINE_BATCH_UPDATE,
+      lineBatchDelete: API_ENDPOINTS.PERSONAL_LINE_BATCH_DELETE,
     } : {
       items: API_ENDPOINTS.PROJECT_ITEMS,
       folder: API_ENDPOINTS.PROJECT_FOLDER,
@@ -353,6 +369,97 @@ class DriveApiBase {
       }))
     } catch (error) {
       return handleApiError(error, '잠금 상태 변경에 실패했습니다.')
+    }
+  }
+
+  // 개인 드라이브 전용: 라인 목록 조회
+  async getDocumentLines(driveChannelSeq, documentSeq) {
+    if (!this.isPersonal || !this.endpoints.documentLines) {
+      throw new Error('라인 조회는 개인 드라이브에서만 사용 가능합니다.')
+    }
+    try {
+      const response = await axios.get(this.endpoints.documentLines(driveChannelSeq, documentSeq))
+      return createApiResponse(true, response.data?.data || [])
+    } catch (error) {
+      return handleApiError(error, '라인 목록 조회에 실패했습니다.')
+    }
+  }
+
+  // 개인 드라이브 전용: 단일 라인 생성
+  async createDocumentLine(driveChannelSeq, message) {
+    if (!this.isPersonal || !this.endpoints.lineCreate) {
+      throw new Error('라인 생성은 개인 드라이브에서만 사용 가능합니다.')
+    }
+    try {
+      await axios.post(this.endpoints.lineCreate(driveChannelSeq), message)
+      return createApiResponse(true)
+    } catch (error) {
+      return handleApiError(error, '라인 생성에 실패했습니다.')
+    }
+  }
+
+  // 개인 드라이브 전용: 단일 라인 수정
+  async updateDocumentLine(driveChannelSeq, message) {
+    if (!this.isPersonal || !this.endpoints.lineUpdate) {
+      throw new Error('라인 수정은 개인 드라이브에서만 사용 가능합니다.')
+    }
+    try {
+      await axios.put(this.endpoints.lineUpdate(driveChannelSeq), message)
+      return createApiResponse(true)
+    } catch (error) {
+      return handleApiError(error, '라인 수정에 실패했습니다.')
+    }
+  }
+
+  // 개인 드라이브 전용: 단일 라인 삭제
+  async deleteDocumentLine(driveChannelSeq, message) {
+    if (!this.isPersonal || !this.endpoints.lineDelete) {
+      throw new Error('라인 삭제는 개인 드라이브에서만 사용 가능합니다.')
+    }
+    try {
+      await axios.delete(this.endpoints.lineDelete(driveChannelSeq), { data: message })
+      return createApiResponse(true)
+    } catch (error) {
+      return handleApiError(error, '라인 삭제에 실패했습니다.')
+    }
+  }
+
+  // 개인 드라이브 전용: 배치 라인 생성
+  async createDocumentLines(driveChannelSeq, message) {
+    if (!this.isPersonal || !this.endpoints.lineBatchCreate) {
+      throw new Error('배치 라인 생성은 개인 드라이브에서만 사용 가능합니다.')
+    }
+    try {
+      await axios.post(this.endpoints.lineBatchCreate(driveChannelSeq), message)
+      return createApiResponse(true)
+    } catch (error) {
+      return handleApiError(error, '배치 라인 생성에 실패했습니다.')
+    }
+  }
+
+  // 개인 드라이브 전용: 배치 라인 수정
+  async updateDocumentLines(driveChannelSeq, message) {
+    if (!this.isPersonal || !this.endpoints.lineBatchUpdate) {
+      throw new Error('배치 라인 수정은 개인 드라이브에서만 사용 가능합니다.')
+    }
+    try {
+      await axios.put(this.endpoints.lineBatchUpdate(driveChannelSeq), message)
+      return createApiResponse(true)
+    } catch (error) {
+      return handleApiError(error, '배치 라인 수정에 실패했습니다.')
+    }
+  }
+
+  // 개인 드라이브 전용: 배치 라인 삭제
+  async deleteDocumentLines(driveChannelSeq, message) {
+    if (!this.isPersonal || !this.endpoints.lineBatchDelete) {
+      throw new Error('배치 라인 삭제는 개인 드라이브에서만 사용 가능합니다.')
+    }
+    try {
+      await axios.delete(this.endpoints.lineBatchDelete(driveChannelSeq), { data: message })
+      return createApiResponse(true)
+    } catch (error) {
+      return handleApiError(error, '배치 라인 삭제에 실패했습니다.')
     }
   }
 

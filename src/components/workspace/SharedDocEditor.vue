@@ -207,6 +207,7 @@ import { connectStomp, sendStompMessage, disconnectStomp } from '@/services/edit
 import { documentApi } from '@/api/document/documentApi';
 import { projectDriveApi } from '@/api/drive/driveApi';
 import { useAuthStore } from '@/store/authStore';
+import { useWorkspaceStore } from '@/store/workspaceStore';
 
 // Props 정의
 const props = defineProps({
@@ -230,12 +231,19 @@ const emit = defineEmits(['document-line-updated', 'document-line-deleted']);
 // 라우터
 const router = useRouter();
 
-// Auth Store
+// Store
 const authStore = useAuthStore();
+const workspaceStore = useWorkspaceStore();
 
 // 뒤로가기 함수
 const goBack = () => {
-  router.go(-1);
+  // 항상 드라이브 페이지로 이동
+  const workspace = workspaceStore.workspaces.find(w => w.id === workspaceStore.currentWorkspace);
+  if (workspace) {
+    router.push(`/workspaces/${workspace.id}/drive`);
+  } else {
+    router.push('/workspaces/personal/drive');
+  }
 };
 
 // 고유 ID 생성 함수

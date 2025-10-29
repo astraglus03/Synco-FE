@@ -100,27 +100,8 @@ export const usePersonalDriveStore = defineStore('personalDrive', () => {
       const result = await personalDriveApi.createFolder(name, currentDriveChannelSeq.value, targetParentId, true)
       
       if (result.success) {
-        // 생성된 폴더가 현재 보고 있는 폴더에 생성된 경우에만 즉시 추가
-        // (다른 폴더에 생성된 경우는 해당 폴더로 이동할 때 자동으로 조회됨)
-        if (targetParentId === currentParentId.value) {
-          // 폴더를 올바른 위치에 삽입 (폴더들 중에서 orders 기준으로 정렬)
-          const newFolder = result.data
-          const folders = items.value.filter(item => item.type === 'folder')
-          const files = items.value.filter(item => item.type !== 'folder')
-          
-          // 새 폴더를 폴더들 중에서 올바른 위치에 삽입
-          let insertIndex = folders.length
-          for (let i = 0; i < folders.length; i++) {
-            if ((newFolder.orders || 0) < (folders[i].orders || 0)) {
-              insertIndex = i
-              break
-            }
-          }
-          
-          // 폴더들을 다시 정렬하고 파일들과 합치기
-          folders.splice(insertIndex, 0, newFolder)
-          items.value = [...folders, ...files]
-        }
+        // 폴더 생성 후 현재 보고 있는 폴더의 목록을 다시 불러와서 갱신
+        await loadItems(currentDriveChannelSeq.value, currentParentId.value)
         
         return { success: true, data: result.data }
       } else {
@@ -434,10 +415,9 @@ export const usePersonalDriveStore = defineStore('personalDrive', () => {
       const result = await personalDriveApi.getAllFolders(currentDriveChannelSeq.value)
       
       if (result.success) {
-        // API 응답을 DriveItem 형태로 변환
-        const folders = result.data.map(folder => DriveItem.fromApiFormat(folder))
-        allFolders.value = folders
-        return { success: true, data: folders }
+        // convertFolderTree에서 이미 DriveItem.fromApiFormat으로 변환 완료
+        allFolders.value = result.data || []
+        return { success: true, data: result.data || [] }
       } else {
         error.value = result.error
         return { success: false, error: result.error }

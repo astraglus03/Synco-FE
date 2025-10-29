@@ -4,7 +4,7 @@ import { usePermissions, PERMISSIONS } from '@/composables/usePermissions'
 import { usePersonalDriveStore } from '@/store/drive/personalDriveStore'
 import { useWorkspaceStore } from '@/store/workspaceStore'
 import { useDraggable, useDropZone } from '@vueuse/core'
-import SharedDocEditor from './SharedDocEditor.vue'
+import PersonalTextEditor from './PersonalTextEditor.vue'
 
 const props = defineProps({
   currentChannel: String
@@ -154,12 +154,8 @@ const parseSize = (sizeStr) => {
 // 공유문서 더블클릭으로 문서 편집기 진입
 const openSharedDoc = async (doc) => {
   if (doc.type === 'shared-doc') {
-    const result = await driveStore.loadDocumentContent(doc.id)
-    if (result.success) {
-      showDocEditor.value = true
-    } else {
-      console.error('문서 내용 로드 실패:', result.error)
-    }
+    currentDocument.value = doc
+    showDocEditor.value = true
   }
 }
 
@@ -194,7 +190,15 @@ const saveDocument = async (docData) => {
 // 공유문서 편집기 닫기
 const closeDocEditor = () => {
   showDocEditor.value = false
+  currentDocument.value = null
   driveStore.currentDocument = null
+}
+
+// 공유 문서로 변환된 경우 처리
+const handleDocumentShared = (data) => {
+  closeDocEditor()
+  // 목록 새로고침
+  driveStore.loadItems(currentDriveChannelSeq.value, driveStore.currentParentId)
 }
 
 // 공유문서 잠금 해제/잠금
@@ -605,7 +609,15 @@ const createFolder = async () => {
     newFolderParentLocation.value = null
     showNewFolderModal.value = false
     showNewFolderParentSelector.value = false
-    // 스토어에서 이미 현재 폴더에 생성된 경우 자동으로 추가되므로 API 재호출 불필요
+    
+    // 폴더 생성 후 전체 폴더 목록 갱신 (폴더 선택 드롭다운에 새 폴더 표시를 위해)
+    await loadAllFolders()
+    
+    // 현재 폴더가 아닌 곳에 생성한 경우, 현재 폴더 목록은 그대로 유지
+    // (현재 폴더에 생성한 경우 스토어에서 이미 추가됨)
+    if (parentFolderId !== null && parentFolderId !== driveStore.currentParentId) {
+      // 다른 폴더에 생성한 경우 현재 목록은 변경하지 않음
+    }
   } else {
     showError('폴더 생성 실패', result.error || '폴더 생성 중 오류가 발생했습니다.')
   }
@@ -1787,6 +1799,21 @@ watch(() => workspaceStore.currentWorkspace, () => {
             확인
           </v-btn>
         </v-card-actions>
+      </v-card>
+    </v-dialog>
+
+    <!-- 문서 편집기 -->
+    <v-dialog v-model="showDocEditor" max-width="100%" max-height="100%" persistent>
+      <v-card class="doc-editor-modal" style="height: 100vh; display: flex; flex-direction: column;">
+        <v-card-text style="padding: 0; flex: 1; overflow: hidden;">
+          <PersonalTextEditor 
+            v-if="currentDocument && currentDriveChannelSeq"
+            :document-seq="currentDocument.id"
+            :drive-channel-seq="currentDriveChannelSeq"
+            @document-shared="handleDocumentShared"
+            @close="closeDocEditor"
+          />
+        </v-card-text>
       </v-card>
     </v-dialog>
   </div>
