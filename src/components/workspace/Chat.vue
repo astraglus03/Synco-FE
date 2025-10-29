@@ -172,6 +172,10 @@ const highlightedMessage = computed(() => {
   return parseMentions(newMessage.value);
 });
 
+let reconnectAttempts = 0;
+const MAX_RECONNECT_ATTEMPTS = 5;
+const RECONNECT_DELAY = 3000;
+
 // ✅ WebSocket 연결
 const connectWebsocket = () => {
   console.log("토큰 확인:", token.value);
@@ -228,9 +232,6 @@ const connectWebsocket = () => {
               return;
             }
 
-            // // ✅ 내가 보낸 메시지는 무시 (서버 broadcast에 포함되므로)
-            // if (Number(parsed.senderSeq) === Number(memberSeq.value)) return;
-
             // 🟩 1️⃣ 서버에서 다시 받은 내 메시지가 temp_로 이미 표시된 경우 → 교체 처리
             if (Number(parsed.senderSeq) === Number(memberSeq.value)) {
               const tempMsgIndex = messages.value.findIndex(
@@ -286,7 +287,6 @@ const connectWebsocket = () => {
                   : (parsed.senderName || parsed.senderSeq)
                       ?.toString()
                       .charAt(0),
-              // profileImageUrl: parsed.senderProfileImageUrl || null,
               profileImageUrl:
                 parsed.senderProfileImageUrl &&
                 parsed.senderProfileImageUrl.trim() !== ""
@@ -323,6 +323,10 @@ const connectWebsocket = () => {
     },
     (error) => {
       console.error("❌ WebSocket 연결 실패:", error);
+      if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
+        reconnectAttempts++;
+        setTimeout(() => connectWebsocket(), RECONNECT_DELAY);
+      }
     }
   );
 };
