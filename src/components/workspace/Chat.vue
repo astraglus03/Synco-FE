@@ -211,12 +211,11 @@ const connectWebsocket = () => {
               
               // 타이핑 종료 시 자동으로 숨김
               if (!parsed.typing) {
-                setTimeout(() => {
-                  otherTyping.value = false;
-                  typingUserName.value = ""; // ✅ 이름도 초기화
-                }, 3000);
+                otherTyping.value = false;
+                typingUserName.value = ""; // ✅ 이름도 초기화
+                return;
               }
-              
+
               return;
             }
 
@@ -790,6 +789,8 @@ const loadMessagesAfterLastRead = async () => {
 
 // 채널 변경 시 WebSocket 재연결
 const changeChannel = async (channelId) => {
+  sendTypingStopEvent();
+  
   if (currentChannel.value === channelId) return;
 
   console.log("🔄 채널 변경:", currentChannel.value, "→", channelId);
@@ -1332,7 +1333,7 @@ const sendTypingStartEvent = () => {
       };
 
       stompClient.value.send(
-        `/publish/typing`,
+        `/publish/typing/${channelSeq.value}`,
         JSON.stringify(typingEvent),
         { Authorization: `Bearer ${token.value}` }
       );
@@ -1388,7 +1389,7 @@ const sendTypingStopEvent = () => {
 
   // 6. WebSocket 전송
   stompClient.value.send(
-    `/publish/typing`,
+    `/publish/typing/${channelSeq.value}`,
     JSON.stringify(stopEvent),
     { Authorization: `Bearer ${token.value}` }
   );
