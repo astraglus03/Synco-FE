@@ -180,7 +180,22 @@ export const useMeetingStore = defineStore('meeting', () => {
       
       return roomSession
     } catch (err) {
-      error.value = err.message || '화상회의 생성에 실패했습니다.'
+      // 백엔드 에러 메시지 추출
+      let errorMessage = '화상회의 생성에 실패했습니다.'
+      
+      if (err.response?.data) {
+        // 백엔드에서 던진 에러 메시지 추출
+        errorMessage = err.response.data.message || err.response.data.error || err.response.data
+        // 메시지가 객체인 경우 처리
+        if (typeof errorMessage === 'object') {
+          errorMessage = err.response.data.message || '화상회의 생성에 실패했습니다.'
+        }
+      } else if (err.message) {
+        errorMessage = err.message
+      }
+      
+      error.value = errorMessage
+      console.error('❌ 회의 생성 에러:', errorMessage)
       throw err
     } finally {
       isCreating.value = false
@@ -222,7 +237,22 @@ export const useMeetingStore = defineStore('meeting', () => {
       
       return roomSession
     } catch (err) {
-      error.value = err.message || '화상회의 참여에 실패했습니다.'
+      // 백엔드 에러 메시지 추출
+      let errorMessage = '화상회의 참여에 실패했습니다.'
+      
+      if (err.response?.data) {
+        // 백엔드에서 던진 에러 메시지 추출
+        errorMessage = err.response.data.message || err.response.data.error || err.response.data
+        // 메시지가 객체인 경우 처리
+        if (typeof errorMessage === 'object') {
+          errorMessage = err.response.data.message || '화상회의 참여에 실패했습니다.'
+        }
+      } else if (err.message) {
+        errorMessage = err.message
+      }
+      
+      error.value = errorMessage
+      console.error('❌ 회의 참여 에러:', errorMessage)
       throw err
     } finally {
       isJoining.value = false

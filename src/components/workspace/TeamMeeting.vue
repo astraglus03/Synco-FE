@@ -595,7 +595,15 @@ const getParticipantColor = (participant) => {
 
 const joinFirstActiveRoom = async () => {
   if (activeRooms.value.length > 0) {
-    await joinRoom(activeRooms.value[0])
+    try {
+      await joinRoom(activeRooms.value[0])
+    } catch (error) {
+      console.error('첫 회의 참여 실패:', error)
+      // 에러는 meetingStore에서 이미 설정되므로 스낵바만 표시
+      if (meetingStore.error) {
+        showError.value = true
+      }
+    }
   }
 }
 
@@ -604,6 +612,10 @@ const joinRoom = async (room) => {
     await meetingStore.joinRoom(room.roomId)
   } catch (error) {
     console.error('회의 참여 실패:', error)
+    // 에러는 meetingStore에서 이미 설정되므로 스낵바만 표시
+    if (meetingStore.error) {
+      showError.value = true
+    }
   }
 }
 
@@ -637,6 +649,10 @@ const confirmCreateRoom = async () => {
     await refreshMeetings()
   } catch (error) {
     console.error('회의 생성 실패:', error)
+    // 에러는 meetingStore에서 이미 설정되므로 스낵바만 표시
+    if (meetingStore.error) {
+      showError.value = true
+    }
   }
 }
 
