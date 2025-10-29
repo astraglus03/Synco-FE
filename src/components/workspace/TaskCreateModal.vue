@@ -19,6 +19,7 @@
                   placeholder="예: Q3 마케팅 캠페인 런칭"
                   :rules="titleRules"
                   outlined
+                  :disabled="isEditMode && props.editModeLimited"
                   required
                 ></v-text-field>
               </div>
@@ -32,6 +33,7 @@
                   :rules="contentsRules"
                   outlined
                   rows="4"
+                  :disabled="isEditMode && props.editModeLimited"
                   required
                 ></v-textarea>
               </div>
@@ -46,6 +48,7 @@
                       type="date"
                       :rules="dateRules"
                       outlined
+                      :disabled="isEditMode && props.editModeLimited"
                       required
                     ></v-text-field>
                   </v-col>
@@ -56,6 +59,7 @@
                       type="date"
                       :rules="dateRules"
                       outlined
+                      :disabled="isEditMode && props.editModeLimited"
                       required
                     ></v-text-field>
                   </v-col>
@@ -76,6 +80,7 @@
                   outlined
                   :loading="isLoadingMembers"
                   placeholder="팀원을 선택하세요"
+                  :disabled="isEditMode && props.editModeLimited"
                   required
                 >
                   <template #selection="{ item }">
@@ -109,6 +114,20 @@
                   outlined
                   required
                 ></v-select>
+              </div>
+
+              <!-- 보드 선택 (개인 일정관리에서 사용) -->
+              <div class="mb-4" v-if="showBoardSelect">
+                <label class="text-subtitle-1 font-weight-medium mb-2 d-block">보드</label>
+                <v-select
+                  v-model="taskData.boardSeq"
+                  :items="boardOptions"
+                  item-title="boardName"
+                  item-value="boardSeq"
+                  outlined
+                  placeholder="보드를 선택하세요"
+                  required
+                />
               </div>
             </v-col>
           </v-row>
@@ -157,6 +176,19 @@ const props = defineProps({
   editTaskData: {
     type: Object,
     default: null
+  },
+  showBoardSelect: {
+    type: Boolean,
+    default: false
+  },
+  boardOptions: {
+    type: Array,
+    default: () => []
+  },
+  editModeLimited: {
+    // true면 수정 시 상태/보드만 변경 가능
+    type: Boolean,
+    default: false
   }
 })
 
@@ -338,7 +370,7 @@ watch(isOpen, (newValue) => {
         startDate: today,
         endDate: today,
         picMemberSeq: null,
-        boardSeq: null
+        boardSeq: props.showBoardSelect ? (props.boardOptions[0]?.boardSeq || null) : null
       }
     }
   }

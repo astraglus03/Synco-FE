@@ -49,12 +49,18 @@
             :key="member.memberSeq"
             class="avatar"
             :class="{ 'selected': selectedFilter === member.memberSeq }"
-            :style="{ backgroundColor: getMemberColor(member.memberSeq) }"
+            :style="{ backgroundColor: member.profileImageUrl ? 'transparent' : getMemberColor(member.memberSeq) }"
             :title="member.name"
             :data-member-name="member.name"
             @click="toggleFilter(member.memberSeq)"
           >
-            {{ getMemberInitial(member.name) }}
+            <img 
+              v-if="member.profileImageUrl" 
+              :src="member.profileImageUrl" 
+              :alt="member.name"
+              class="profile-image"
+            />
+            <span v-else>{{ getMemberInitial(member.name) }}</span>
           </div>
         </div>
         <!-- 타임라인/캘린더 뷰: 필터 버튼 -->
@@ -132,7 +138,7 @@
                 <div class="task-title">{{ task.title }}</div>
                 <div class="task-actions">
                   <div class="task-assignee">{{ task.assignee }}</div>
-                  <v-menu v-if="canCreateTask" location="bottom start">
+                  <v-menu v-if="canEditTask(task)" location="bottom start">
                     <template v-slot:activator="{ props }">
                       <v-btn 
                         icon="mdi-dots-vertical" 
@@ -147,7 +153,7 @@
                       <v-list-item @click="editTask(task)" class="menu-item">
                         <v-list-item-title class="text-caption text-center">수정</v-list-item-title>
                       </v-list-item>
-                      <v-list-item @click="deleteTask(task)" class="menu-item text-red">
+                      <v-list-item v-if="canCreateTask" @click="deleteTask(task)" class="menu-item text-red">
                         <v-list-item-title class="text-caption text-center">삭제</v-list-item-title>
                       </v-list-item>
                     </v-list>
@@ -191,7 +197,7 @@
               <div class="task-title">{{ task.title }}</div>
               <div class="task-actions">
                 <div class="task-assignee">{{ task.assignee }}</div>
-                <v-menu v-if="canCreateTask" location="bottom start">
+                <v-menu v-if="canEditTask(task)" location="bottom start">
                   <template v-slot:activator="{ props }">
                     <v-btn 
                       icon="mdi-dots-vertical" 
@@ -206,7 +212,7 @@
                     <v-list-item @click="editTask(task)" class="menu-item">
                       <v-list-item-title class="text-caption text-center">수정</v-list-item-title>
                     </v-list-item>
-                    <v-list-item @click="deleteTask(task)" class="menu-item text-red">
+                    <v-list-item v-if="canCreateTask" @click="deleteTask(task)" class="menu-item text-red">
                       <v-list-item-title class="text-caption text-center">삭제</v-list-item-title>
                     </v-list-item>
                   </v-list>
@@ -249,7 +255,7 @@
               <div class="task-title">{{ task.title }}</div>
               <div class="task-actions">
                 <div class="task-assignee">{{ task.assignee }}</div>
-                <v-menu v-if="canCreateTask" location="bottom start">
+                <v-menu v-if="canEditTask(task)" location="bottom start">
                   <template v-slot:activator="{ props }">
                     <v-btn 
                       icon="mdi-dots-vertical" 
@@ -264,7 +270,7 @@
                     <v-list-item @click="editTask(task)" class="menu-item">
                       <v-list-item-title class="text-caption text-center">수정</v-list-item-title>
                     </v-list-item>
-                    <v-list-item @click="deleteTask(task)" class="menu-item text-red">
+                    <v-list-item v-if="canCreateTask" @click="deleteTask(task)" class="menu-item text-red">
                       <v-list-item-title class="text-caption text-center">삭제</v-list-item-title>
                     </v-list-item>
                   </v-list>
@@ -304,6 +310,7 @@
       :project-id="currentProjectId"
       :is-edit-mode="isEditMode"
       :edit-task-data="editTaskData"
+      :edit-mode-limited="isEditModeLimited"
       @task-created="onTaskCreated"
       @task-updated="onTaskUpdated"
     />
@@ -424,8 +431,14 @@
                   :class="{ 'selected': selectedFilters.assignees.includes(member.memberSeq) }"
                   @click="toggleFilterAssignee(member.memberSeq)"
                 >
-                  <div class="option-avatar-simple" :style="{ backgroundColor: getMemberColor(member.memberSeq) }">
-                    <span class="text-white text-caption">{{ getMemberInitial(member.name) }}</span>
+                  <div class="option-avatar-simple" :style="{ backgroundColor: member.profileImageUrl ? 'transparent' : getMemberColor(member.memberSeq) }">
+                    <img 
+                      v-if="member.profileImageUrl" 
+                      :src="member.profileImageUrl" 
+                      :alt="member.name"
+                      class="profile-image-small"
+                    />
+                    <span v-else class="text-white text-caption">{{ getMemberInitial(member.name) }}</span>
                   </div>
                   <span class="option-label-simple">{{ member.name }}</span>
                 </div>
@@ -528,6 +541,7 @@ const isTaskModalOpen = ref(false)
 // Task 수정 모달 상태
 const isEditMode = ref(false)
 const editTaskData = ref(null)
+const isEditModeLimited = ref(false)
 
 // Task 상세 모달 상태
 const isTaskDetailModalOpen = ref(false)
@@ -646,6 +660,18 @@ const canCreateTask = computed(() => {
   const authority = currentUser?.authority
   return authority === 'SUPER' || authority === 'MANAGER'
 })
+
+// participant라도 자신이 담당자인 업무는 수정 가능
+const canEditTask = (task) => {
+  try {
+    const mySeq = Number(authStore.memberSeq)
+    const assigneeSeq = Number(task.assigneeMemberSeq || task.picMemberSeq || task.assigneeSeq)
+    const isAssignee = !!assigneeSeq && mySeq === assigneeSeq
+    return canCreateTask.value || isAssignee
+  } catch (e) {
+    return canCreateTask.value
+  }
+}
 
 // 멤버 이니셜 추출 함수
 const getMemberInitial = (memberName) => {
@@ -818,6 +844,7 @@ watch(isTaskModalOpen, (newValue) => {
     // 모달이 닫힐 때 수정 모드 상태 초기화
     isEditMode.value = false
     editTaskData.value = null
+    isEditModeLimited.value = false
   }
 })
 
@@ -849,6 +876,7 @@ const editTask = async (task) => {
       // 수정 모드로 설정하고 모달 열기
       editTaskData.value = taskDetail
       isEditMode.value = true
+      isEditModeLimited.value = !canCreateTask.value
       isTaskModalOpen.value = true
       console.log('✅ 태스크 수정 모달 열기')
     } else {
@@ -1135,6 +1163,13 @@ const getMemberName = (memberSeq) => {
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
 }
 
+.profile-image {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
 .avatar::after {
   content: attr(data-member-name);
   position: absolute;
@@ -1390,6 +1425,9 @@ const getMemberName = (memberSeq) => {
   font-size: 12px;
   color: #888;
   line-height: 1.4;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* 반응형 디자인 */
@@ -1720,6 +1758,13 @@ const getMemberName = (memberSeq) => {
   justify-content: center;
   flex-shrink: 0;
   box-shadow: 0 1px 2px rgba(0,0,0,0.15);
+}
+
+.profile-image-small {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  object-fit: cover;
 }
 
 .option-label-simple {

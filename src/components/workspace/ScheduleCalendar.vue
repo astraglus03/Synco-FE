@@ -19,93 +19,24 @@
       </v-btn>
     </div>
 
-    <!-- 캘린더 그리드 -->
-    <div class="calendar-grid">
-      <!-- 요일 헤더 -->
-      <div class="weekday-header">
-        <div class="weekday-cell" v-for="day in weekdays" :key="day">
-          {{ day }}
-        </div>
-      </div>
-
-      <!-- 날짜 그리드 -->
-      <div class="date-grid">
-        <div 
-          v-for="date in calendarDates" 
-          :key="date.dateStr"
-          :class="['date-cell', getDateCellClass(date)]"
-          @click="selectDate(date)"
-        >
-          <div class="date-number">{{ date.date }}</div>
-          
-          <!-- 해당 날짜의 태스크들 -->
-          <div class="task-list-container">
-            <template v-for="(task, index) in getTasksForDate(date)" :key="task.id">
-              <div
-                v-if="index < 3"
-                :class="['task-badge', getStatusClass(task.status)]"
-                @click.stop="handleTaskClick(task)"
-                :title="task.title"
-              >
-                <span class="task-icon">{{ getStatusIcon(task.status) }}</span>
-                <span class="task-title">{{ task.title }}</span>
-              </div>
-            </template>
-            
-            <!-- 더 많은 태스크가 있을 경우 -->
-            <div 
-              v-if="getTaskCountForDate(date) > 3" 
-              class="task-more-badge"
-              @click.stop="openDateDetail(date)"
-            >
-              + {{ getTaskCountForDate(date) - 3 }}개
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
+    <!-- FullCalendar -->
+    <FullCalendar
+      ref="calendarRef"
+      class="fullcalendar-container"
+      :options="calendarOptions"
+    />
   </div>
 
-  <!-- 날짜 상세 모달 -->
-  <v-dialog v-model="showDateDetailModal" max-width="600">
-    <v-card>
-      <v-card-title class="d-flex align-center justify-space-between">
-        <span>{{ selectedDateDetail?.dateStr }}</span>
-        <v-btn icon variant="text" @click="showDateDetailModal = false">
-          <v-icon>mdi-close</v-icon>
-        </v-btn>
-      </v-card-title>
-      <v-card-text>
-        <div v-if="selectedDateDetail">
-          <div
-            v-for="task in getTasksForDate(selectedDateDetail)"
-            :key="task.id"
-            class="date-task-item"
-            @click="handleTaskClick(task)"
-          >
-            <div :class="['task-status', getStatusClass(task.status)]">
-              <span class="status-icon">{{ getStatusIcon(task.status) }}</span>
-            </div>
-            <div class="task-info">
-              <div class="task-info-title">{{ task.title }}</div>
-              <div class="task-info-assignee">{{ task.assignee }}</div>
-            </div>
-            <div class="task-date-range">
-              {{ formatDateRange(task) }}
-            </div>
-          </div>
-          
-          <div v-if="getTaskCountForDate(selectedDateDetail) === 0" class="no-tasks">
-            이 날짜에 예정된 업무가 없습니다.
-          </div>
-        </div>
-      </v-card-text>
-    </v-card>
-  </v-dialog>
+  
 </template>
 
 <script setup>
 import { ref, computed } from 'vue'
+import FullCalendar from '@fullcalendar/vue3'
+import dayGridPlugin from '@fullcalendar/daygrid'
+import interactionPlugin from '@fullcalendar/interaction'
+
+// removed currentView state
 
 const props = defineProps({
   kanbanTasks: {
@@ -122,8 +53,8 @@ const emit = defineEmits(['open-task-detail'])
 
 // 현재 날짜
 const currentDate = ref(new Date())
-const selectedDateDetail = ref(null)
-const showDateDetailModal = ref(false)
+const calendarRef = ref(null)
+
 
 // 모든 태스크를 하나의 배열로 합치기
 const allTasks = computed(() => {
@@ -137,6 +68,80 @@ const allTasks = computed(() => {
   
   return tasks
 })
+
+// 상태별 색상 (타임라인과 동일하게)
+function getEventColors(status) {
+  const colorMap = {
+    'TODO': { bg: '#e3f2fd', border: '#e3f2fd', text: '#1976d2' },
+    'IN_PROGRESS': { bg: '#fff3e0', border: '#fff3e0', text: '#f57c00' },
+    'COMPLETED': { bg: '#e8f5e8', border: '#e8f5e8', text: '#388e3c' },
+  }
+  return colorMap[status] || { bg: '#f5f5f5', border: '#f5f5f5', text: '#666666' }
+}
+
+// 날짜 유틸: YYYY-MM-DD 포맷으로 반환
+function toDateString(d) {
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
+
+function addDays(dateInput, days) {
+  const d = new Date(dateInput)
+  d.setDate(d.getDate() + days)
+  // allDay 이벤트이므로 시간 제거
+  d.setHours(0, 0, 0, 0)
+  return toDateString(d)
+}
+
+// FullCalendar 이벤트 데이터 변환 (allDay는 end가 배타(exclusive)이므로 +1일 처리)
+const calendarEvents = computed(() => {
+  return allTasks.value.map(task => {
+    const colors = getEventColors(task.status)
+    return {
+      id: task.id,
+      title: task.title,
+      start: toDateString(new Date(task.startDate)),
+      end: addDays(task.endDate, 1), // 마감일 포함 표시
+      allDay: true,
+      display: 'block',
+      backgroundColor: colors.bg,
+      borderColor: colors.border,
+      textColor: colors.text,
+      classNames: [`status-${String(task.status || '').toLowerCase()}`],
+      extendedProps: {
+        task,
+        status: task.status,
+      }
+    }
+  })
+})
+
+function updateCurrentDateFromApi() {
+  if (!calendarRef.value) return
+  const api = calendarRef.value.getApi()
+  currentDate.value = api.getDate()
+}
+
+// FullCalendar 옵션
+const calendarOptions = computed(() => ({
+  plugins: [dayGridPlugin, interactionPlugin],
+  initialView: 'dayGridMonth', // 초기 뷰 설정
+  headerToolbar: false,
+  locale: 'ko',
+  firstDay: 0,
+  fixedWeekCount: true,
+  showNonCurrentDates: true,
+  dayMaxEvents: 3,
+  expandRows: true,
+  height: 'auto',
+  contentHeight: 'auto',
+  events: calendarEvents.value,
+  moreLinkContent: (args) => `+ ${args.num}개`,
+  datesSet: () => updateCurrentDateFromApi(),
+  eventClick: (info) => handleTaskClick(info.event.extendedProps?.task || info.event),
+}))
 
 // 주의 시작 (일요일)
 const weekdays = ['일', '월', '화', '수', '목', '금', '토']
@@ -296,25 +301,35 @@ function getStatusIcon(status) {
 
 // 이전 달
 function previousMonth() {
-  currentDate.value = new Date(
-    currentDate.value.getFullYear(),
-    currentDate.value.getMonth() - 1,
-    1
-  )
+  if (calendarRef.value) {
+    calendarRef.value.getApi().prev()
+    updateCurrentDateFromApi()
+  }
 }
 
 // 다음 달
 function nextMonth() {
-  currentDate.value = new Date(
-    currentDate.value.getFullYear(),
-    currentDate.value.getMonth() + 1,
-    1
-  )
+  if (calendarRef.value) {
+    calendarRef.value.getApi().next()
+    updateCurrentDateFromApi()
+  }
 }
 
 // 오늘로 이동
 function goToToday() {
-  currentDate.value = new Date()
+  if (calendarRef.value) {
+    calendarRef.value.getApi().today()
+    updateCurrentDateFromApi()
+  }
+}
+
+// 뷰 전환 (월/주)
+function changeView(view) {
+  if (!calendarRef.value) return
+  const api = calendarRef.value.getApi()
+  api.changeView(view)
+  // currentView.value = view // Removed currentView state
+  updateCurrentDateFromApi()
 }
 
 // 날짜 선택
@@ -324,21 +339,19 @@ function selectDate(dateInfo) {
 
 // 태스크 클릭
 function handleTaskClick(task) {
+  // 더보기(popover)에서 클릭한 경우 남아있는 팝오버를 닫아 사용자 경험 개선
+  closeMorePopover()
   emit('open-task-detail', task)
 }
 
-// 날짜 상세 열기
-function openDateDetail(dateInfo) {
-  selectedDateDetail.value = dateInfo
-  showDateDetailModal.value = true
-}
-
-// 날짜 범위 포맷
-function formatDateRange(task) {
-  const start = new Date(task.startDate)
-  const end = new Date(task.endDate)
-  const format = (d) => `${d.getMonth() + 1}/${d.getDate()}`
-  return `${format(start)} - ${format(end)}`
+// Vuetify 모달 제거로 관련 함수 삭제
+function closeMorePopover() {
+  try {
+    const popovers = document.querySelectorAll('.fc-popover')
+    popovers.forEach((el) => el.parentElement && el.parentElement.removeChild(el))
+  } catch (e) {
+    // 안전하게 무시
+  }
 }
 </script>
 
@@ -347,7 +360,7 @@ function formatDateRange(task) {
   background: white;
   border-radius: 8px;
   padding: 24px;
-  height: calc(100vh - 200px);
+  height: auto; /* 한 달 전체가 보이도록 자동 높이 */
 }
 
 /* 네비게이션 */
@@ -387,21 +400,17 @@ function formatDateRange(task) {
   margin-left: 16px;
 }
 
-/* 캘린더 그리드 */
-.calendar-grid {
-  display: flex;
-  flex-direction: column;
+/* FullCalendar 컨테이너 */
+.fullcalendar-container {
+  height: auto; /* 내부 스크롤 제거 */
 }
 
-/* 요일 헤더 */
-.weekday-header {
-  display: grid;
-  grid-template-columns: repeat(7, 1fr);
-  gap: 1px;
+/* 요일 헤더를 기존 스타일과 동일하게 */
+:deep(.fc-col-header) {
   margin-bottom: 8px;
 }
 
-.weekday-cell {
+:deep(.fc-col-header-cell) {
   padding: 12px;
   text-align: center;
   font-weight: 600;
@@ -411,186 +420,160 @@ function formatDateRange(task) {
   border-bottom: 2px solid #e0e0e0;
 }
 
-/* 날짜 그리드 */
-.date-grid {
-  display: grid;
-  grid-template-columns: repeat(7, 1fr);
-  gap: 1px;
-  background: #e0e0e0;
+/* 날짜 그리드 간격/경계선 느낌 - 더 깔끔하게 */
+:deep(.fc-daygrid-body) {
+  background: transparent;
 }
 
-.date-cell {
+:deep(.fc-daygrid-day) {
+  background: #ffffff;
+  border: 1px solid #f0f2f5;
+}
+
+:deep(.fc-daygrid-day-frame) {
+  background: #ffffff;
   min-height: 120px;
-  padding: 8px;
-  cursor: pointer;
-  transition: all 0.2s;
-  display: flex;
-  flex-direction: column;
+  padding: 40px 8px 0 8px; /* 날짜와 업무 사이 여백 소폭 추가 */
   position: relative;
-  background: white; /* 이번달 날짜는 흰색 */
+  display: flex;           /* 셀 내부 배치를 위한 플렉스 레이아웃 */
+  flex-direction: column;
 }
 
 /* 다른 달 날짜는 회색 */
-.date-cell.other-month {
+:deep(.fc-day-other .fc-daygrid-day-frame) {
   background: #f5f5f5;
 }
 
-.date-cell.other-month .date-number {
-  color: #999;
+/* 날짜 숫자 스타일 */
+:deep(.fc-daygrid-day-number) {
+  font-size: 12px;
+  font-weight: 600;
+  color: #6b7280;
+  position: absolute;
+  top: 6px;
+  right: 8px;
+  z-index: 3;
+  pointer-events: none;
+  white-space: nowrap; /* 숫자 줄바꿈 방지 */
 }
 
-.date-cell:hover {
-  background: #f8f9fa;
-}
-
-.date-cell.other-month:hover {
-  background: #eeeeee;
-}
-
-.date-cell.today .date-number {
+/* 오늘 날짜 숫자 배지 */
+:deep(.fc-day-today .fc-daygrid-day-number) {
   background: #2196f3;
   color: white;
   border-radius: 50%;
-  width: 28px;
-  height: 28px;
-  display: flex;
+  min-width: 24px; /* 고정 최소 크기 */
+  height: 24px;
+  padding: 0 6px; /* 숫자가 2자리일 때도 원형/알약 형태 유지 */
+  display: inline-flex;
   align-items: center;
   justify-content: center;
-  font-weight: 600;
+  font-weight: 700;
+  font-size: 12px;
+  line-height: 24px;
+  position: absolute; /* 오늘 배지도 절대 위치로 고정 */
 }
 
-.date-number {
-  font-size: 14px;
-  font-weight: 500;
-  margin-bottom: 4px;
+/* 셀 호버 */
+:deep(.fc-daygrid-day-frame:hover) {
+  background: #f8f9fa;
 }
 
-/* 태스크 표시 */
-.task-list-container {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
+/* 다른 달 셀 호버 */
+:deep(.fc-day-other .fc-daygrid-day-frame:hover) {
+  background: #eeeeee;
+}
+
+/* 다른 달 날짜 흐리게 */
+:deep(.fc-day-other) {
+  background: #f7f7f7;
+}
+
+:deep(.fc-day-other .fc-daygrid-day-number) {
+  color: #b3b3b3;
+}
+
+/* 이벤트(업무) 바를 기존 badge 느낌으로 */
+:deep(.fc-daygrid-event) {
   margin-top: 4px;
 }
 
-.task-badge {
-  padding: 4px 6px;
-  border-radius: 4px;
-  font-size: 12px;
-  cursor: pointer;
-  transition: all 0.2s;
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  overflow: hidden;
-  white-space: nowrap;
-}
-
-.task-badge:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.15);
-}
-
-.task-icon {
-  font-size: 10px;
-  flex-shrink: 0;
-}
-
-.task-title {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  flex: 1;
-}
-
-/* 상태별 색상 */
-.status-todo {
-  background: #e3f2fd;
-  color: #1976d2;
-}
-
-.status-progress {
-  background: #fff3e0;
-  color: #f57c00;
-}
-
-.status-completed {
-  background: #e8f5e9;
-  color: #388e3c;
-}
-
-.task-more-badge {
-  padding: 4px 8px;
-  background: #f5f5f5;
-  color: #666;
-  border-radius: 4px;
-  font-size: 11px;
-  cursor: pointer;
-  transition: all 0.2s;
-  text-align: center;
-}
-
-.task-more-badge:hover {
-  background: #e0e0e0;
-}
-
-/* 날짜 상세 모달 */
-.date-task-item {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 12px;
+/* 이벤트 바 - 테두리/그림자 정리 */
+:deep(.fc-event) {
   border-radius: 6px;
-  margin-bottom: 8px;
-  cursor: pointer;
-  transition: all 0.2s;
-  border: 1px solid #e0e0e0;
+  padding: 2px 6px; /* 바 두께 살짝 얇게 */
+  font-size: 11px; /* 텍스트도 약간 작게 */
+  font-weight: 600;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.06);
+  border: 1px solid rgba(0,0,0,0.03);
 }
 
-.date-task-item:hover {
-  background: #f5f5f5;
-  border-color: #2196f3;
+:deep(.fc-daygrid-event-harness) {
+  margin: 2px 0;
 }
 
-.task-status {
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
-  display: flex;
+/* 이벤트 영역을 셀 하단으로 밀어내기 (셀 높이 변경 없이) */
+:deep(.fc-daygrid-day-events) {
+  margin-top: 4px; /* 기본 쌓임 사용, 겹침 방지 */
+  margin-bottom: 0;
+}
+
+/* 더보기 컨테이너를 셀의 맨 아래로 밀착 */
+:deep(.fc-daygrid-day-bottom) {
+  margin-top: 2px;
+  padding-bottom: 0;
+  margin-bottom: 0; /* 음수 마진 금지 */
+}
+
+/* 숨겨진 이벤트(더보기로 들어간 항목) 잔상 제거 */
+:deep(.fc-event-hidden) {
+  display: none !important;
+}
+
+/* 배경 이벤트가 있을 경우 얇은 바가 보이지 않도록 비활성화 */
+:deep(.fc-bg-event) {
+  display: none;
+}
+
+/* 이벤트 최소 높이 지정해 얇게 눌려 보이지 않도록 */
+:deep(.fc-daygrid-event) {
+  min-height: 18px; /* 바 높이 소폭 축소 */
+}
+
+/* 더보기 링크 버튼 */
+:deep(.fc-more-link) {
+  display: inline-flex;
   align-items: center;
   justify-content: center;
-  flex-shrink: 0;
-}
-
-.status-icon {
-  font-size: 16px;
-}
-
-.task-info {
-  flex: 1;
-}
-
-.task-info-title {
+  background-color: #f3f4f6;
+  color: #6b7280;
+  border-radius: 6px;
+  padding: 2px 8px;
+  margin-top: 6px;
+  margin-bottom: 0; /* 음수 마진 금지 */
+  font-size: 11px;
   font-weight: 600;
-  font-size: 14px;
-  margin-bottom: 2px;
+  transition: all 0.2s ease;
 }
 
-.task-info-assignee {
-  font-size: 12px;
-  color: #666;
+:deep(.fc-more-link:hover) {
+  background-color: #e5e7eb;
+  color: #374151;
 }
 
-.task-date-range {
-  font-size: 12px;
-  color: #999;
-  flex-shrink: 0;
+/* 기본 more popover 사용 (숨기지 않음) */
+
+/* Vuetify 모달 관련 스타일 제거 */
+
+/* 오늘 셀 하단에 잔상(옅은 바) 나타나는 현상 방지 */
+::deep(.fc-day-today .fc-daygrid-day-bg),
+::deep(.fc-day-today .fc-highlight) {
+  display: none !important;
 }
 
-.no-tasks {
-  text-align: center;
-  padding: 40px;
-  color: #999;
+/* 오늘 셀 이벤트 영역 여백 보정 */
+::deep(.fc-day-today .fc-daygrid-day-events) {
+  margin-bottom: 0;
 }
 </style>
 

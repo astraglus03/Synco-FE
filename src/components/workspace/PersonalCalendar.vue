@@ -18,93 +18,21 @@
         오늘
       </v-btn>
     </div>
-    
-    <!-- 캘린더 그리드 -->
-    <div class="calendar-grid">
-      <!-- 요일 헤더 -->
-      <div class="weekday-header">
-        <div class="weekday-cell" v-for="day in weekdays" :key="day">
-          {{ day }}
-        </div>
-      </div>
 
-      <!-- 날짜 그리드 -->
-      <div class="date-grid">
-        <div 
-          v-for="date in calendarDates" 
-          :key="date.dateStr"
-          :class="['date-cell', getDateCellClass(date)]"
-          @click="selectDate(date)"
-        >
-          <div class="date-number">{{ date.date }}</div>
-          
-          <!-- 해당 날짜의 태스크들 -->
-          <div class="task-list-container">
-            <template v-for="(task, index) in getTasksForDate(date)" :key="task.taskSeq">
-              <div
-                v-if="index < 3"
-                :class="['task-badge', getStatusClass(task.taskStatus)]"
-                @click.stop="handleTaskClick(task)"
-                :title="task.taskTitle"
-              >
-                <span class="task-icon">{{ getStatusIcon(task.taskStatus) }}</span>
-                <span class="task-title">{{ task.taskTitle }}</span>
-              </div>
-            </template>
-            
-            <!-- 더 많은 태스크가 있을 경우 -->
-            <div 
-              v-if="getTaskCountForDate(date) > 3" 
-              class="task-more-badge"
-              @click.stop="openDateDetail(date)"
-            >
-              + {{ getTaskCountForDate(date) - 3 }}개
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
+    <!-- FullCalendar -->
+    <FullCalendar
+      ref="calendarRef"
+      class="fullcalendar-container"
+      :options="calendarOptions"
+    />
   </div>
-
-  <!-- 날짜 상세 모달 -->
-  <v-dialog v-model="showDateDetailModal" max-width="600">
-    <v-card>
-      <v-card-title class="d-flex align-center justify-space-between">
-        <span>{{ selectedDateDetail?.dateStr }}</span>
-        <v-btn icon variant="text" @click="showDateDetailModal = false">
-          <v-icon>mdi-close</v-icon>
-        </v-btn>
-      </v-card-title>
-      <v-card-text>
-        <div v-if="selectedDateDetail">
-          <div
-            v-for="task in getTasksForDate(selectedDateDetail)"
-            :key="task.taskSeq"
-            class="date-task-item"
-            @click="handleTaskClick(task)"
-          >
-            <div :class="['task-status', getStatusClass(task.taskStatus)]">
-              <span class="status-icon">{{ getStatusIcon(task.taskStatus) }}</span>
-            </div>
-            <div class="task-info">
-              <div class="task-info-title">{{ task.taskTitle }}</div>
-            </div>
-            <div class="task-date-range">
-              {{ task.startDate }} ~ {{ task.endDate }}
-            </div>
-          </div>
-          
-          <div v-if="getTaskCountForDate(selectedDateDetail) === 0" class="no-tasks">
-            이 날짜에 예정된 일정이 없습니다.
-          </div>
-        </div>
-      </v-card-text>
-    </v-card>
-  </v-dialog>
 </template>
 
 <script setup>
 import { ref, computed } from 'vue'
+import FullCalendar from '@fullcalendar/vue3'
+import dayGridPlugin from '@fullcalendar/daygrid'
+import interactionPlugin from '@fullcalendar/interaction'
 
 const props = defineProps({
   kanbanTasks: {
@@ -115,10 +43,9 @@ const props = defineProps({
 
 const emit = defineEmits(['open-task-detail'])
 
-// 현재 날짜
+// 현재 날짜 및 뷰
 const currentDate = ref(new Date())
-const selectedDateDetail = ref(null)
-const showDateDetailModal = ref(false)
+const calendarRef = ref(null)
 
 // 모든 태스크를 하나의 배열로 합치기
 const allTasks = computed(() => {
@@ -131,8 +58,79 @@ const allTasks = computed(() => {
   return tasks
 })
 
-// 주의 시작 (일요일)
-const weekdays = ['일', '월', '화', '수', '목', '금', '토']
+// 상태별 색상 (기존과 동일하게 유지)
+function getEventColors(status) {
+  const colorMap = {
+    'TODO': { bg: '#e3f2fd', border: '#1976d2', text: '#1976d2' },
+    'IN_PROGRESS': { bg: '#fff3e0', border: '#f57c00', text: '#f57c00' },
+    'COMPLETED': { bg: '#e8f5e9', border: '#388e3c', text: '#388e3c' }
+  }
+  return colorMap[status] || { bg: '#f5f5f5', border: '#666666', text: '#666666' }
+}
+
+// 날짜 유틸
+function toDateString(d) {
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
+
+function addDays(dateInput, days) {
+  const d = new Date(dateInput)
+  d.setDate(d.getDate() + days)
+  d.setHours(0, 0, 0, 0)
+  return toDateString(d)
+}
+
+// FullCalendar 이벤트 데이터 변환
+const calendarEvents = computed(() => {
+  return allTasks.value.map(task => {
+    const colors = getEventColors(task.taskStatus)
+    return {
+      id: task.taskSeq,
+      title: task.taskTitle,
+      start: toDateString(new Date(task.startDate)),
+      end: addDays(task.endDate, 1), // 마감일 포함 표시
+      allDay: true,
+      display: 'block',
+      backgroundColor: colors.bg,
+      borderColor: colors.border,
+      textColor: colors.text,
+      classNames: [`status-${String(task.taskStatus || '').toLowerCase()}`],
+      extendedProps: {
+        task,
+        status: task.taskStatus
+      }
+    }
+  })
+})
+
+// currentDate 업데이트
+function updateCurrentDateFromApi() {
+  if (!calendarRef.value) return
+  const api = calendarRef.value.getApi()
+  currentDate.value = api.getDate()
+}
+
+// FullCalendar 옵션
+const calendarOptions = computed(() => ({
+  plugins: [dayGridPlugin, interactionPlugin],
+  initialView: 'dayGridMonth',
+  headerToolbar: false,
+  locale: 'ko',
+  firstDay: 0,
+  fixedWeekCount: true,
+  showNonCurrentDates: true,
+  expandRows: true,
+  height: 'auto',
+  contentHeight: 'auto',
+  dayMaxEvents: 3, // 3개까지만 표시, 나머지는 더보기
+  events: calendarEvents.value,
+  moreLinkContent: (args) => `+ ${args.num}개`,
+  datesSet: () => updateCurrentDateFromApi(),
+  eventClick: (info) => handleTaskClick(info.event.extendedProps?.task || info.event)
+}))
 
 // 현재 월 표시
 const currentMonthDisplay = computed(() => {
@@ -141,191 +139,45 @@ const currentMonthDisplay = computed(() => {
   return `${year}년 ${month}월`
 })
 
-// 캘린더 날짜 배열 생성
-const calendarDates = computed(() => {
-  const year = currentDate.value.getFullYear()
-  const month = currentDate.value.getMonth()
-  
-  // 해당 월의 첫 번째 날
-  const firstDay = new Date(year, month, 1)
-  // 해당 월의 마지막 날
-  const lastDay = new Date(year, month + 1, 0)
-  
-  // 첫 번째 날의 요일 (0: 일요일)
-  const firstDayOfWeek = firstDay.getDay()
-  
-  // 마지막 날의 날짜
-  const lastDate = lastDay.getDate()
-  
-  const dates = []
-  
-  // 이전 달의 끝부분 추가
-  const prevMonthLastDay = new Date(year, month, 0).getDate()
-  for (let i = firstDayOfWeek - 1; i >= 0; i--) {
-    const date = new Date(year, month - 1, prevMonthLastDay - i)
-    dates.push({
-      date: prevMonthLastDay - i,
-      dateObj: date,
-      dateStr: formatDate(date),
-      isCurrentMonth: false,
-      isToday: isTodayDate(date),
-      isPast: isPastDate(date)
-    })
-  }
-  
-  // 현재 달의 날짜들
-  for (let i = 1; i <= lastDate; i++) {
-    const date = new Date(year, month, i)
-    dates.push({
-      date: i,
-      dateObj: date,
-      dateStr: formatDate(date),
-      isCurrentMonth: true,
-      isToday: isTodayDate(date),
-      isPast: isPastDate(date)
-    })
-  }
-  
-  // 다음 달의 시작부분 추가 (6주를 채우기 위해)
-  const totalCells = dates.length
-  const remainingCells = 42 - totalCells // 6주 * 7일
-  for (let i = 1; i <= remainingCells; i++) {
-    const date = new Date(year, month + 1, i)
-    dates.push({
-      date: i,
-      dateObj: date,
-      dateStr: formatDate(date),
-      isCurrentMonth: false,
-      isToday: isTodayDate(date),
-      isPast: isPastDate(date)
-    })
-  }
-  
-  return dates
-})
-
-// 날짜 포맷팅
-function formatDate(date) {
-  const year = date.getFullYear()
-  const month = String(date.getMonth() + 1).padStart(2, '0')
-  const day = String(date.getDate()).padStart(2, '0')
-  return `${year}-${month}-${day}`
-}
-
-// 오늘 날짜인지 확인
-function isTodayDate(date) {
-  const today = new Date()
-  return (
-    date.getDate() === today.getDate() &&
-    date.getMonth() === today.getMonth() &&
-    date.getFullYear() === today.getFullYear()
-  )
-}
-
-// 과거 날짜인지 확인
-function isPastDate(date) {
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
-  const compareDate = new Date(date)
-  compareDate.setHours(0, 0, 0, 0)
-  return compareDate < today
-}
-
-// 특정 날짜의 태스크 가져오기
-function getTasksForDate(dateInfo) {
-  if (!dateInfo) return []
-  
-  const tasks = allTasks.value.filter(task => {
-    if (!task.startDate || !task.endDate) return false
-    
-    const taskStart = new Date(task.startDate)
-    taskStart.setHours(0, 0, 0, 0)
-    
-    const taskEnd = new Date(task.endDate)
-    taskEnd.setHours(23, 59, 59, 999)
-    
-    const date = new Date(dateInfo.dateObj)
-    date.setHours(0, 0, 0, 0)
-    
-    // 태스크가 해당 날짜와 겹치는지 확인
-    const isMatch = date >= taskStart && date <= taskEnd
-    
-    return isMatch
-  })
-  
-  return tasks
-}
-
-// 특정 날짜의 태스크 개수
-function getTaskCountForDate(dateInfo) {
-  return getTasksForDate(dateInfo).length
-}
-
-// 날짜 셀 클래스
-function getDateCellClass(dateInfo) {
-  return {
-    'other-month': !dateInfo.isCurrentMonth,
-    'today': dateInfo.isToday,
-    'past': dateInfo.isPast
-  }
-}
-
-// 상태별 클래스
-function getStatusClass(status) {
-  return {
-    'status-todo': status === 'TODO',
-    'status-progress': status === 'IN_PROGRESS',
-    'status-completed': status === 'COMPLETED'
-  }
-}
-
-// 상태별 아이콘
-function getStatusIcon(status) {
-  const icons = {
-    'TODO': '🔵',
-    'IN_PROGRESS': '🟡',
-    'COMPLETED': '🟢'
-  }
-  return icons[status] || '⚪'
-}
-
-// 이전 달
+// 이전 달/주/일
 function previousMonth() {
-  currentDate.value = new Date(
-    currentDate.value.getFullYear(),
-    currentDate.value.getMonth() - 1,
-    1
-  )
+  if (calendarRef.value) {
+    calendarRef.value.getApi().prev()
+    updateCurrentDateFromApi()
+  }
 }
 
-// 다음 달
+// 다음 달/주/일
 function nextMonth() {
-  currentDate.value = new Date(
-    currentDate.value.getFullYear(),
-    currentDate.value.getMonth() + 1,
-    1
-  )
+  if (calendarRef.value) {
+    calendarRef.value.getApi().next()
+    updateCurrentDateFromApi()
+  }
 }
 
 // 오늘로 이동
 function goToToday() {
-  currentDate.value = new Date()
-}
-
-// 날짜 선택
-function selectDate(dateInfo) {
-  // 필요시 추가 로직
+  if (calendarRef.value) {
+    calendarRef.value.getApi().today()
+    updateCurrentDateFromApi()
+  }
 }
 
 // 태스크 클릭
 function handleTaskClick(task) {
+  // 팝오버 닫기
+  closeMorePopover()
   emit('open-task-detail', task)
 }
 
-// 날짜 상세 열기
-function openDateDetail(dateInfo) {
-  selectedDateDetail.value = dateInfo
-  showDateDetailModal.value = true
+// 팝오버 닫기
+function closeMorePopover() {
+  try {
+    const popovers = document.querySelectorAll('.fc-popover')
+    popovers.forEach((el) => el.parentElement && el.parentElement.removeChild(el))
+  } catch (e) {
+    // 안전하게 무시
+  }
 }
 </script>
 
@@ -334,7 +186,7 @@ function openDateDetail(dateInfo) {
   background: white;
   border-radius: 8px;
   padding: 24px;
-  height: calc(100vh - 200px);
+  height: auto;
 }
 
 /* 네비게이션 */
@@ -374,21 +226,17 @@ function openDateDetail(dateInfo) {
   margin-left: 16px;
 }
 
-/* 캘린더 그리드 */
-.calendar-grid {
-  display: flex;
-  flex-direction: column;
+/* FullCalendar 컨테이너 */
+.fullcalendar-container {
+  height: auto;
 }
 
-/* 요일 헤더 */
-.weekday-header {
-  display: grid;
-  grid-template-columns: repeat(7, 1fr);
-  gap: 1px;
+/* 요일 헤더 스타일 */
+:deep(.fc-col-header) {
   margin-bottom: 8px;
 }
 
-.weekday-cell {
+:deep(.fc-col-header-cell) {
   padding: 12px;
   text-align: center;
   font-weight: 600;
@@ -399,179 +247,170 @@ function openDateDetail(dateInfo) {
 }
 
 /* 날짜 그리드 */
-.date-grid {
-  display: grid;
-  grid-template-columns: repeat(7, 1fr);
-  gap: 1px;
-  background: #e0e0e0;
+:deep(.fc-daygrid-body) {
+  background: transparent;
 }
 
-.date-cell {
+:deep(.fc-daygrid-day) {
+  background: #ffffff;
+  border: 1px solid #f0f2f5;
+}
+
+:deep(.fc-daygrid-day-frame) {
+  background: #ffffff;
   min-height: 120px;
-  padding: 8px;
-  cursor: pointer;
-  transition: all 0.2s;
+  padding: 40px 8px 0 8px;
+  position: relative;
   display: flex;
   flex-direction: column;
-  position: relative;
-  background: white; /* 이번달 날짜는 흰색 */
 }
 
-/* 다른 달 날짜는 회색 */
-.date-cell.other-month {
+/* 다른 달 날짜 스타일 */
+:deep(.fc-day-other .fc-daygrid-day-frame) {
   background: #f5f5f5;
 }
 
-.date-cell.other-month .date-number {
-  color: #999;
-}
-
-.date-cell:hover {
-  background: #f8f9fa;
-}
-
-.date-cell.other-month:hover {
-  background: #eeeeee;
-}
-
-.date-cell.today .date-number {
-  background: #2196f3;
-  color: white;
-  border-radius: 50%;
-  width: 28px;
-  height: 28px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-weight: 600;
-}
-
-.date-number {
-  font-size: 14px;
-  font-weight: 500;
-  margin-bottom: 4px;
-}
-
-/* 태스크 표시 */
-.task-list-container {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  margin-top: 4px;
-}
-
-.task-badge {
-  padding: 4px 6px;
-  border-radius: 4px;
+/* 날짜 숫자 */
+:deep(.fc-daygrid-day-number) {
   font-size: 12px;
-  cursor: pointer;
-  transition: all 0.2s;
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  overflow: hidden;
+  font-weight: 600;
+  color: #6b7280;
+  position: absolute;
+  top: 6px;
+  right: 8px;
+  z-index: 3;
+  pointer-events: none;
   white-space: nowrap;
 }
 
-.task-badge:hover {
+/* 오늘 날짜 배지 */
+:deep(.fc-day-today .fc-daygrid-day-number) {
+  background: #2196f3;
+  color: white;
+  border-radius: 50%;
+  min-width: 24px;
+  height: 24px;
+  padding: 0 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 12px;
+  line-height: 24px;
+}
+
+/* 셀 호버 */
+:deep(.fc-daygrid-day-frame:hover) {
+  background: #f8f9fa;
+}
+
+:deep(.fc-day-other .fc-daygrid-day-frame:hover) {
+  background: #eeeeee;
+}
+
+/* 다른 달 날짜 흐리게 */
+:deep(.fc-day-other) {
+  background: #f7f7f7;
+}
+
+:deep(.fc-day-other .fc-daygrid-day-number) {
+  color: #b3b3b3;
+}
+
+/* 이벤트(업무) 스타일 - 기존 색상 유지 */
+:deep(.fc-event) {
+  border-radius: 6px;
+  padding: 2px 6px;
+  font-size: 11px;
+  font-weight: 600;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.06);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+:deep(.fc-event:hover) {
   transform: translateY(-1px);
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.15);
 }
 
-.task-icon {
-  font-size: 10px;
-  flex-shrink: 0;
+:deep(.fc-daygrid-event) {
+  margin-top: 4px;
 }
 
-.task-title {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  flex: 1;
+:deep(.fc-daygrid-event-harness) {
+  margin: 2px 0;
 }
 
-/* 상태별 색상 */
-.status-todo {
-  background: #e3f2fd;
-  color: #1976d2;
+:deep(.fc-daygrid-day-events) {
+  margin-top: 4px;
+  margin-bottom: 0;
 }
 
-.status-progress {
-  background: #fff3e0;
-  color: #f57c00;
+:deep(.fc-daygrid-day-bottom) {
+  margin-top: 2px;
+  padding-bottom: 0;
+  margin-bottom: 0;
 }
 
-.status-completed {
-  background: #e8f5e9;
-  color: #388e3c;
+:deep(.fc-event-hidden) {
+  display: none !important;
 }
 
-.task-more-badge {
-  padding: 4px 8px;
-  background: #f5f5f5;
-  color: #666;
-  border-radius: 4px;
-  font-size: 11px;
-  cursor: pointer;
-  transition: all 0.2s;
-  text-align: center;
+:deep(.fc-bg-event) {
+  display: none;
 }
 
-.task-more-badge:hover {
-  background: #e0e0e0;
+:deep(.fc-daygrid-event) {
+  min-height: 18px;
 }
 
-/* 날짜 상세 모달 */
-.date-task-item {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 12px;
-  border-radius: 6px;
-  margin-bottom: 8px;
-  cursor: pointer;
-  transition: all 0.2s;
-  border: 1px solid #e0e0e0;
-}
-
-.date-task-item:hover {
-  background: #f5f5f5;
-  border-color: #2196f3;
-}
-
-.task-status {
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
-  display: flex;
+/* 더보기 링크 */
+:deep(.fc-more-link) {
+  display: inline-flex;
   align-items: center;
   justify-content: center;
-  flex-shrink: 0;
-}
-
-.status-icon {
-  font-size: 16px;
-}
-
-.task-info {
-  flex: 1;
-}
-
-.task-info-title {
+  background-color: #f3f4f6;
+  color: #6b7280;
+  border-radius: 6px;
+  padding: 2px 8px;
+  margin-top: 6px;
+  margin-bottom: 0;
+  font-size: 11px;
   font-weight: 600;
-  font-size: 14px;
-  margin-bottom: 2px;
+  transition: all 0.2s ease;
 }
 
-.task-date-range {
-  font-size: 12px;
-  color: #999;
-  flex-shrink: 0;
+:deep(.fc-more-link:hover) {
+  background-color: #e5e7eb;
+  color: #374151;
 }
 
-.no-tasks {
-  text-align: center;
-  padding: 40px;
-  color: #999;
+/* 오늘 셀 하단 잔상 방지 */
+:deep(.fc-day-today .fc-daygrid-day-bg),
+:deep(.fc-day-today .fc-highlight) {
+  display: none !important;
+}
+
+:deep(.fc-day-today .fc-daygrid-day-events) {
+  margin-bottom: 0;
+}
+
+/* 상태별 색상 (기존과 동일) */
+:deep(.status-todo) {
+  background: #e3f2fd !important;
+  border-color: #1976d2 !important;
+  color: #1976d2 !important;
+}
+
+:deep(.status-in_progress) {
+  background: #fff3e0 !important;
+  border-color: #f57c00 !important;
+  color: #f57c00 !important;
+}
+
+:deep(.status-completed) {
+  background: #e8f5e9 !important;
+  border-color: #388e3c !important;
+  color: #388e3c !important;
 }
 </style>

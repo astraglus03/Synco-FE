@@ -22,7 +22,7 @@
 
           <div class="info-item">
             <label class="info-label">설명</label>
-            <div class="info-value">{{ props.taskData.taskContent || props.taskData.description || '-' }}</div>
+            <div class="info-value task-content">{{ props.taskData.taskContent || props.taskData.description || '-' }}</div>
           </div>
 
           <div class="info-row">
@@ -616,6 +616,11 @@ const deleteCommentConfirm = async (commentSeq) => {
   color: #212121;
   font-weight: 500;
   line-height: 1.3;
+}
+
+.task-content {
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
 .status-badge {

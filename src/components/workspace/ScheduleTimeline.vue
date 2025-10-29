@@ -33,7 +33,7 @@
         <div class="task-list-header">
           <h3>업무</h3>
         </div>
-        <div class="task-items">
+        <div class="task-items" ref="taskItemsRef">
           <div 
             v-for="task in allTasks" 
             :key="task.id"
@@ -47,7 +47,7 @@
       </div>
 
       <!-- 오른쪽: 타임라인 그리드 -->
-      <div class="timeline-grid">
+      <div class="timeline-grid" ref="timelineGridRef">
         <div class="grid-header">
           <div 
             v-for="date in visibleDates" 
@@ -89,7 +89,7 @@
 </template>
 
 <script setup>
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 
 const props = defineProps({
   kanbanTasks: {
@@ -115,6 +115,11 @@ const timeUnits = [
 // 현재 기간
 const currentDate = ref(new Date())
 const selectedTaskId = ref(null)
+
+// 스크롤 동기화 참조
+const taskItemsRef = ref(null)
+const timelineGridRef = ref(null)
+let isSyncingScroll = false
 
 // 모든 태스크를 하나의 배열로 합치기
 const allTasks = computed(() => {
@@ -388,6 +393,40 @@ function getNavLabel() {
 watch(selectedTimeUnit, () => {
   currentDate.value = new Date()
 })
+
+// 스크롤 동기화 핸들러
+// 좌측 영역에서 마우스 휠을 굴리면 우측 타임라인을 스크롤
+function onTaskWheel(e) {
+  if (!timelineGridRef.value) return
+  e.preventDefault()
+  timelineGridRef.value.scrollTop += e.deltaY
+}
+
+function onGridScroll() {
+  if (!taskItemsRef.value || !timelineGridRef.value) return
+  if (isSyncingScroll) return
+  isSyncingScroll = true
+  taskItemsRef.value.scrollTop = timelineGridRef.value.scrollTop
+  requestAnimationFrame(() => { isSyncingScroll = false })
+}
+
+onMounted(() => {
+  if (taskItemsRef.value) {
+    taskItemsRef.value.addEventListener('wheel', onTaskWheel, { passive: false })
+  }
+  if (timelineGridRef.value) {
+    timelineGridRef.value.addEventListener('scroll', onGridScroll, { passive: true })
+  }
+})
+
+onBeforeUnmount(() => {
+  if (taskItemsRef.value) {
+    taskItemsRef.value.removeEventListener('wheel', onTaskWheel)
+  }
+  if (timelineGridRef.value) {
+    timelineGridRef.value.removeEventListener('scroll', onGridScroll)
+  }
+})
 </script>
 
 <style scoped>
@@ -470,8 +509,8 @@ watch(selectedTimeUnit, () => {
 }
 
 .task-list-header {
-  padding: 16px;
-  border-bottom: 1px solid #e0e0e0;
+  padding: 8px;
+  border-bottom: 2px solid #e0e0e0; /* 그리드 헤더와 두께 맞춤 */
   background: #f5f5f5;
 }
 
@@ -483,17 +522,25 @@ watch(selectedTimeUnit, () => {
 
 .task-items {
   flex: 1;
-  overflow-y: auto;
-  padding: 8px;
+  overflow-y: hidden; /* 좌측 스크롤 숨김: 우측만 스크롤 표시 */
+  padding: 2px 6px 6px 6px; /* 상단 여백 살짝 추가하여 라인 미세 조정 */
 }
 
 .task-item {
-  padding: 12px;
-  margin-bottom: 8px;
+  display: flex;              /* 세로 중앙 정렬 */
+  align-items: center;        /* 세로 중앙 정렬 */
+  min-height: 40px;           /* 타임라인 행과 동일 높이 */
+  padding: 8px 10px;          /* 패딩 축소 */
+  margin-bottom: 0;           /* 간격 제거: 구분선과 정렬 */
   border-radius: 6px;
   cursor: pointer;
   transition: all 0.2s;
   border: 2px solid transparent;
+}
+
+/* 업무 항목 구분선 - 타임라인 행의 구분선과 색상/두께를 맞춤 */
+.task-items .task-item:not(:last-child) {
+  border-bottom: 1px solid #f0f0f0;
 }
 
 .task-item:hover {
@@ -506,14 +553,15 @@ watch(selectedTimeUnit, () => {
 }
 
 .task-title {
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 500;
-  margin-bottom: 4px;
+  margin-bottom: 0;            /* 한 줄 정렬 */
 }
 
 .task-assignee {
   font-size: 12px;
   color: #666;
+  margin-left: 8px;            /* 제목과 간격 */
 }
 
 /* 오른쪽: 타임라인 그리드 */
@@ -560,13 +608,13 @@ watch(selectedTimeUnit, () => {
   display: flex;
   border-bottom: 1px solid #f0f0f0;
   position: relative;
-  min-height: 60px;
+  min-height: 40px; /* 행 높이 축소 */
 }
 
 .grid-cell {
   flex: 1;
   min-width: 120px;
-  min-height: 60px;
+  min-height: 40px; /* 셀 높이 축소 */
   border-right: 1px solid #f0f0f0;
   position: relative;
   padding: 4px;
@@ -574,18 +622,18 @@ watch(selectedTimeUnit, () => {
 
 .task-bar-row {
   position: absolute;
-  top: 8px;
-  bottom: 8px;
-  height: calc(100% - 16px);
+  top: 6px; /* 위 여백 축소 */
+  bottom: 6px; /* 아래 여백 축소 */
+  height: calc(100% - 12px);
   border-radius: 4px;
-  padding: 6px 8px;
+  padding: 4px 6px; /* 내부 패딩 축소 */
   display: flex;
   align-items: center;
   justify-content: flex-start;
   cursor: pointer;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
   transition: all 0.2s;
-  margin: 2px 4px;
+  margin: 1px 4px; /* 위아래 마진 약간 축소 */
 }
 
 .task-bar-row:hover {

@@ -224,6 +224,7 @@ const handleNavigateToChannel = (channelId) => {
       <MainContent 
         :workspace-type="workspaceStore.currentWorkspaceInfo?.type"
         :current-channel="workspaceStore.currentChannel"
+        :selected-sub-channel="workspaceStore.selectedSubChannel"
         :member-sidebar-visible="uiStore.memberSidebarVisible"
         :workspace-sidebar-collapsed="uiStore.workspaceSidebarCollapsed"
         @navigate-to-channel="handleNavigateToChannel"

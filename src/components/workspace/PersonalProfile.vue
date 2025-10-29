@@ -127,6 +127,7 @@
                   placeholder="010-0000-0000"
                   persistent-hint
                   @input="formatPhoneNumber"
+                  @keydown="handlePhoneKeydown"
                   maxlength="13"
                 />
                 <v-text-field
@@ -466,6 +467,12 @@ const formatDateOnly = (dateString) => {
 const formatPhoneNumber = (event) => {
   let value = event.target.value.replace(/[^\d]/g, '') // 숫자만 추출
   
+  // 숫자가 11자리를 초과하지 않도록 제한
+  if (value.length > 11) {
+    value = value.slice(0, 11)
+  }
+  
+  // 포맷팅 적용 - 정확한 길이에 따라 처리
   if (value.length >= 7) {
     value = value.slice(0, 3) + '-' + value.slice(3, 7) + '-' + value.slice(7, 11)
   } else if (value.length >= 3) {
@@ -473,6 +480,34 @@ const formatPhoneNumber = (event) => {
   }
   
   editForm.value.phone = value
+}
+
+// 전화번호 키 입력 처리 함수
+const handlePhoneKeydown = (event) => {
+  const { key, target } = event
+  const currentValue = target.value
+  const cursorPosition = target.selectionStart
+  
+  // 백스페이스 키 처리
+  if (key === 'Backspace') {
+    // 하이픈 바로 앞에 커서가 있으면 하이픈과 함께 앞의 숫자도 삭제
+    if (cursorPosition > 0 && currentValue[cursorPosition - 1] === '-') {
+      event.preventDefault()
+      const newValue = currentValue.slice(0, cursorPosition - 2) + currentValue.slice(cursorPosition)
+      editForm.value.phone = newValue
+      
+      // 커서 위치 조정
+      setTimeout(() => {
+        target.setSelectionRange(cursorPosition - 2, cursorPosition - 2)
+      }, 0)
+      return
+    }
+  }
+  
+  // 숫자와 필요한 키만 허용
+  if (!/[\d]/.test(key) && !['Backspace', 'Delete', 'ArrowLeft', 'ArrowRight', 'Tab', 'Enter'].includes(key)) {
+    event.preventDefault()
+  }
 }
 
 // 마이페이지 정보 조회

@@ -1,5 +1,5 @@
 <script setup>
-import { computed, ref, onMounted, onUnmounted } from 'vue'
+import { computed, ref, onMounted, onUnmounted, watch } from 'vue'
 import { useUIStore } from '@/store/uiStore'
 import PersonalDashboard from '@/components/workspace/PersonalDashboard.vue'
 import PersonalFriends from '@/components/workspace/PersonalFriends.vue'
@@ -18,6 +18,7 @@ import MemberSidebar from './MemberSidebar.vue'
 const props = defineProps({
   workspaceType: String, // 'personal' 또는 'project'
   currentChannel: String,
+  selectedSubChannel: String,
   memberSidebarVisible: Boolean,
   workspaceSidebarCollapsed: Boolean
 })
@@ -42,6 +43,22 @@ const selectedSchedule = ref('team-schedule')
 
 // 선택된 채널 정보
 const selectedChannel = ref('')
+
+// URL에서 subChannel 정보를 읽어와서 초기화
+const initializeFromProps = () => {
+  if (props.selectedSubChannel) {
+    if (props.currentChannel === 'schedule') {
+      selectedSchedule.value = props.selectedSubChannel
+    } else {
+      selectedChannel.value = props.selectedSubChannel
+    }
+  }
+}
+
+// props 변경 감지하여 초기화
+watch(() => props.selectedSubChannel, () => {
+  initializeFromProps()
+}, { immediate: true })
 
 // 일정 선택 이벤트 리스너
 const handleScheduleSelect = (event) => {

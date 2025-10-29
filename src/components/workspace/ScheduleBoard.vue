@@ -9,11 +9,7 @@
           <v-icon size="20" color="grey">mdi-magnify</v-icon>
           <input placeholder="업무 검색..." class="search-input" />
         </div>
-        <div class="header-icons">
-          <v-icon size="20" color="grey">mdi-view-grid</v-icon>
-          <v-icon size="20" color="grey">mdi-timeline</v-icon>
-          <v-icon size="20" color="grey">mdi-calendar</v-icon>
-        </div>
+        <div class="header-icons"></div>
       </div>
     </div>
 
@@ -56,16 +52,39 @@
             draggable="true"
             @dragstart="onDragStart($event, task)"
             @dragend="onDragEnd"
+            @dblclick="openTaskDetail(task)"
           >
             <div class="task-header">
               <div class="task-title">{{ task.taskTitle }}</div>
-              <v-chip 
-                :color="getStatusColor(task.taskStatus)" 
-                size="x-small"
-                class="status-chip"
-              >
-                {{ getStatusText(task.taskStatus) }}
-              </v-chip>
+              <div class="task-actions">
+                <v-chip 
+                  :color="getStatusColor(task.taskStatus)" 
+                  size="x-small"
+                  class="status-chip"
+                >
+                  {{ getStatusText(task.taskStatus) }}
+                </v-chip>
+                <v-menu location="bottom start">
+                  <template #activator="{ props }">
+                    <v-btn 
+                      icon="mdi-dots-vertical" 
+                      size="x-small" 
+                      variant="text"
+                      class="task-menu-btn"
+                      v-bind="props"
+                      @click.stop
+                    />
+                  </template>
+                  <v-list density="compact" class="menu-list">
+                    <v-list-item @click="openTaskEdit(task)" class="menu-item">
+                      <v-list-item-title class="text-caption text-center">수정</v-list-item-title>
+                    </v-list-item>
+                    <v-list-item v-if="canManageTasks" @click="deleteTaskHandler(task)" class="menu-item text-red">
+                      <v-list-item-title class="text-caption text-center">삭제</v-list-item-title>
+                    </v-list-item>
+                  </v-list>
+                </v-menu>
+              </div>
             </div>
             
             <div class="task-content">
@@ -168,9 +187,11 @@
                 draggable="true"
                 @dragstart="onDragStart($event, task)"
                 @dragend="onDragEnd"
+                @dblclick="openTaskDetail(task)"
               >
-                <div class="task-header">
-                  <div class="task-title">{{ task.taskTitle }}</div>
+              <div class="task-header">
+                <div class="task-title">{{ task.taskTitle }}</div>
+                <div class="task-actions">
                   <v-chip 
                     :color="getStatusColor(task.taskStatus)" 
                     size="small"
@@ -178,7 +199,28 @@
                   >
                     {{ getStatusText(task.taskStatus) }}
                   </v-chip>
+                  <v-menu location="bottom start">
+                    <template #activator="{ props }">
+                      <v-btn 
+                        icon="mdi-dots-vertical" 
+                        size="x-small" 
+                        variant="text"
+                        class="task-menu-btn"
+                        v-bind="props"
+                        @click.stop
+                      />
+                    </template>
+                    <v-list density="compact" class="menu-list">
+                    <v-list-item @click="openTaskEdit(task)" class="menu-item">
+                        <v-list-item-title class="text-caption text-center">수정</v-list-item-title>
+                      </v-list-item>
+                    <v-list-item v-if="canManageTasks" @click="deleteTaskHandler(task)" class="menu-item text-red">
+                      <v-list-item-title class="text-caption text-center">삭제</v-list-item-title>
+                    </v-list-item>
+                    </v-list>
+                  </v-menu>
                 </div>
+              </div>
                 
                 <div class="task-content">
                   <div class="task-description">{{ task.taskContent }}</div>
@@ -209,16 +251,42 @@
       @board-created="onBoardCreated"
       @board-updated="onBoardUpdated"
     />
+
+    <!-- Task 생성/수정 모달 (Schedule.vue와 동일 스타일) -->
+    <TaskCreateModal
+      v-model="isTaskModalOpen"
+      :project-id="currentProjectId"
+      :is-edit-mode="isTaskEditMode"
+      :edit-task-data="editTaskData"
+      :show-board-select="true"
+      :board-options="boardSelectOptions"
+      :edit-mode-limited="isTaskEditLimited"
+      @taskUpdated="onTaskUpdated"
+      @taskCreated="onTaskCreated"
+    />
+
+    <!-- Task 상세 모달 -->
+    <TaskDetailModal
+      v-model="isTaskDetailModalOpen"
+      :task-data="selectedTaskData"
+      :is-personal="false"
+    />
   </div>
 </template>
 
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue'
 import { useWorkspaceStore } from '../../store/workspaceStore.js'
-import { getMyTasks, getProjectBoards, moveTaskToBoard, updateBoardOrders, deleteBoard, getBoardDetail } from '../../api/schedule/scheduleApi.js'
+import { useWorkspaceMemberStore } from '../../store/workspaceMemberStore.js'
+import { useAuthStore } from '../../store/authStore.js'
+import { getMyTasks, getProjectBoards, moveTaskToBoard, updateBoardOrders, deleteBoard, getBoardDetail, getTaskDetail, deleteTask as deleteTaskApi } from '../../api/schedule/scheduleApi.js'
 import BoardCreateModal from './BoardCreateModal.vue'
+import TaskDetailModal from './TaskDetailModal.vue'
+import TaskCreateModal from './TaskCreateModal.vue'
 
 const workspaceStore = useWorkspaceStore()
+const workspaceMemberStore = useWorkspaceMemberStore()
+const authStore = useAuthStore()
 
 // 상태 관리
 const myTasks = ref([])
@@ -236,6 +304,29 @@ const dragOverBoard = ref(null)
 const taskListRef = ref(null)
 const canScrollLeft = ref(false)
 const canScrollRight = ref(false)
+
+// Task 상세/수정 모달 상태
+const isTaskDetailModalOpen = ref(false)
+const selectedTaskData = ref({})
+const isTaskModalOpen = ref(false)
+const isTaskEditMode = ref(false)
+const editTaskData = ref(null)
+const boardSelectOptions = computed(() => boards.value.map(b => ({ boardName: b.boardName, boardSeq: b.boardSeq })))
+const isTaskEditLimited = ref(false)
+
+// 삭제 권한 (SUPER, MANAGER)
+const canManageTasks = computed(() => {
+  const scheduleMembers = workspaceMemberStore.scheduleChannels || []
+  const me = scheduleMembers.find(m => Number(m.memberSeq) === Number(authStore.memberSeq))
+  const authority = me?.authority
+  return authority === 'SUPER' || authority === 'MANAGER'
+})
+
+const isParticipant = computed(() => {
+  const scheduleMembers = workspaceMemberStore.scheduleChannels || []
+  const me = scheduleMembers.find(m => Number(m.memberSeq) === Number(authStore.memberSeq))
+  return me?.authority === 'PARTICIPANT'
+})
 
 // 현재 프로젝트 ID (팀 프로젝트의 개인 일정 = 해당 프로젝트에서 내가 담당한 업무)
 const currentProjectId = computed(() => {
@@ -467,6 +558,7 @@ const deleteBoardHandler = async (board) => {
     try {
       await deleteBoard(board.boardSeq)
       await loadBoards()
+      await loadMyTasks()
       console.log('보드가 성공적으로 삭제되었습니다.')
     } catch (error) {
       console.error('보드 삭제 실패:', error)
@@ -506,6 +598,72 @@ const openBoardModal = () => {
 const onBoardCreated = () => {
   // 보드 목록 새로고침
   loadBoards()
+}
+
+// Task 상세 열기
+const openTaskDetail = async (task) => {
+  try {
+    console.log('🖱️ 태스크 더블클릭:', task)
+    
+    // 태스크 상세 정보 조회
+    console.log('📡 태스크 상세 조회 시작:', task.taskSeq)
+    const response = await getTaskDetail(task.taskSeq)
+    console.log('📦 받은 응답:', response)
+    
+    // 백엔드 응답 구조 처리: { success, data } 또는 직접 객체
+    const taskDetail = response?.data || response
+    
+    if (taskDetail) {
+      selectedTaskData.value = taskDetail
+      isTaskDetailModalOpen.value = true
+      console.log('✅ 태스크 상세 모달 열기')
+    } else {
+      console.error('❌ 태스크 정보가 없습니다.')
+      alert('태스크 정보를 불러오는데 실패했습니다.')
+    }
+  } catch (error) {
+    console.error('❌ 태스크 상세 조회 실패:', error)
+    alert('태스크 정보를 불러오는데 실패했습니다.')
+  }
+}
+
+// 수정 메뉴 액션: Schedule.vue와 동일하게 수정 모달 열기
+const openTaskEdit = async (task) => {
+  try {
+    const response = await getTaskDetail(task.taskSeq)
+    const taskDetail = response?.data || response
+    if (taskDetail) {
+      editTaskData.value = taskDetail
+      isTaskEditMode.value = true
+      isTaskEditLimited.value = isParticipant.value
+      isTaskModalOpen.value = true
+    }
+  } catch (e) {
+    console.error('태스크 상세 조회 실패:', e)
+  }
+}
+
+// 생성/수정 후 목록 새로고침 (상단/하단 동기화)
+const onTaskUpdated = async () => {
+  await Promise.all([loadMyTasks(), loadBoards()])
+}
+const onTaskCreated = async () => {
+  await Promise.all([loadMyTasks(), loadBoards()])
+}
+
+// Task 삭제 (권한 사용자만 노출/실행)
+const deleteTaskHandler = async (task) => {
+  if (!canManageTasks.value) return
+  const title = task.taskTitle || task.title || '업무'
+  if (confirm(`"${title}" 업무를 삭제하시겠습니까?`)) {
+    try {
+      await deleteTaskApi(task.taskSeq || task.id)
+      await Promise.all([loadMyTasks(), loadBoards()])
+    } catch (e) {
+      console.error('업무 삭제 실패:', e)
+      alert('업무 삭제에 실패했습니다.')
+    }
+  }
 }
 
 // 태스크 스크롤 함수
@@ -694,7 +852,7 @@ watch(
 .task-card {
   background: white;
   border-radius: 8px;
-  padding: 16px;
+  padding: 8px 16px 16px 16px; /* 상단 패딩만 소폭 축소 */
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
   border: 1px solid #e0e0e0;
   cursor: move;
@@ -714,6 +872,24 @@ watch(
   align-items: center;
   margin-bottom: 8px;
   gap: 6px;
+}
+
+.task-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-right: -8px;
+}
+
+.task-menu-btn {
+  margin-left: auto;
+  margin-right: 0;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.task-card:hover .task-menu-btn {
+  opacity: 1;
 }
 
 .task-title {
@@ -737,6 +913,10 @@ watch(
   font-size: 12px;
   color: #666;
   line-height: 1.3;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 150px;
 }
 
 .task-dates {
@@ -842,7 +1022,7 @@ watch(
 .kanban-board .task-card {
   background: white;
   border-radius: 8px;
-  padding: 16px;
+  padding: 12px 16px 16px 16px; /* 상단 패딩만 소폭 축소 */
   border: 1px solid rgba(0, 0, 0, 0.1);
   cursor: move;
   transition: all 0.3s ease;
@@ -857,7 +1037,8 @@ watch(
 .kanban-board .task-header {
   display: flex;
   justify-content: space-between;
-  align-items: flex-start;
+  align-items: center; /* 정렬 보정: 세로 중앙 */
+  gap: 8px;
   margin-bottom: 8px;
 }
 
@@ -879,6 +1060,10 @@ watch(
   font-size: 12px;
   color: #666;
   line-height: 1.4;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 200px;
 }
 
 .kanban-board .task-dates {
