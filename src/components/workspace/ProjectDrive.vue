@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router'
 import { usePermissions, PERMISSIONS } from '@/composables/usePermissions'
 import { useProjectDriveStore } from '@/store/drive/projectDriveStore'
 import { useWorkspaceStore } from '@/store/workspaceStore'
+import { useAuthStore } from '@/store/authStore'
 import { useDraggable, useDropZone } from '@vueuse/core'
 import SharedDocEditor from './SharedDocEditor.vue'
 
@@ -14,6 +15,7 @@ const props = defineProps({
 const { hasPermission, isManager, isSuper } = usePermissions()
 const driveStore = useProjectDriveStore()
 const workspaceStore = useWorkspaceStore()
+const authStore = useAuthStore()
 const router = useRouter()
 
 // 뷰 모드 (list, grid)
@@ -1706,7 +1708,7 @@ watch(() => workspaceStore.currentWorkspace, () => {
             v-if="currentDocument && currentDriveChannelSeq"
             :document-seq="currentDocument.id"
             :drive-channel-seq="currentDriveChannelSeq"
-            :current-user="{ id: 1, name: '홍길동' }"
+            :current-user="{ id: authStore.memberSeq, name: authStore.user?.name || '사용자' }"
           />
         </v-card-text>
       </v-card>

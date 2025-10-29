@@ -464,6 +464,8 @@ const buildFolderHierarchy = (folders) => {
 const openSharedDocModal = () => {
   showSharedDocModal.value = true
   showFolderSelector.value = false // 폴더 선택기 닫기
+  // 기본 저장 위치를 현재 폴더로 설정
+  sharedDocLocation.value = driveStore.currentParentId
   // 폴더 목록이 없을 때만 로드
   if (!allFolders.value || allFolders.value.length === 0) {
     loadAllFolders()
@@ -603,10 +605,7 @@ const createFolder = async () => {
     newFolderParentLocation.value = null
     showNewFolderModal.value = false
     showNewFolderParentSelector.value = false
-    // 폴더 생성 후 현재 폴더 다시 로드
-    await loadDriveItems()
-    // 폴더 목록도 새로고침 (새 폴더가 추가되었으므로)
-    await loadAllFolders()
+    // 스토어에서 이미 현재 폴더에 생성된 경우 자동으로 추가되므로 API 재호출 불필요
   } else {
     showError('폴더 생성 실패', result.error || '폴더 생성 중 오류가 발생했습니다.')
   }
@@ -752,8 +751,8 @@ const formatFileSizeFromBytes = (bytes) => {
 const createSharedDoc = async () => {
   if (!sharedDocTitle.value.trim()) return
   
-  // 현재 폴더의 ID를 사용 (sharedDocLocation이 선택된 폴더가 아니라면 현재 폴더 사용)
-  const parentFolderId = sharedDocLocation.value || driveStore.currentParentId
+  // 선택한 폴더 위치를 사용
+  const parentFolderId = sharedDocLocation.value
   
   const result = await driveStore.createSharedDocument(sharedDocTitle.value.trim(), parentFolderId, sharedDocIsLocked.value)
   if (result.success) {
@@ -763,6 +762,7 @@ const createSharedDoc = async () => {
     sharedDocIsLocked.value = false
     showSharedDocModal.value = false
     showFolderSelector.value = false
+    // 스토어에서 이미 현재 폴더에 생성된 경우 자동으로 추가되므로 API 재호출 불필요
   } else {
     showError('공유문서 생성 실패', result.error || '공유문서 생성 중 오류가 발생했습니다.')
   }

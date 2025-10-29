@@ -42,7 +42,7 @@
               v-for="participant in participants"
               :key="participant.userId"
               class="participant-item"
-              :class="{ 'is-current-user': participant.userId === user.id }"
+              :class="{ 'is-current-user': user.id && participant.userId === user.id }"
             >
               <div class="participant-avatar">
                 {{ participant.userName.charAt(0).toUpperCase() }}
@@ -195,6 +195,7 @@ import StarterKit from '@tiptap/starter-kit';
 import { connectStomp, sendStompMessage, disconnectStomp } from '@/services/editorStompService';
 import { documentApi } from '@/api/document/documentApi';
 import { projectDriveApi } from '@/api/drive/driveApi';
+import { useAuthStore } from '@/store/authStore';
 
 // Props 정의 (라우트 파라미터에서 받음)
 const props = defineProps({
@@ -208,7 +209,7 @@ const props = defineProps({
   },
   currentUser: {
     type: Object,
-    default: () => ({ id: 1, name: '홍길동' })
+    required: true
   }
 });
 
@@ -217,6 +218,9 @@ const emit = defineEmits(['document-line-updated', 'document-line-deleted']);
 
 // 라우터
 const router = useRouter();
+
+// Auth Store
+const authStore = useAuthStore();
 
 // 뒤로가기 함수
 const goBack = () => {
@@ -260,7 +264,7 @@ const sendUpdate = (updates) => {
         body: {
           messageType: 'UPDATE',
           documentId: props.documentSeq.toString(),
-          senderId: user.name,
+          senderId: user.value.name,
           lineId: id,
           content: cleanedHtml,
         },
@@ -281,7 +285,7 @@ const sendUpdate = (updates) => {
       body: {
         messageType: 'BATCH_UPDATE',
         documentId: props.documentSeq.toString(),
-        senderId: user.name,
+        senderId: user.value.name,
         changes: changes,
       },
     });
@@ -545,8 +549,8 @@ const joinDocument = () => {
   sendStompMessage({
     destination: `/publish/document/${props.documentSeq}/join`,
     body: {
-      userId: user.id,
-      userName: user.name
+      userId: user.value.id,
+      userName: user.value.name
     },
   });
 };
@@ -561,8 +565,8 @@ const leaveDocument = () => {
   sendStompMessage({
     destination: `/publish/document/${props.documentSeq}/leave`,
     body: {
-      userId: user.id,
-      userName: user.name
+      userId: user.value.id,
+      userName: user.value.name
     },
   });
 };
@@ -570,14 +574,14 @@ const leaveDocument = () => {
 // 라인 락 함수
 const lockLine = (lineId) => {
   console.log('🔒 라인 락 시도:', lineId);
-  console.log('🔒 현재 사용자:', { id: user.id, name: user.name });
+  console.log('🔒 현재 사용자:', { id: user.value.id, name: user.value.name });
   
   const lockMessage = {
     messageType: 'LOCK',
     documentId: props.documentSeq.toString(),
     lineId: lineId,
-    userId: user.id,
-    userName: user.name
+    userId: user.value.id,
+    userName: user.value.name
   };
   
   console.log('🔒 락 메시지 전송:', lockMessage);
@@ -602,8 +606,8 @@ const unlockLine = (lineId) => {
       messageType: 'UNLOCK',
       documentId: props.documentSeq.toString(),
       lineId: lineId,
-      userId: user.id,
-      userName: user.name
+      userId: user.value.id,
+      userName: user.value.name
     },
   });
 };
@@ -724,7 +728,7 @@ const UniqueIdExtension = Extension.create({
               for (const lineId of selectedLines) {
                 if (isLineLocked(lineId)) {
                   const lockInfo = getLineLockUser(lineId);
-                  if (lockInfo && lockInfo.userId !== user.id) {
+                  if (lockInfo && lockInfo.userId !== user.value.id) {
                     console.log('🚫 락된 라인 삭제 차단:', lineId, lockInfo.userName);
                     
                     // 에러 메시지 표시
@@ -753,7 +757,7 @@ const UniqueIdExtension = Extension.create({
             
             if (currentLineId && isLineLocked(currentLineId)) {
               const lockInfo = getLineLockUser(currentLineId);
-              if (lockInfo && lockInfo.userId !== user.id) {
+              if (lockInfo && lockInfo.userId !== user.value.id) {
                 console.log('🚫 락된 라인 타이핑 차단:', currentLineId, lockInfo.userName);
                 event.preventDefault();
                 event.stopPropagation();
@@ -775,7 +779,7 @@ const UniqueIdExtension = Extension.create({
                 const lineId = lineElement.getAttribute('data-id');
                 if (isLineLocked(lineId)) {
                   const lockInfo = getLineLockUser(lineId);
-                  if (lockInfo && lockInfo.userId !== user.id) {
+                  if (lockInfo && lockInfo.userId !== user.value.id) {
                     console.log('🚫 락된 라인 마우스다운 차단:', lineId, lockInfo.userName);
                     event.preventDefault();
                     event.stopPropagation();
@@ -793,7 +797,7 @@ const UniqueIdExtension = Extension.create({
                 const lineId = lineElement.getAttribute('data-id');
                 if (isLineLocked(lineId)) {
                   const lockInfo = getLineLockUser(lineId);
-                  if (lockInfo && lockInfo.userId !== user.id) {
+                  if (lockInfo && lockInfo.userId !== user.value.id) {
                     console.log('🚫 락된 라인 클릭 차단:', lineId, lockInfo.userName);
                     event.preventDefault();
                     event.stopPropagation();
@@ -812,7 +816,7 @@ const UniqueIdExtension = Extension.create({
                 const lineId = lineElement.getAttribute('data-id');
                 if (isLineLocked(lineId)) {
                   const lockInfo = getLineLockUser(lineId);
-                  if (lockInfo && lockInfo.userId !== user.id) {
+                  if (lockInfo && lockInfo.userId !== user.value.id) {
                     console.log('🚫 락된 라인 선택시작 차단:', lineId, lockInfo.userName);
                     event.preventDefault();
                     event.stopPropagation();
@@ -832,7 +836,7 @@ const UniqueIdExtension = Extension.create({
                   const lineId = lineElement.getAttribute('data-id');
                   if (isLineLocked(lineId)) {
                     const lockInfo = getLineLockUser(lineId);
-                    if (lockInfo && lockInfo.userId !== user.id) {
+                    if (lockInfo && lockInfo.userId !== user.value.id) {
                       console.log('🚫 드래그 중 락된 라인 차단:', lineId, lockInfo.userName);
                       event.preventDefault();
                       event.stopPropagation();
@@ -869,7 +873,7 @@ const UniqueIdExtension = Extension.create({
                 for (const lineId of selectedLines) {
                   if (isLineLocked(lineId)) {
                     const lockInfo = getLineLockUser(lineId);
-                    if (lockInfo && lockInfo.userId !== user.id) {
+                    if (lockInfo && lockInfo.userId !== user.value.id) {
                       console.log('🚫 드래그 종료 시 락된 라인 선택 차단:', lineId, lockInfo.userName);
                       
                       // 선택 강제 해제
@@ -920,7 +924,7 @@ const isLineLocked = (lineId) => {
 // 라인이 다른 사용자에게 락되어 있는지 확인하는 computed
 const isLineLockedByOthers = (lineId) => {
   const lock = lineLocks.value.get(lineId);
-  return lock && lock.userId !== user.id;
+  return lock && lock.userId !== user.value.id;
 };
 
 // 락된 라인의 사용자 정보를 가져오는 computed
@@ -1042,11 +1046,41 @@ const selectedFormat = ref(null);
 const selectedHeading = ref(null);
 const selectedList = ref(null);
 
-const user = {
-  id: Math.floor(Math.random() * 10000), // 랜덤 ID (테스트용)
-  name: 'User ' + Math.floor(Math.random() * 100),
-  color: '#' + Math.floor(Math.random()*16777215).toString(16),
-};
+// 현재 사용자 정보 (props에서 받거나 authStore에서 가져오기)
+const user = computed(() => {
+  // props 또는 authStore에서 사용자 정보 가져오기
+  const userInfo = props.currentUser || {
+    id: authStore.memberSeq,
+    name: authStore.user?.name || '사용자'
+  };
+  
+  // 유효한 사용자 정보가 없을 경우 기본값 제공
+  const userId = userInfo?.id || authStore.memberSeq || null;
+  const userName = userInfo?.name || authStore.user?.name || '사용자';
+  
+  if (!userId) {
+    // 사용자 정보가 아직 로드되지 않은 경우 기본 객체 반환
+    return {
+      id: null,
+      name: '사용자',
+      color: '#1976d2'
+    };
+  }
+  
+  // 고유 색상 생성 (사용자 ID 기반으로 일관성 있게)
+  const hash = String(userId).split('').reduce((acc, char) => {
+    return char.charCodeAt(0) + ((acc << 5) - acc);
+  }, 0);
+  
+  const hue = Math.abs(hash % 360);
+  const color = `hsl(${hue}, 70%, 50%)`;
+  
+  return {
+    id: userId,
+    name: userName,
+    color: color
+  };
+});
 
 const connectionStatusClass = computed(() => ({
   'status-connecting': connectionStatus.value === 'connecting',
@@ -1234,7 +1268,7 @@ onMounted(async () => {
               body: {
                 messageType: 'DELETE',
                 documentId: props.documentSeq.toString(),
-                senderId: user.name,
+                senderId: user.value.name,
                 lineId,
                 prevLineId,
               },
@@ -1246,7 +1280,7 @@ onMounted(async () => {
               body: {
                 messageType: 'BATCH_DELETE',
                 documentId: props.documentSeq.toString(),
-                senderId: user.name,
+                senderId: user.value.name,
                 changes: deletes,
               },
             });
@@ -1266,7 +1300,7 @@ onMounted(async () => {
                 body: {
                   messageType: 'CREATE',
                   documentId: props.documentSeq.toString(),
-                  senderId: user.name,
+                  senderId: user.value.name,
                   lineId,
                   prevLineId,
                   content: cleanedHtml,
@@ -1289,7 +1323,7 @@ onMounted(async () => {
               body: {
                 messageType: 'BATCH_CREATE',
                 documentId: props.documentSeq.toString(),
-                senderId: user.name,
+                senderId: user.value.name,
                 changes,
               },
             });
@@ -1335,8 +1369,8 @@ onMounted(async () => {
           body: {
             messageType: 'CURSOR_UPDATE',
             documentId: props.documentSeq.toString(),
-            senderId: user.name,
-            content: JSON.stringify({ lineId: cursorLineId, offset: cursorOffset, user }),
+            senderId: user.value.name,
+            content: JSON.stringify({ lineId: cursorLineId, offset: cursorOffset, user: user.value }),
           },
         });
       }
@@ -1404,7 +1438,7 @@ const handleIncomingMessage = (message) => {
   }
   
   // 락 메시지가 아닌 경우에만 본인 메시지 무시
-  if (message.messageType !== 'LOCK' && message.messageType !== 'UNLOCK' && message.senderId === user.name) {
+  if (message.messageType !== 'LOCK' && message.messageType !== 'UNLOCK' && message.senderId === user.value.name) {
     console.log('🚫 메시지 무시 - 본인 메시지');
     return;
   }
