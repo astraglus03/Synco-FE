@@ -11,6 +11,35 @@ import axios from 'axios'
 // 전역 컴포넌트 import
 import GlobalSearch from '@/components/common/GlobalSearch.vue'
 
+// ===== 콘솔 로그 필터링 설정 =====
+// SSE 및 알림 관련 로그만 표시하고 나머지는 비활성화
+const originalConsoleLog = console.log
+console.log = function(...args) {
+  // 첫 번째 인자를 문자열로 변환하여 체크
+  const firstArg = String(args[0] || '')
+  
+  // SSE 또는 알림 관련 키워드가 있으면 로그 표시
+  const allowedKeywords = [
+    '[SSE]',
+    '[알림',
+    'SSE 연결',
+    'SSE 메시지',
+    '알림 수신',
+    '알림 Store',
+    '[App] 로그인',
+    '[App] 로그아웃'
+  ]
+  
+  const shouldLog = allowedKeywords.some(keyword => firstArg.includes(keyword))
+  
+  if (shouldLog) {
+    originalConsoleLog.apply(console, args)
+  }
+}
+
+// console.error와 console.warn은 항상 표시
+// (이미 원본 그대로 유지됨)
+
 const app = createApp(App)
 
 const pinia = createPinia()

@@ -3,6 +3,8 @@ import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/store/authStore'
 import { useWorkspaceStore } from '@/store/workspaceStore'
+import { useWorkspaceMemberStore } from '@/store/workspaceMemberStore'
+import { useNotificationStore } from '@/store/notificationStore'
 import { Authority } from '@/models/workspace/WorkspaceModels'
 import { getWorkspaceMembers, updateWorkspace, delegateSuperAuthority } from '@/services/WorkspaceService'
 import * as authApi from '@/api/member/auth'
@@ -15,13 +17,24 @@ const props = defineProps({
 
 const authStore = useAuthStore()
 const workspaceStore = useWorkspaceStore()
+const workspaceMemberStore = useWorkspaceMemberStore()
+const notificationStore = useNotificationStore()
 const router = useRouter()
 
 const emit = defineEmits(['toggle-theme', 'toggle-member-sidebar', 'toggle-notification-sidebar'])
 
-// 알림 사이드바 상태
-const notificationSidebarVisible = ref(false)
-const activeFilter = ref('all')
+// 알림 스토어에서 알림 데이터 가져오기
+const notifications = computed(() => notificationStore.notifications)
+const notificationCount = computed(() => notificationStore.notificationCount)
+const filteredNotifications = computed(() => notificationStore.filteredNotifications)
+const activeFilter = computed({
+  get: () => notificationStore.activeFilter,
+  set: (value) => notificationStore.setActiveFilter(value)
+})
+const notificationSidebarVisible = computed({
+  get: () => notificationStore.notificationSidebarVisible,
+  set: (value) => notificationStore.notificationSidebarVisible = value
+})
 
 // 프로필 메뉴 상태
 const profileMenuOpen = ref(false)
@@ -30,6 +43,7 @@ const profileMenuOpen = ref(false)
 const profileImageUrl = ref('')
 const userName = ref('')
 
+// ===== 더미 알림 데이터 제거 (실제 SSE를 통해 수신) =====
 // 개인 스페이스용 알림 데이터
 const personalNotifications = ref([
     { 
@@ -398,14 +412,8 @@ const projectNotifications = ref([
   }
 ])
 
-// 현재 워크스페이스에 따른 알림 데이터
-const notifications = computed(() => {
-  if (props.currentWorkspace?.type === 'project') {
-    return projectNotifications.value
-  } else {
-    return personalNotifications.value
-  }
-})
+// NotificationStore를 사용하므로 더 이상 필요 없음
+// 현재 워크스페이스에 따른 알림 데이터는 상단에서 computed로 정의됨
 
 // 개인 스페이스용 필터 옵션
 const personalFilters = ref([
@@ -438,103 +446,36 @@ const notificationFilters = computed(() => {
   }
 })
 
-// 알림 개수 계산
-const notificationCount = computed(() => {
-  return notifications.value.filter(n => !n.read).length
-})
+// NotificationStore에서 이미 정의되어 있으므로 제거
 
-// 필터링된 알림 목록
-const filteredNotifications = computed(() => {
-  let filtered = notifications.value
-  
-  if (activeFilter.value === 'unread') {
-    filtered = filtered.filter(n => !n.read)
-  } else if (activeFilter.value === 'personal_task') {
-    filtered = filtered.filter(n => n.type.includes('personal_task'))
-  } else if (activeFilter.value === 'project_task') {
-    filtered = filtered.filter(n => n.type.includes('project_task'))
-  } else if (activeFilter.value === 'project_meeting') {
-    filtered = filtered.filter(n => n.type.includes('project_meeting'))
-  } else if (activeFilter.value === 'project_file') {
-    filtered = filtered.filter(n => n.type.includes('project_file'))
-  } else if (activeFilter.value === 'project_member') {
-    filtered = filtered.filter(n => n.type.includes('project_member'))
-  } else if (activeFilter.value === 'project_project') {
-    filtered = filtered.filter(n => n.type.includes('project_project'))
-  } else if (activeFilter.value !== 'all') {
-    filtered = filtered.filter(n => n.type === activeFilter.value)
-  }
-  
-  return filtered
-})
+// 필터 개수는 notificationStore에서 자동으로 계산되므로 별도 함수 불필요
 
-// 필터별 개수 업데이트
-const updateFilterCounts = () => {
-  const currentFilters = notificationFilters.value
-  const currentNotifications = notifications.value
-  
-  currentFilters.forEach(filter => {
-    if (filter.key === 'unread') {
-      filter.count = currentNotifications.filter(n => !n.read).length
-    } else if (filter.key === 'all') {
-      filter.count = currentNotifications.length
-    } else if (filter.key === 'personal_task') {
-      filter.count = currentNotifications.filter(n => n.type.includes('personal_task')).length
-    } else if (filter.key === 'project_task') {
-      filter.count = currentNotifications.filter(n => n.type.includes('project_task')).length
-    } else if (filter.key === 'project_meeting') {
-      filter.count = currentNotifications.filter(n => n.type.includes('project_meeting')).length
-    } else if (filter.key === 'project_file') {
-      filter.count = currentNotifications.filter(n => n.type.includes('project_file')).length
-    } else if (filter.key === 'project_member') {
-      filter.count = currentNotifications.filter(n => n.type.includes('project_member')).length
-    } else if (filter.key === 'project_project') {
-      filter.count = currentNotifications.filter(n => n.type.includes('project_project')).length
-    } else {
-      filter.count = currentNotifications.filter(n => n.type === filter.key).length
-    }
-  })
-}
-
-// 초기 필터 개수 업데이트
-updateFilterCounts()
-
-// 필터 변경
+// 필터 변경 (notificationStore로 위임)
 const setActiveFilter = (filterKey) => {
-  activeFilter.value = filterKey
+  notificationStore.setActiveFilter(filterKey)
 }
 
 // 알림 클릭 처리
 const handleNotificationClick = (notification) => {
   if (!notification.read) {
-    markAsRead(notification.id)
+    notificationStore.markAsRead(notification.id)
   }
-  // 알림 타입에 따른 추가 처리
-  console.log('알림 클릭:', notification)
+  // 알림 타입에 따른 추가 처리 (향후 확장)
 }
 
-// 알림 읽음 처리
+// 알림 읽음 처리 (notificationStore로 위임)
 const markAsRead = (notificationId) => {
-  const notification = notifications.value.find(n => n.id === notificationId)
-  if (notification) {
-  notification.read = true
-    updateFilterCounts()
-  }
+  notificationStore.markAsRead(notificationId)
 }
 
-// 모든 알림 읽음 처리
+// 모든 알림 읽음 처리 (notificationStore로 위임)
 const markAllAsRead = () => {
-  notifications.value.forEach(n => n.read = true)
-  updateFilterCounts()
+  notificationStore.markAllAsRead()
 }
 
-// 알림 삭제
+// 알림 삭제 (notificationStore로 위임)
 const deleteNotification = (notificationId) => {
-  const index = notifications.value.findIndex(n => n.id === notificationId)
-  if (index > -1) {
-    notifications.value.splice(index, 1)
-    updateFilterCounts()
-  }
+  notificationStore.deleteNotification(notificationId)
 }
 
 // 모든 알림 보기
@@ -941,10 +882,10 @@ const toggleNotificationSidebar = () => {
   emit('toggle-notification-sidebar', notificationSidebarVisible.value)
 }
 
-// 워크스페이스 변경 시 필터 초기화 및 개수 업데이트
+// 워크스페이스 변경 시 필터 초기화 및 워크스페이스 타입 설정
 const resetFiltersOnWorkspaceChange = () => {
-  activeFilter.value = 'all'
-  updateFilterCounts()
+  notificationStore.setActiveFilter('all')
+  notificationStore.setWorkspaceType(props.currentWorkspace?.type || 'personal')
 }
 
 // 워크스페이스 변경 감지
