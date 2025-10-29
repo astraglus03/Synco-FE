@@ -20,6 +20,8 @@ const API_ENDPOINTS = {
   KICK_MEMBER: '/task-service/virtual-meeting/kick',
   CHANGE_CHANNEL_AUTHORITY: '/task-service/virtual-meeting/changeChannelAuthority',
   GET_ACTIVE_ROOMS: (channelSeq) => `/task-service/virtual-meeting/channel/${channelSeq}/rooms/active`,
+  GET_ENDED_ROOMS: (channelSeq) => `/task-service/virtual-meeting/channel/${channelSeq}/rooms/ended`,
+  GET_ROOM_DETAIL: (roomSeq) => `/task-service/virtual-meeting/rooms/${roomSeq}/summary`,
   GET_WORKSPACE_MEMBERS: (workSpaceSeq) => `/task-service/virtual-meeting/workspace/${workSpaceSeq}/members`,
 }
 
@@ -328,6 +330,65 @@ export const meetingApi = {
       return response.data
     } catch (error) {
       console.error('❌ 활성 회의 목록 조회 실패:', error)
+      if (error.response) {
+        console.error('  - Status:', error.response.status)
+        console.error('  - Data:', error.response.data)
+      }
+      throw error
+    }
+  },
+
+  // 종료된 회의 목록 조회
+  async getEndedRooms(workSpaceSeq, memberSeq, page = 0, size = 10) {
+    try {
+      const url = API_ENDPOINTS.GET_ENDED_ROOMS(workSpaceSeq)
+      console.log('🔍 종료된 회의 목록 API 호출:')
+      console.log('  - URL:', url)
+      console.log('  - workSpaceSeq:', workSpaceSeq)
+      console.log('  - memberSeq:', memberSeq)
+      
+      const response = await axios.get(url, {
+        headers: {
+          'X-Member-Seq': memberSeq
+        },
+        params: {
+          page,
+          size,
+          sort: 'createdAt,desc'
+        }
+      })
+      
+      console.log('✅ API 응답:', response.data)
+      return response.data
+    } catch (error) {
+      console.error('❌ 종료된 회의 목록 조회 실패:', error)
+      if (error.response) {
+        console.error('  - Status:', error.response.status)
+        console.error('  - Data:', error.response.data)
+      }
+      throw error
+    }
+  },
+
+  // 회의 상세 정보 조회
+  async getRoomDetail(roomSeq, memberSeq) {
+    try {
+      const url = API_ENDPOINTS.GET_ROOM_DETAIL(roomSeq)
+      console.log('🔍 회의 상세 정보 API 호출:')
+      console.log('  - URL:', url)
+      console.log('  - roomSeq:', roomSeq)
+      console.log('  - memberSeq:', memberSeq)
+      
+      const response = await axios.get(url, {
+        headers: {
+          'X-Member-Seq': memberSeq
+        }
+      })
+      
+      console.log('✅ API 응답:', response.data)
+      return response.data
+    } catch (error) {
+      console.error('❌ 회의 상세 정보 조회 실패:', error)
       if (error.response) {
         console.error('  - Status:', error.response.status)
         console.error('  - Data:', error.response.data)

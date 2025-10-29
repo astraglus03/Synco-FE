@@ -8,6 +8,8 @@ import {
   ChatMessageReq,
   RoomSessionResDto,
   RoomActiveListDto,
+  RoomEndedListDto,
+  RoomDetailDto,
   ChatMessageRes,
   ChannelInfoResDto,
   MemberInfoDto,
@@ -19,11 +21,13 @@ export const useMeetingStore = defineStore('meeting', () => {
   // 상태
   const channels = ref([])
   const activeRooms = ref([])
+  const endedRooms = ref([])
   const currentChannel = ref(null)
   const currentRoom = ref(null)
   const channelMembers = ref([])
   const workSpaceMembers = ref([])
   const chatMessages = ref([])
+  const currentRoomDetail = ref(null)
   
   // 현재 미팅 상태
   const isCurrentlyInMeeting = ref(false)
@@ -392,6 +396,43 @@ export const useMeetingStore = defineStore('meeting', () => {
     return true
   }
 
+  const loadEndedRooms = async (workSpaceSeq, page = 0, size = 10) => {
+    try {
+      isLoading.value = true
+      error.value = null
+      
+      const response = await meetingApi.getEndedRooms(workSpaceSeq, currentMemberSeq.value, page, size)
+      endedRooms.value = response.data.content.map(room => new RoomEndedListDto(room))
+      
+      console.log('📋 종료된 회의 목록 업데이트:', endedRooms.value)
+      return endedRooms.value
+    } catch (err) {
+      console.error('📋 loadEndedRooms 실패:', err)
+      error.value = err.message || '종료된 회의 목록을 불러오는데 실패했습니다.'
+      throw err
+    } finally {
+      isLoading.value = false
+    }
+  }
+
+  const loadRoomDetail = async (roomSeq) => {
+    try {
+      isLoading.value = true
+      error.value = null
+      
+      const response = await meetingApi.getRoomDetail(roomSeq, currentMemberSeq.value)
+      currentRoomDetail.value = new RoomDetailDto(response.data)
+      
+      return currentRoomDetail.value
+    } catch (err) {
+      console.error('📋 loadRoomDetail 실패:', err)
+      error.value = err.message || '회의 상세 정보를 불러오는데 실패했습니다.'
+      throw err
+    } finally {
+      isLoading.value = false
+    }
+  }
+
   // 미팅 종료 (Store에서만 호출)
   const endMeetingFromStore = () => {
     isCurrentlyInMeeting.value = false
@@ -414,11 +455,13 @@ export const useMeetingStore = defineStore('meeting', () => {
   const reset = () => {
     channels.value = []
     activeRooms.value = []
+    endedRooms.value = []
     currentChannel.value = null
     currentRoom.value = null
     channelMembers.value = []
     workSpaceMembers.value = []
     chatMessages.value = []
+    currentRoomDetail.value = null
     isCurrentlyInMeeting.value = false
     currentMeetingData.value = null
     livekitToken.value = null
@@ -436,11 +479,13 @@ export const useMeetingStore = defineStore('meeting', () => {
     // 상태
     channels,
     activeRooms,
+    endedRooms,
     currentChannel,
     currentRoom,
     channelMembers,
     workSpaceMembers,
     chatMessages,
+    currentRoomDetail,
     isCurrentlyInMeeting,
     currentMeetingData,
     livekitToken,
@@ -466,6 +511,8 @@ export const useMeetingStore = defineStore('meeting', () => {
     setCurrentUser,
     loadChannels,
     loadActiveRooms,
+    loadEndedRooms,
+    loadRoomDetail,
     loadWorkSpaceMembers,
     createRoom,
     joinRoom,

@@ -130,6 +130,114 @@ export class RoomActiveListDto {
   }
 }
 
+// 종료된 회의 목록 DTO
+export class RoomEndedListDto {
+  constructor(data) {
+    this.roomId = data.roomId
+    this.roomName = data.roomName
+    this.roomDescription = data.roomDescription
+    this.activeUserCount = data.activeUserCount
+    this.hostId = data.hostId
+    this.createdAt = data.createdAt
+  }
+
+  get formattedDescription() {
+    return this.roomDescription || '설명 없음'
+  }
+
+  get formattedCreatedAt() {
+    if (!this.createdAt) return ''
+    return new Date(this.createdAt).toLocaleString('ko-KR')
+  }
+}
+
+// 회의 상세 DTO
+export class RoomDetailDto {
+  constructor(data) {
+    this.roomId = data.roomId
+    this.roomName = data.roomName
+    this.roomDescription = data.roomDescription
+    this.hostId = data.hostId
+    this.createdAt = data.createdAt
+    this.duration = data.duration
+    this.summaryContent = data.summaryContent || ''
+    this.participants = data.participants || []
+    this.participantCount = data.participantCount
+  }
+
+  get formattedCreatedAt() {
+    if (!this.createdAt) return ''
+    return new Date(this.createdAt).toLocaleString('ko-KR')
+  }
+
+  get formattedDuration() {
+    if (!this.duration) return '0분'
+    
+    // LiveKit Egress duration은 나노초(nanoseconds) 단위로 반환됨
+    // 48656565668 ns / 1,000,000 = 48656.565668 ms = 48.656 초
+    let durationMs = this.duration
+    
+    // 나노초 단위 확인 (일반적으로 1억 이상이면 나노초)
+    if (this.duration > 100000000) {
+      durationMs = this.duration / 1000000 // 나노초를 밀리초로 변환
+    }
+    
+    const totalMinutes = Math.floor(durationMs / 60000)
+    const hours = Math.floor(totalMinutes / 60)
+    const minutes = totalMinutes % 60
+    
+    if (hours === 0) {
+      return `${minutes}분`
+    } else {
+      return minutes > 0 ? `${hours}시간 ${minutes}분` : `${hours}시간`
+    }
+  }
+}
+
+// 참여자 정보 DTO
+export class ParticipantDto {
+  constructor(data) {
+    this.participantId = data.participantId
+    this.participantName = data.participantName
+    this.participantProfileUrl = data.participantProfileUrl
+    this.participantStatus = data.participantStatus
+  }
+
+  get isOnline() {
+    return this.participantStatus === 'ONLINE'
+  }
+
+  get statusText() {
+    switch (this.participantStatus) {
+      case 'ONLINE':
+        return '온라인'
+      case 'AWAY':
+        return '자리비움'
+      case 'OFFLINE':
+        return '오프라인'
+      default:
+        return '오프라인'
+    }
+  }
+
+  get statusColor() {
+    switch (this.participantStatus) {
+      case 'ONLINE':
+        return 'success'
+      case 'AWAY':
+        return 'warning'
+      case 'OFFLINE':
+        return 'grey'
+      default:
+        return 'grey'
+    }
+  }
+
+  get avatar() {
+    return this.participantName ? this.participantName.charAt(0) : '?'
+  }
+}
+
 // 채팅 메시지 응답 DTO
 export class ChatMessageRes {
   constructor(data) {
@@ -420,6 +528,9 @@ export default {
   KickMemberFromWorkSpaceReqDto,
   RoomSessionResDto,
   RoomActiveListDto,
+  RoomEndedListDto,
+  RoomDetailDto,
+  ParticipantDto,
   ChatMessageRes,
   ChannelInfoResDto,
   ChannelMemberResDto,
