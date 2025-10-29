@@ -44,7 +44,7 @@ export const usePersonalDriveStore = defineStore('personalDrive', () => {
   const loadItems = async (driveChannelSeq, parentId = null) => {
     isLoading.value = true
     error.value = null
-    currentDriveChannelSeq.value = 2 // 테스트용 하드코딩
+    currentDriveChannelSeq.value = driveChannelSeq
 
     try {
       const result = await personalDriveApi.getItems(driveChannelSeq, parentId)

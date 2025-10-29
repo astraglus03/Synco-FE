@@ -1,7 +1,8 @@
 <script setup>
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { usePermissions, PERMISSIONS } from '@/composables/usePermissions'
 import { usePersonalDriveStore } from '@/store/drive/personalDriveStore'
+import { useWorkspaceStore } from '@/store/workspaceStore'
 import { useDraggable, useDropZone } from '@vueuse/core'
 import SharedDocEditor from './SharedDocEditor.vue'
 
@@ -11,6 +12,20 @@ const props = defineProps({
 
 const { hasPermission, isManager, isSuper } = usePermissions()
 const driveStore = usePersonalDriveStore()
+const workspaceStore = useWorkspaceStore()
+
+// 현재 워크스페이스 정보
+const currentWorkspace = computed(() => {
+  return workspaceStore.workspaces.find(w => w.id === workspaceStore.currentWorkspace)
+})
+
+// 현재 드라이브 채널 시퀀스 계산 (워크스페이스의 workSpaceSeq를 사용)
+const currentDriveChannelSeq = computed(() => {
+  if (currentWorkspace.value && currentWorkspace.value.workSpaceSeq) {
+    return currentWorkspace.value.workSpaceSeq
+  }
+  return null
+})
 
 // 뷰 모드 (list, grid)
 const viewMode = ref('grid')
@@ -868,15 +883,26 @@ const handleGlobalClick = (event) => {
 
 // API 연동 메서드들
 const loadDriveItems = async () => {
-  if (!props.currentChannel) return
+  if (!currentDriveChannelSeq.value) {
+    console.error('driveChannelSeq가 없습니다. 워크스페이스를 확인하세요.')
+    return
+  }
   
   try {
-    const driveChannelSeq = parseInt(props.currentChannel.replace('personal', ''))
-    await driveStore.loadItems(driveChannelSeq, null)
+    console.log('드라이브 로드 시작:', currentDriveChannelSeq.value)
+    await driveStore.loadItems(currentDriveChannelSeq.value, null)
   } catch (error) {
+    console.error('목록 조회 실패:', error)
     showError('목록 조회 실패', '드라이브 목록을 불러오는 중 오류가 발생했습니다.')
   }
 }
+
+// 워크스페이스가 변경될 때마다 드라이브 다시 로드
+watch(() => workspaceStore.currentWorkspace, () => {
+  if (props.currentChannel === 'drive') {
+    loadDriveItems()
+  }
+}, { deep: true })
 </script>
 
 <template>

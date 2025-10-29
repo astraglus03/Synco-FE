@@ -1,8 +1,9 @@
 <script setup>
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { usePermissions, PERMISSIONS } from '@/composables/usePermissions'
 import { useProjectDriveStore } from '@/store/drive/projectDriveStore'
+import { useWorkspaceStore } from '@/store/workspaceStore'
 import { useDraggable, useDropZone } from '@vueuse/core'
 import SharedDocEditor from './SharedDocEditor.vue'
 
@@ -12,6 +13,7 @@ const props = defineProps({
 
 const { hasPermission, isManager, isSuper } = usePermissions()
 const driveStore = useProjectDriveStore()
+const workspaceStore = useWorkspaceStore()
 const router = useRouter()
 
 // 뷰 모드 (list, grid)
@@ -138,14 +140,31 @@ const parseSize = (sizeStr) => {
   }
 }
 
+// 현재 워크스페이스 정보
+const currentWorkspace = computed(() => {
+  return workspaceStore.workspaces.find(w => w.id === workspaceStore.currentWorkspace)
+})
+
+// 현재 드라이브 채널 시퀀스 계산 (워크스페이스의 workSpaceSeq를 사용)
+const currentDriveChannelSeq = computed(() => {
+  if (currentWorkspace.value && currentWorkspace.value.workSpaceSeq) {
+    return currentWorkspace.value.workSpaceSeq
+  }
+  return null
+})
+
 // 공유문서 더블클릭으로 문서 편집기 진입
 const openSharedDoc = async (doc) => {
   if (doc.type === 'shared-doc') {
+    if (!currentDriveChannelSeq.value) {
+      console.error('driveChannelSeq가 유효하지 않습니다')
+      return
+    }
     // 라우트로 문서 편집기 페이지 이동
     await router.push({
       name: 'DocumentEditor',
       params: {
-        driveChannelSeq: 2, // 하드코딩
+        driveChannelSeq: currentDriveChannelSeq.value,
         documentSeq: doc.id
       }
     })
@@ -454,6 +473,8 @@ const buildFolderHierarchy = (folders) => {
 const openSharedDocModal = () => {
   showSharedDocModal.value = true
   showFolderSelector.value = false // 폴더 선택기 닫기
+  // 기본 저장 위치를 현재 폴더로 설정
+  sharedDocLocation.value = driveStore.currentParentId
   // 폴더 목록이 없을 때만 로드
   if (!allFolders.value || allFolders.value.length === 0) {
     loadAllFolders()
@@ -593,10 +614,7 @@ const createFolder = async () => {
     newFolderParentLocation.value = null
     showNewFolderModal.value = false
     showNewFolderParentSelector.value = false
-    // 폴더 생성 후 현재 폴더 다시 로드
-    await loadDriveItems()
-    // 폴더 목록도 새로고침 (새 폴더가 추가되었으므로)
-    await loadAllFolders()
+    // 스토어에서 이미 현재 폴더에 생성된 경우 자동으로 추가되므로 API 재호출 불필요
   } else {
     showError('폴더 생성 실패', result.error || '폴더 생성 중 오류가 발생했습니다.')
   }
@@ -742,8 +760,8 @@ const formatFileSizeFromBytes = (bytes) => {
 const createSharedDoc = async () => {
   if (!sharedDocTitle.value.trim()) return
   
-  // 현재 폴더의 ID를 사용 (sharedDocLocation이 선택된 폴더가 아니라면 현재 폴더 사용)
-  const parentFolderId = sharedDocLocation.value || driveStore.currentParentId
+  // 선택한 폴더 위치를 사용
+  const parentFolderId = sharedDocLocation.value
   
   const result = await driveStore.createSharedDocument(sharedDocTitle.value.trim(), parentFolderId, sharedDocIsLocked.value)
   if (result.success) {
@@ -753,6 +771,7 @@ const createSharedDoc = async () => {
     sharedDocIsLocked.value = false
     showSharedDocModal.value = false
     showFolderSelector.value = false
+    // 스토어에서 이미 현재 폴더에 생성된 경우 자동으로 추가되므로 API 재호출 불필요
   } else {
     showError('공유문서 생성 실패', result.error || '공유문서 생성 중 오류가 발생했습니다.')
   }
@@ -873,15 +892,26 @@ const handleGlobalClick = (event) => {
 
 // API 연동 메서드들
 const loadDriveItems = async () => {
-  if (!props.currentChannel) return
+  if (!currentDriveChannelSeq.value) {
+    console.error('driveChannelSeq가 없습니다. 워크스페이스를 확인하세요.')
+    return
+  }
   
   try {
-    const driveChannelSeq = parseInt(props.currentChannel.replace('project', ''))
-    await driveStore.loadItems(driveChannelSeq, null)
+    console.log('드라이브 로드 시작:', currentDriveChannelSeq.value)
+    await driveStore.loadItems(currentDriveChannelSeq.value, null)
   } catch (error) {
+    console.error('목록 조회 실패:', error)
     showError('목록 조회 실패', '드라이브 목록을 불러오는 중 오류가 발생했습니다.')
   }
 }
+
+// 워크스페이스가 변경될 때마다 드라이브 다시 로드
+watch(() => workspaceStore.currentWorkspace, () => {
+  if (props.currentChannel === 'drive') {
+    loadDriveItems()
+  }
+}, { deep: true })
 </script>
 
 <template>
@@ -1673,9 +1703,9 @@ const loadDriveItems = async () => {
         
         <v-card-text class="modal-body" style="padding: 0; height: calc(100vh - 120px);">
           <SharedDocEditor 
-            v-if="currentDocument"
+            v-if="currentDocument && currentDriveChannelSeq"
             :document-seq="currentDocument.id"
-            :drive-channel-seq="2"
+            :drive-channel-seq="currentDriveChannelSeq"
             :current-user="{ id: 1, name: '홍길동' }"
           />
         </v-card-text>

@@ -58,9 +58,6 @@ const ALLOWED_FILE_EXTENSIONS = [
   '.exe', '.dmg', '.iso', '.deb', '.rpm', '.apk', '.ipa'
 ]
 
-// 테스트용 채널 번호 (실제로는 props에서 받아와야 함)
-const TEST_CHANNEL_SEQ = 2
-
 // 공통 유틸리티 함수들
 const createApiResponse = (success, data = null, error = null) => ({
   success,
@@ -144,7 +141,7 @@ class DriveApiBase {
   // 드라이브 아이템 목록 조회
   async getItems(driveChannelSeq, parentFolderSeq = null) {
     try {
-      const endpoint = this.endpoints.items(TEST_CHANNEL_SEQ)
+      const endpoint = this.endpoints.items(driveChannelSeq)
       const response = await axios.get(endpoint, {
         params: { parentFolderId: parentFolderSeq }
       })
@@ -173,7 +170,7 @@ class DriveApiBase {
       const response = await axios.post(this.endpoints.folder, {
         folderName: name,
         parentFolderSeq,
-        driveChannelSeq: TEST_CHANNEL_SEQ
+        driveChannelSeq
       })
       
       return createApiResponse(true, DriveItem.fromApiFormat({
@@ -192,7 +189,7 @@ class DriveApiBase {
       const response = await axios.post(this.endpoints.sharedDoc, {
         documentName: name,
         parentFolderSeq,
-        driveChannelSeq: TEST_CHANNEL_SEQ,
+        driveChannelSeq,
         isLocked
       })
       
@@ -216,7 +213,7 @@ class DriveApiBase {
       
       const formData = new FormData()
       files.forEach(file => formData.append('files', file))
-      formData.append('driveChannelSeq', TEST_CHANNEL_SEQ)
+      formData.append('driveChannelSeq', driveChannelSeq)
       if (parentFolderSeq) {
         formData.append('parentFolderSeq', parentFolderSeq)
       }
@@ -242,7 +239,7 @@ class DriveApiBase {
   async renameFolder(folderSeq, newFolderName, driveChannelSeq) {
     try {
       const response = await axios.patch(this.endpoints.renameFolder, {
-        driveChannelSeq: TEST_CHANNEL_SEQ,
+        driveChannelSeq,
         folderSeq,
         newFolderName
       })
@@ -261,7 +258,7 @@ class DriveApiBase {
   async renameDocument(documentSeq, newDocumentName, driveChannelSeq) {
     try {
       const response = await axios.patch(this.endpoints.renameDocument, {
-        driveChannelSeq: TEST_CHANNEL_SEQ,
+        driveChannelSeq,
         documentSeq,
         newDocumentName
       })
@@ -364,7 +361,7 @@ class DriveApiBase {
     try {
       await axios.patch(this.endpoints.move, {
         itemId,
-        driveChannelSeq: TEST_CHANNEL_SEQ,
+        driveChannelSeq,
         itemType,
         newParentSeq: newParentId
       })
@@ -380,7 +377,7 @@ class DriveApiBase {
     try {
       await axios.patch(this.endpoints.reorder, {
         itemId: folderId,
-        driveChannelSeq: TEST_CHANNEL_SEQ,
+        driveChannelSeq,
         newOrder: newOrder
       })
       
