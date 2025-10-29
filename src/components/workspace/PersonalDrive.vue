@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import { usePermissions, PERMISSIONS } from '@/composables/usePermissions'
 import { usePersonalDriveStore } from '@/store/drive/personalDriveStore'
 import { useWorkspaceStore } from '@/store/workspaceStore'
@@ -82,6 +82,12 @@ const currentDocument = ref(null)
 
 // 파일 업로드 폴더 선택 상태
 const uploadFolderLocation = ref(null)
+
+// 아이템 이동 상태
+const showMoveModal = ref(false)
+const moveItemTarget = ref(null) // 이동할 아이템
+const moveItemLocation = ref(null) // 이동할 폴더 ID
+const showMoveFolderSelector = ref(false)
 const showUploadFolderSelector = ref(false)
 
 // 폴더 생성 부모 폴더 선택 상태
@@ -476,6 +482,131 @@ const openSharedDocModal = () => {
   }
 }
 
+// 아이템 이동 모달 열기
+const openMoveModal = (item) => {
+  moveItemTarget.value = item
+  moveItemLocation.value = null
+  showMoveModal.value = true
+  showMoveFolderSelector.value = false
+  // 폴더 목록이 없을 때만 로드
+  if (!allFolders.value || allFolders.value.length === 0) {
+    loadAllFolders()
+  }
+}
+
+// 아이템 이동
+const moveItem = async () => {
+  if (!moveItemTarget.value) return
+  
+  const targetFolderId = moveItemLocation.value
+  const result = await driveStore.moveItem(
+    moveItemTarget.value.id,
+    moveItemTarget.value.type,
+    targetFolderId
+  )
+  
+  if (result.success) {
+    // 이동 성공 후 목록 갱신
+    await driveStore.loadItems(currentDriveChannelSeq.value, driveStore.currentParentId)
+    // 전체 폴더 목록도 갱신
+    await loadAllFolders()
+    
+    moveItemTarget.value = null
+    moveItemLocation.value = null
+    showMoveModal.value = false
+    showMoveFolderSelector.value = false
+  } else {
+    showError('이동 실패', result.error || '아이템 이동 중 오류가 발생했습니다.')
+  }
+}
+
+// 이동할 폴더 선택
+const selectMoveFolder = (folder) => {
+  moveItemLocation.value = folder.id
+  showMoveFolderSelector.value = false
+}
+
+// 현재 선택된 이동 폴더 이름
+const selectedMoveFolderName = computed(() => {
+  if (moveItemLocation.value === null) return '최상위 루트'
+  if (!moveItemLocation.value) return '폴더를 선택하세요'
+  
+  // 전체 폴더 목록에서 찾기
+  const findFolderInHierarchy = (folders, targetId) => {
+    for (const folder of folders) {
+      if (folder.id === targetId) {
+        return folder
+      }
+      if (folder.children && folder.children.length > 0) {
+        const found = findFolderInHierarchy(folder.children, targetId)
+        if (found) return found
+      }
+    }
+    return null
+  }
+  
+  const folder = findFolderInHierarchy(allFolders.value, moveItemLocation.value)
+  return folder ? folder.name : '알 수 없는 폴더'
+})
+
+// 이동 가능한 폴더 필터링 (자신과 자신의 하위 폴더는 제외)
+const moveableFolders = computed(() => {
+  if (!moveItemTarget.value || moveItemTarget.value.type !== 'folder') {
+    return flattenedFolders.value
+  }
+  
+  // 자신과 자신의 하위 폴더를 제외
+  const excludeIds = new Set([moveItemTarget.value.id])
+  
+  // 재귀적으로 하위 폴더 ID 수집
+  const collectChildIds = (parentFolderId, folders) => {
+    for (const folder of folders) {
+      if (folder.parentFolderSeq === parentFolderId || folder.id === parentFolderId) {
+        if (folder.id === parentFolderId) {
+          // 직접 매칭된 경우
+          if (folder.children && folder.children.length > 0) {
+            folder.children.forEach(child => {
+              excludeIds.add(child.id)
+              collectChildIds(child.id, allFolders.value)
+            })
+          }
+        } else if (folder.parentFolderSeq === parentFolderId) {
+          // 자식인 경우
+          excludeIds.add(folder.id)
+          if (folder.children && folder.children.length > 0) {
+            collectChildIds(folder.id, folder.children)
+          }
+        }
+      }
+      if (folder.children && folder.children.length > 0) {
+        collectChildIds(parentFolderId, folder.children)
+      }
+    }
+  }
+  
+  // 전체 폴더 목록에서 하위 폴더 찾기
+  const findFolderAndCollectChildren = (folders, targetId) => {
+    for (const folder of folders) {
+      if (folder.id === targetId) {
+        if (folder.children && folder.children.length > 0) {
+          folder.children.forEach(child => {
+            excludeIds.add(child.id)
+            collectChildIds(child.id, allFolders.value)
+          })
+        }
+        return
+      }
+      if (folder.children && folder.children.length > 0) {
+        findFolderAndCollectChildren(folder.children, targetId)
+      }
+    }
+  }
+  
+  findFolderAndCollectChildren(allFolders.value, moveItemTarget.value.id)
+  
+  return flattenedFolders.value.filter(folder => !excludeIds.has(folder.id))
+})
+
 // 아이템 삭제
 const deleteItem = async (item) => {
   if (!confirm(`"${item.name}"을(를) 삭제하시겠습니까?`)) {
@@ -851,13 +982,17 @@ const closeModals = () => {
   showUploadModal.value = false
   showNewFolderModal.value = false
   showSharedDocModal.value = false
+  showMoveModal.value = false
   showFolderSelector.value = false
   showUploadFolderSelector.value = false
   showNewFolderParentSelector.value = false
+  showMoveFolderSelector.value = false
   newFolderName.value = ''
   uploadFiles.value = []
   sharedDocTitle.value = ''
   sharedDocLocation.value = null
+  moveItemTarget.value = null
+  moveItemLocation.value = null
   sharedDocIsLocked.value = false
   uploadFolderLocation.value = null
   newFolderParentLocation.value = null
@@ -1221,6 +1356,18 @@ watch(() => workspaceStore.currentWorkspace, () => {
                 <v-icon size="16">{{ item.isLocked ? 'mdi-lock-open' : 'mdi-lock' }}</v-icon>
               </v-btn>
               
+              <!-- 이동 버튼 -->
+              <v-btn
+                icon="mdi-folder-move"
+                size="small"
+                variant="text"
+                class="action-btn"
+                @click.stop="openMoveModal(item)"
+                title="이동"
+              >
+                <v-icon size="16">mdi-folder-move</v-icon>
+              </v-btn>
+              
               <!-- 삭제 버튼 -->
               <v-btn
                 v-if="canDeleteItem(item)"
@@ -1359,6 +1506,18 @@ watch(() => workspaceStore.currentWorkspace, () => {
                 :title="item.isLocked ? '잠금 해제' : '잠금'"
               >
                 <v-icon size="16">{{ item.isLocked ? 'mdi-lock-open' : 'mdi-lock' }}</v-icon>
+              </v-btn>
+              
+              <!-- 이동 버튼 -->
+              <v-btn
+                icon="mdi-folder-move"
+                size="small"
+                variant="text"
+                class="action-btn"
+                @click.stop="openMoveModal(item)"
+                title="이동"
+              >
+                <v-icon size="16">mdi-folder-move</v-icon>
               </v-btn>
               
               <!-- 삭제 버튼 -->
@@ -1770,6 +1929,98 @@ watch(() => workspaceStore.currentWorkspace, () => {
             :disabled="!newFolderName.trim()"
           >
             만들기
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
+    <!-- 아이템 이동 모달 -->
+    <v-dialog v-model="showMoveModal" max-width="600px" max-height="90vh" @click:outside="closeModals">
+      <v-card class="move-item-modal">
+        <v-card-title class="modal-header">
+          <div class="header-content">
+            <v-icon class="header-icon" color="primary">mdi-folder-move</v-icon>
+            <h3 class="modal-title">아이템 이동</h3>
+          </div>
+          <v-btn icon="mdi-close" variant="text" @click="closeModals"></v-btn>
+        </v-card-title>
+        
+        <v-card-text class="modal-body">
+          <div class="move-item-info mb-4">
+            <v-icon class="mr-2" :color="moveItemTarget?.color">{{ moveItemTarget?.icon }}</v-icon>
+            <span class="text-body-1 font-weight-medium">{{ moveItemTarget?.name }}</span>
+          </div>
+          
+          <!-- 이동 위치 선택 -->
+          <div class="folder-selection mb-4">
+            <label class="input-label">이동할 위치</label>
+            <div class="folder-selector" @click="showMoveFolderSelector = !showMoveFolderSelector">
+              <div class="selected-folder">
+                <v-icon class="folder-icon">mdi-folder</v-icon>
+                <span class="folder-name">{{ selectedMoveFolderName }}</span>
+                <v-icon class="dropdown-icon" :class="{ 'rotated': showMoveFolderSelector }">mdi-chevron-down</v-icon>
+              </div>
+            </div>
+            
+            <!-- 계층형 폴더 선택 드롭다운 -->
+            <div v-if="showMoveFolderSelector" class="folder-dropdown">
+              <div class="folder-list">
+                <!-- 로딩 상태 -->
+                <div v-if="loadingFolders" class="loading-state">
+                  <v-progress-circular indeterminate color="primary" size="24"></v-progress-circular>
+                  <span class="loading-text">폴더 목록을 불러오는 중...</span>
+                </div>
+                
+                <!-- 폴더 없음 -->
+                <div v-else-if="moveableFolders.length === 0" class="empty-state">
+                  <v-icon size="48" color="grey">mdi-folder-off</v-icon>
+                  <p>이동 가능한 폴더가 없습니다</p>
+                </div>
+                
+                <!-- 최상위 루트 옵션 -->
+                <div
+                  v-if="moveableFolders.length > 0"
+                  class="folder-item root-folder"
+                  :class="{ 'selected': moveItemLocation === null }"
+                  @click="selectMoveFolder({ id: null, name: '최상위 루트' })"
+                >
+                  <v-icon class="expand-placeholder"></v-icon>
+                  <v-icon class="folder-icon" color="#2196f3">mdi-home</v-icon>
+                  <span class="folder-name">최상위 루트</span>
+                  <span v-if="moveItemLocation === null" class="selected-indicator">
+                    <v-icon color="primary" size="16">mdi-check</v-icon>
+                  </span>
+                </div>
+                
+                <!-- 계층구조 폴더 목록 -->
+                <div 
+                  v-for="folder in moveableFolders" 
+                  :key="folder.id"
+                  class="folder-item"
+                  :class="{ 'selected': moveItemLocation === folder.id }"
+                  :style="{ paddingLeft: `${20 + folder.level * 20}px` }"
+                  @click="selectMoveFolder(folder)"
+                >
+                  <v-icon class="folder-icon" color="#ff9800">mdi-folder</v-icon>
+                  <span class="folder-name">{{ folder.name }}</span>
+                  <span v-if="moveItemLocation === folder.id" class="selected-indicator">
+                    <v-icon color="primary" size="16">mdi-check</v-icon>
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </v-card-text>
+        
+        <v-card-actions class="modal-actions">
+          <v-spacer></v-spacer>
+          <v-btn variant="text" @click="closeModals">취소</v-btn>
+          <v-btn 
+            color="primary" 
+            @click="moveItem"
+            :disabled="moveItemLocation === undefined"
+          >
+            이동하기
           </v-btn>
         </v-card-actions>
       </v-card>
@@ -2330,18 +2581,13 @@ watch(() => workspaceStore.currentWorkspace, () => {
 }
 
 .folder-dropdown {
-  position: absolute;
-  top: 100%;
-  left: 0;
-  right: 0;
+  margin-top: 8px;
   background: rgb(var(--v-theme-surface));
   border: 1px solid rgba(var(--v-theme-on-surface), 0.2);
   border-radius: 8px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-  z-index: 1000;
-  max-height: 300px; /* 높이 더 증가 */
+  max-height: 500px;
   overflow-y: auto;
-  margin-top: 4px;
 }
 
 .folder-list {
@@ -2612,15 +2858,16 @@ watch(() => workspaceStore.currentWorkspace, () => {
 
 /* 공유문서 생성 모달 스타일 */
 .shared-doc-modal {
-  max-height: 90vh;
   display: flex;
   flex-direction: column;
 }
 
 .shared-doc-modal .modal-body {
-  flex: 1;
+  min-height: auto;
+  max-height: 70vh;
   overflow-y: auto;
   padding: 24px;
+  transition: max-height 0.3s ease;
 }
 
 .shared-doc-modal .modal-actions {
@@ -2631,15 +2878,16 @@ watch(() => workspaceStore.currentWorkspace, () => {
 
 /* 파일 업로드 모달 스타일 */
 .upload-modal {
-  max-height: 90vh;
   display: flex;
   flex-direction: column;
 }
 
 .upload-modal .modal-body {
-  flex: 1;
+  min-height: auto;
+  max-height: 70vh;
   overflow-y: auto;
   padding: 24px;
+  transition: max-height 0.3s ease;
 }
 
 .upload-modal .modal-actions {
@@ -2650,21 +2898,51 @@ watch(() => workspaceStore.currentWorkspace, () => {
 
 /* 폴더 생성 모달 스타일 */
 .new-folder-modal {
-  max-height: 90vh;
   display: flex;
   flex-direction: column;
 }
 
 .new-folder-modal .modal-body {
-  flex: 1;
+  min-height: auto;
+  max-height: 70vh;
   overflow-y: auto;
   padding: 24px;
+  transition: max-height 0.3s ease;
 }
 
 .new-folder-modal .modal-actions {
   flex-shrink: 0;
   padding: 16px 24px;
   border-top: 1px solid rgba(var(--v-theme-on-surface), 0.1);
+}
+
+/* 아이템 이동 모달 스타일 */
+.move-item-modal {
+  display: flex;
+  flex-direction: column;
+}
+
+.move-item-modal .modal-body {
+  min-height: auto;
+  max-height: 70vh;
+  overflow-y: auto;
+  padding: 24px;
+  transition: max-height 0.3s ease;
+}
+
+.move-item-modal .modal-actions {
+  flex-shrink: 0;
+  padding: 16px 24px;
+  border-top: 1px solid rgba(var(--v-theme-on-surface), 0.1);
+}
+
+.move-item-info {
+  display: flex;
+  align-items: center;
+  padding: 12px 16px;
+  background: rgba(var(--v-theme-primary), 0.05);
+  border-radius: 8px;
+  border: 1px solid rgba(var(--v-theme-primary), 0.2);
 }
 
 /* 로딩 상태 스타일 */
