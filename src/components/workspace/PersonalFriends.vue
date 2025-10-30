@@ -573,6 +573,11 @@ const acceptFriendRequestFromSearch = async (user) => {
 // 친구 요청 수락
 const acceptFriendRequest = async (friendSeq) => {
   try {
+    console.log('🔍 [PersonalFriends] acceptFriendRequest 호출됨')
+    console.log('🔍 [PersonalFriends] friendSeq 값:', friendSeq)
+    console.log('🔍 [PersonalFriends] friendSeq 타입:', typeof friendSeq)
+    console.log('🔍 [PersonalFriends] receivedRequests:', receivedRequests.value)
+    
     await friendApi.acceptFriendRequest(friendSeq)
     
     // 받은 요청에서 제거
@@ -1664,45 +1669,478 @@ onUnmounted(() => {
 }
 
 /* 반응형 디자인 */
+@media (max-width: 1024px) {
+  .personal-friends {
+    padding: 16px;
+  }
+  
+  .page-title {
+    font-size: 22px;
+  }
+  
+  .page-subtitle {
+    font-size: 14px;
+  }
+  
+  .content-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 16px;
+  }
+  
+  .search-container {
+    width: 100%;
+    max-width: 100%;
+  }
+  
+  .tab-button {
+    font-size: 14px;
+    padding: 10px 16px;
+  }
+}
+
 @media (max-width: 768px) {
   .personal-friends {
-    padding: 20px;
+    padding: 12px;
     height: calc(100vh - 56px);
   }
   
-  .friends-list,
-  .request-list {
-    min-height: 200px;
+  .friends-header {
+    margin-bottom: 16px;
   }
   
   .header-content {
     flex-direction: column;
-    gap: 20px;
+    gap: 12px;
+    align-items: stretch;
   }
   
-  .stats-cards {
-    grid-template-columns: 1fr;
-    gap: 16px;
-  }
-  
-  .main-content {
-    padding: 20px;
+  .add-friend-btn {
+    width: 100%;
+    font-size: 14px;
+    padding: 10px 20px;
   }
   
   .page-title {
-    font-size: 24px;
+    font-size: 20px;
+  }
+  
+  .page-subtitle {
+    font-size: 13px;
+  }
+  
+  .tab-navigation {
+    gap: 0;
+    padding: 3px;
+  }
+  
+  .tab-button {
+    font-size: 13px;
+    padding: 8px 12px;
+    gap: 4px;
+    white-space: nowrap;
+  }
+  
+  .tab-count {
+    font-size: 11px;
+    padding: 1px 6px;
+  }
+  
+  .main-content {
+    padding: 16px;
+  }
+  
+  .content-header {
+    margin-bottom: 16px;
+  }
+  
+  .content-title {
+    font-size: 18px;
+  }
+  
+  .content-subtitle {
+    font-size: 14px;
+  }
+  
+  .search-container {
+    width: 100%;
+  }
+  
+  .search-input {
+    font-size: 13px;
+    height: 36px;
+    padding: 6px 12px 6px 40px;
+  }
+  
+  .search-icon {
+    left: 12px;
+    font-size: 18px;
+  }
+  
+  .friends-list,
+  .request-list {
+    gap: 12px;
   }
   
   .friend-item,
   .request-item {
-    flex-direction: column;
-    align-items: flex-start;
+    padding: 12px;
     gap: 12px;
   }
   
-  .friend-actions,
-  .request-actions {
-    align-self: flex-end;
+  .friend-name,
+  .request-name {
+    font-size: 14px;
+  }
+  
+  .friend-status,
+  .request-message {
+    font-size: 12px;
+  }
+  
+  .empty-state {
+    padding: 40px 16px;
+  }
+  
+  .empty-icon {
+    font-size: 48px;
+    margin-bottom: 16px;
+  }
+  
+  .empty-title {
+    font-size: 16px;
+  }
+  
+  .empty-subtitle {
+    font-size: 13px;
+  }
+  
+  /* 모달 반응형 */
+  .fixed-modal {
+    width: 95vw !important;
+    height: 85vh !important;
+    max-width: 500px !important;
+    min-height: 500px !important;
+    max-height: 85vh !important;
+  }
+  
+  .modal-header {
+    padding: 16px 20px;
+  }
+  
+  .modal-icon {
+    width: 40px;
+    height: 40px;
+  }
+  
+  .modal-icon .v-icon {
+    font-size: 20px;
+  }
+  
+  .modal-title {
+    font-size: 18px;
+  }
+  
+  .modal-subtitle {
+    font-size: 13px;
+  }
+  
+  .modal-content {
+    padding: 20px 20px 0 20px;
+  }
+  
+  .modal-content-area {
+    margin-bottom: 20px;
+  }
+  
+  .result-item {
+    padding: 16px;
+    gap: 12px;
+  }
+  
+  .result-name {
+    font-size: 15px;
+  }
+  
+  .result-userid {
+    font-size: 12px;
+  }
+}
+
+@media (max-width: 480px) {
+  .personal-friends {
+    padding: 10px;
+  }
+  
+  .friends-header {
+    margin-bottom: 12px;
+  }
+  
+  .add-friend-btn {
+    font-size: 13px;
+    padding: 8px 16px;
+  }
+  
+  .page-title {
+    font-size: 18px;
+  }
+  
+  .page-subtitle {
+    font-size: 12px;
+  }
+  
+  .tab-button {
+    font-size: 12px;
+    padding: 6px 8px;
+    gap: 3px;
+  }
+  
+  .tab-count {
+    font-size: 10px;
+    padding: 1px 5px;
+  }
+  
+  .main-content {
+    padding: 12px;
+  }
+  
+  .content-title {
+    font-size: 16px;
+  }
+  
+  .content-subtitle {
+    font-size: 13px;
+  }
+  
+  .search-input {
+    font-size: 12px;
+    height: 32px;
+    padding: 4px 10px 4px 36px;
+  }
+  
+  .search-icon {
+    left: 10px;
+    font-size: 16px;
+  }
+  
+  .friend-item,
+  .request-item {
+    padding: 10px;
+    gap: 10px;
+  }
+  
+  .friend-avatar .v-avatar,
+  .request-item .v-avatar {
+    width: 36px !important;
+    height: 36px !important;
+  }
+  
+  .friend-name,
+  .request-name {
+    font-size: 13px;
+  }
+  
+  .friend-status,
+  .request-message {
+    font-size: 11px;
+  }
+  
+  .friend-actions button,
+  .request-actions button {
+    padding: 4px 8px;
+    font-size: 12px;
+    min-width: auto;
+  }
+  
+  .empty-state {
+    padding: 30px 12px;
+  }
+  
+  .empty-icon {
+    font-size: 40px;
+    margin-bottom: 12px;
+  }
+  
+  .empty-title {
+    font-size: 14px;
+  }
+  
+  .empty-subtitle {
+    font-size: 12px;
+  }
+  
+  /* 모달 반응형 */
+  .fixed-modal {
+    width: 100vw !important;
+    height: 90vh !important;
+    max-width: 100vw !important;
+    min-height: 400px !important;
+    max-height: 90vh !important;
+    border-radius: 16px 16px 0 0 !important;
+  }
+  
+  .modal-header {
+    padding: 12px 16px;
+  }
+  
+  .modal-header-content {
+    gap: 12px;
+  }
+  
+  .modal-icon {
+    width: 36px;
+    height: 36px;
+  }
+  
+  .modal-icon .v-icon {
+    font-size: 18px;
+  }
+  
+  .modal-title {
+    font-size: 16px;
+  }
+  
+  .modal-subtitle {
+    font-size: 12px;
+  }
+  
+  .modal-content {
+    padding: 16px 16px 0 16px;
+  }
+  
+  .modal-search-section {
+    margin-bottom: 16px;
+  }
+  
+  .modal-content-area {
+    margin-bottom: 16px;
+  }
+  
+  .results-title {
+    font-size: 16px;
+  }
+  
+  .results-count {
+    font-size: 12px;
+    padding: 2px 8px;
+  }
+  
+  .result-item {
+    padding: 12px;
+    gap: 10px;
+  }
+  
+  .result-avatar .v-avatar {
+    width: 40px !important;
+    height: 40px !important;
+  }
+  
+  .result-name {
+    font-size: 14px;
+  }
+  
+  .result-userid {
+    font-size: 11px;
+  }
+  
+  .result-status {
+    font-size: 11px;
+  }
+  
+  .request-btn,
+  .accept-btn,
+  .disabled-btn {
+    font-size: 12px;
+    padding: 6px 12px;
+  }
+  
+  .initial-icon {
+    width: 60px;
+    height: 60px;
+    margin-bottom: 16px;
+  }
+  
+  .initial-icon .v-icon {
+    font-size: 32px;
+  }
+  
+  .initial-title {
+    font-size: 16px;
+  }
+  
+  .initial-subtitle {
+    font-size: 13px;
+  }
+}
+
+@media (max-width: 360px) {
+  .personal-friends {
+    padding: 8px;
+  }
+  
+  .page-title {
+    font-size: 16px;
+  }
+  
+  .page-subtitle {
+    font-size: 11px;
+  }
+  
+  .tab-button {
+    font-size: 11px;
+    padding: 5px 6px;
+  }
+  
+  .tab-count {
+    font-size: 9px;
+    padding: 1px 4px;
+  }
+  
+  .main-content {
+    padding: 10px;
+  }
+  
+  .content-title {
+    font-size: 15px;
+  }
+  
+  .search-input {
+    font-size: 11px;
+    height: 30px;
+  }
+  
+  .friend-name,
+  .request-name {
+    font-size: 12px;
+  }
+  
+  .friend-status,
+  .request-message {
+    font-size: 10px;
+  }
+  
+  .empty-title {
+    font-size: 13px;
+  }
+  
+  .empty-subtitle {
+    font-size: 11px;
+  }
+  
+  .modal-title {
+    font-size: 15px;
+  }
+  
+  .modal-subtitle {
+    font-size: 11px;
+  }
+  
+  .result-name {
+    font-size: 13px;
+  }
+  
+  .result-userid {
+    font-size: 10px;
   }
 }
 </style>

@@ -249,7 +249,19 @@ const handleNavigateToChannel = (channelId) => {
 }
 
 /* 반응형 디자인 */
+@media (max-width: 1024px) {
+  .main-container {
+    padding-top: 56px;
+  }
+}
+
 @media (max-width: 768px) {
+  .main-container {
+    padding-top: 56px;
+  }
+}
+
+@media (max-width: 480px) {
   .main-container {
     padding-top: 56px;
   }

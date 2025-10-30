@@ -13,6 +13,17 @@ import {
   ChannelMemberResDto,
   Authority
 } from '@/models/workspace/WorkspaceModels'
+import { useNotificationStore } from '@/store/notificationStore'
+
+// 알림 갱신 헬퍼 함수
+const refreshNotifications = async () => {
+  try {
+    const notificationStore = useNotificationStore()
+    await notificationStore.fetchNotifications()
+  } catch (error) {
+    console.error('[Workspace API] 알림 갱신 실패:', error)
+  }
+}
 
 // ----------------------
 // 워크스페이스 생성 API
@@ -22,6 +33,8 @@ export const createWorkspace = async (workSpaceName, workSpaceThumbnailImage, me
   const formData = reqDto.toFormData()
   
   const res = await apiPostFormData('/workspace-service/workspace/create', formData)
+  // 프로젝트 생성 시 알림 갱신 (백그라운드에서 실행, 실패해도 무시)
+  refreshNotifications().catch(() => {})
   return WorkSpaceResDto.fromJson(res)
 }
 
@@ -106,6 +119,8 @@ export const inviteWorkspaceMembers = async (workSpaceSeq, memberList, channelSe
     memberList: memberList
   }
   const res = await apiPost('/workspace-service/workspace/invite', reqDto)
+  // 프로젝트 초대 시 알림 갱신 (백그라운드에서 실행, 실패해도 무시)
+  refreshNotifications().catch(() => {})
   return res
 }
 
@@ -118,6 +133,8 @@ export const kickWorkspaceMember = async (workSpaceSeq, memberSeq) => {
     memberSeq: memberSeq
   }
   const res = await apiDelete('/workspace-service/workspace/kick', reqDto)
+  // 강제 탈퇴 시 알림 갱신 (백그라운드에서 실행, 실패해도 무시)
+  refreshNotifications().catch(() => {})
   return res
 }
 

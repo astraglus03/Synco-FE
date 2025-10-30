@@ -274,11 +274,10 @@ onMounted(() => {
   background: rgba(var(--v-theme-primary), 0.2);
 }
 
-/* 반응형 디자인 */
-@media (max-width: 768px) {
+/* 반응형 디자인 - 태블릿 이하에서는 완전히 숨김 */
+@media (max-width: 1024px) {
   .user-status {
-    left: 60px;
-    width: 240px;
+    display: none !important;
   }
 }
 </style>

@@ -12,26 +12,59 @@ onMounted(async () => {
   // authStore 초기화
   authStore.initializeAuth()
   
-  // 이미 로그인되어 있으면 SSE 연결
+  // 이미 로그인되어 있으면 SSE 연결 및 알림 목록 불러오기
   if (authStore.memberSeq) {
-    console.log('[App] 로그인 상태 확인 - SSE 연결 시작')
+    // console.log('[App] 로그인 상태 확인 - SSE 연결 및 알림 불러오기 시작')
+    
+    // SSE 재연결 카운터 초기화 (새로고침 시)
+    notificationStore.resetSSEReconnection()
+    
+    // SSE 연결
     notificationStore.connectSSE()
     notificationStore.requestNotificationPermission()
+    
+    // 기존 알림 목록 불러오기
+    try {
+      await notificationStore.fetchNotifications()
+      // console.log('[App] 기존 알림 목록 불러오기 완료')
+    } catch (error) {
+      // console.error('[App] 기존 알림 목록 불러오기 실패:', error)
+    }
+    
+    // 알림 사이드바는 항상 닫혀있어야 함
+    notificationStore.notificationSidebarVisible = false
   }
 })
 
 // authStore의 memberSeq 감시 - 로그인/로그아웃 감지
-watch(() => authStore.memberSeq, (newMemberSeq, oldMemberSeq) => {
+watch(() => authStore.memberSeq, async (newMemberSeq, oldMemberSeq) => {
   if (newMemberSeq && !oldMemberSeq) {
     // 로그인됨
-    console.log('[App] 로그인 감지 - SSE 연결 시작')
+    // console.log('[App] 로그인 감지 - SSE 연결 및 알림 불러오기 시작')
+    
+    // SSE 재연결 카운터 초기화 (새로 로그인 시)
+    notificationStore.resetSSEReconnection()
+    
+    // SSE 연결
     notificationStore.connectSSE()
     notificationStore.requestNotificationPermission()
+    
+    // 기존 알림 목록 불러오기
+    try {
+      await notificationStore.fetchNotifications()
+      // console.log('[App] 로그인 후 알림 목록 불러오기 완료')
+    } catch (error) {
+      // console.error('[App] 로그인 후 알림 목록 불러오기 실패:', error)
+    }
+    
+    // 알림 사이드바는 항상 닫혀있어야 함
+    notificationStore.notificationSidebarVisible = false
   } else if (!newMemberSeq && oldMemberSeq) {
     // 로그아웃됨
-    console.log('[App] 로그아웃 감지 - SSE 연결 종료')
+    // console.log('[App] 로그아웃 감지 - SSE 연결 종료')
     notificationStore.disconnectSSE()
-    notificationStore.clearAllNotifications()
+    // 로컬 상태만 초기화 (API 호출 안 함)
+    notificationStore.notifications = []
   }
 })
 

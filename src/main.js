@@ -37,10 +37,31 @@ console.log = function(...args) {
   }
 }
 
-// console.error와 console.warn은 항상 표시
-// (이미 원본 그대로 유지됨)
+// console.warn 비활성화 (임시)
+const originalConsoleWarn = console.warn
+console.warn = function(...args) {
+  const firstArg = String(args[0] || '')
+  
+  // SSE 관련 경고만 표시
+  if (firstArg.includes('[SSE]')) {
+    originalConsoleWarn.apply(console, args)
+  }
+  // 나머지 경고는 무시
+}
 
 const app = createApp(App)
+
+// Vue 경고 메시지 비활성화 (임시)
+app.config.warnHandler = () => {}
+
+// Vue 에러 핸들러 (SSE 관련만 표시)
+app.config.errorHandler = (err, instance, info) => {
+  const errorMsg = String(err?.message || err || '')
+  if (errorMsg.includes('SSE') || errorMsg.includes('알림')) {
+    console.error('[Vue Error]', err, info)
+  }
+  // 나머지 에러는 조용히 무시
+}
 
 const pinia = createPinia()
 app.use(pinia)
