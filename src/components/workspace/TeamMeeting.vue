@@ -71,14 +71,32 @@
         />
       </div>
       
-      <div class="meeting-timeline" @scroll="handleScroll">
-        <!-- 활성 회의 목록 -->
-        <div
-          v-for="room in activeRooms"
-          :key="room.roomId"
-          class="timeline-item active"
-          @dblclick="joinRoom(room)"
-        >
+      <!-- 탭 스위치 -->
+      <v-tabs
+        v-model="activeTab"
+        color="primary"
+        class="mb-4"
+        @update:model-value="onTabChange"
+      >
+        <v-tab value="active" prepend-icon="mdi-video">
+          진행 중 ({{ activeRooms.length }})
+        </v-tab>
+        <v-tab value="ended" prepend-icon="mdi-history">
+          종료된 회의 ({{ meetingStore.endedRooms.length }})
+        </v-tab>
+      </v-tabs>
+
+      <!-- 탭 컨텐츠 -->
+      <v-window v-model="activeTab">
+        <!-- 진행 중인 회의 -->
+        <v-window-item value="active">
+          <div class="meeting-timeline" @scroll="handleScroll">
+            <div
+              v-for="room in activeRooms"
+              :key="room.roomId"
+              class="timeline-item active"
+              @dblclick="joinRoom(room)"
+            >
           <div class="timeline-dot">
             <v-icon color="success" size="16">mdi-video</v-icon>
           </div>
@@ -140,8 +158,184 @@
           <p v-if="workspaceMemberStore.canCreateChannel(authStore)">회의를 시작해보세요!</p>
           <p v-else>회의가 시작되면 알림을 받을 수 있습니다.</p>
         </div>
+          </div>
+        </v-window-item>
+
+        <!-- 종료된 회의 -->
+        <v-window-item value="ended">
+          <div class="meeting-timeline" @scroll="handleScroll">
+            <div
+              v-for="room in meetingStore.endedRooms"
+              :key="room.roomId"
+              class="timeline-item"
+              @dblclick="openRoomDetail(room)"
+            >
+              <div class="timeline-dot">
+                <div class="dot-inner"></div>
+              </div>
+              
+              <div class="timeline-content">
+                <div class="meeting-header-info">
+                  <h4 class="meeting-title">{{ room.roomName }}</h4>
+                  <div class="meeting-actions">
+                    <v-btn
+                      icon="mdi-eye-outline"
+                      variant="text"
+                      size="small"
+                      class="action-btn"
+                      @click.stop="openRoomDetail(room)"
+                    />
+                  </div>
+                </div>
+                
+                <div class="meeting-meta-grid">
+                  <div class="meta-item">
+                    <v-icon size="14" color="grey">mdi-calendar</v-icon>
+                    <span>{{ room.formattedCreatedAt }}</span>
+                  </div>
+                  <div class="meta-item">
+                    <v-icon size="14" color="grey">mdi-account-group</v-icon>
+                    <span>{{ room.activeUserCount }}명 참여</span>
+                  </div>
+                  <div class="meta-item">
+                    <v-icon size="14" color="grey">mdi-information</v-icon>
+                    <span>{{ room.formattedDescription }}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- 빈 상태 -->
+            <div v-if="meetingStore.endedRooms.length === 0 && !meetingStore.isLoading" class="no-meetings">
+              <v-icon color="grey" size="48">mdi-history</v-icon>
+              <h4>종료된 회의가 없습니다</h4>
+            </div>
+          </div>
+        </v-window-item>
+      </v-window>
+
+      <!-- 로딩 인디케이터 -->
+      <div v-if="meetingStore.isLoading" class="loading-indicator">
+        <v-progress-circular
+          indeterminate
+          color="primary"
+          size="24"
+        />
+        <span>회의 목록을 불러오는 중...</span>
       </div>
     </div>
+
+    <!-- 회의 상세 정보 모달 -->
+    <v-dialog v-model="showRoomDetailModal" max-width="900">
+      <v-card class="meeting-detail-modal">
+        <div class="modal-header">
+          <div class="header-content">
+            <v-icon class="header-icon">mdi-calendar-clock</v-icon>
+            <h3 class="modal-title">{{ meetingStore.currentRoomDetail?.roomName }}</h3>
+          </div>
+          <v-btn
+            icon="mdi-close"
+            variant="text"
+            size="small"
+            @click="closeRoomDetailModal"
+          />
+        </div>
+        
+        <div class="meeting-detail-content-new" v-if="meetingStore.currentRoomDetail">
+          <!-- 회의 정보 -->
+          <div class="meeting-info-section-new">
+            <div class="section-header-new">
+              <div class="blue-bar"></div>
+              <h4 class="section-title-new">회의 정보</h4>
+            </div>
+            <div class="info-grid-new">
+              <div class="info-item-new">
+                <v-icon class="info-icon" color="primary">mdi-calendar</v-icon>
+                <div class="info-content">
+                  <div class="info-label">일정</div>
+                  <div class="info-value">{{ meetingStore.currentRoomDetail.formattedCreatedAt }}</div>
+                </div>
+              </div>
+              <div class="info-item-new">
+                <v-icon class="info-icon" color="primary">mdi-clock</v-icon>
+                <div class="info-content">
+                  <div class="info-label">소요시간</div>
+                  <div class="info-value">{{ meetingStore.currentRoomDetail.formattedDuration }}</div>
+                </div>
+              </div>
+              <div class="info-item-new">
+                <v-icon class="info-icon" color="primary">mdi-account-group</v-icon>
+                <div class="info-content">
+                  <div class="info-label">참여자</div>
+                  <div class="info-value">{{ meetingStore.currentRoomDetail.participantCount }}명</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 참여자 목록 -->
+          <div class="participants-section-new">
+            <div class="section-header-new">
+              <div class="blue-bar"></div>
+              <h4 class="section-title-new">참여자 목록</h4>
+            </div>
+            <div class="participants-grid-new">
+              <div
+                v-for="participant in meetingStore.currentRoomDetail.participants"
+                :key="participant.participantId"
+                class="participant-card-new"
+              >
+                <v-avatar size="48" :color="getParticipantColor(participant)">
+                  <v-img 
+                    v-if="participant.participantProfileUrl" 
+                    :src="participant.participantProfileUrl"
+                    :alt="participant.participantName"
+                  />
+                  <span v-else class="text-white font-weight-bold text-h6">
+                    {{ participant.avatar }}
+                  </span>
+                </v-avatar>
+                <div class="participant-info-new">
+                  <div class="participant-name-row">
+                    <span class="participant-name">{{ participant.participantName }}</span>
+                    <v-icon
+                      v-if="participant.participantId === meetingStore.currentRoomDetail.hostId"
+                      class="host-icon"
+                      color="warning"
+                      size="small"
+                    >
+                      mdi-crown
+                    </v-icon>
+                  </div>
+                  <div class="participant-status">{{ participant.statusText || '오프라인' }}</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 회의 요약 -->
+          <div class="summary-section-new" v-if="meetingStore.currentRoomDetail.summaryContent">
+            <div class="section-header-new">
+              <div class="blue-bar"></div>
+              <h4 class="section-title-new">회의 요약</h4>
+            </div>
+            <div class="summary-content-new">
+              {{ meetingStore.currentRoomDetail.summaryContent }}
+            </div>
+          </div>
+        </div>
+        
+        <div class="modal-actions-new">
+          <v-btn
+            variant="text"
+            class="close-btn"
+            @click="closeRoomDetailModal"
+          >
+            닫기
+          </v-btn>
+        </div>
+      </v-card>
+    </v-dialog>
 
     <!-- 회의 생성 모달 -->
     <v-dialog v-model="showCreateRoomModal" max-width="500">
@@ -287,10 +481,12 @@ const authStore = useAuthStore()
 
 // 반응형 데이터
 const showCreateRoomModal = ref(false)
+const showRoomDetailModal = ref(false)
 const newRoomName = ref('')
 const newRoomDescription = ref('')
 const selectedMembers = ref([])
 const showError = ref(false)
+const activeTab = ref('active') // 'active' or 'ended'
 
 // 워크스페이스 멤버 목록 (현재 사용자 제외)
 const workspaceMembers = computed(() => {
@@ -346,17 +542,68 @@ watch(() => meetingStore.error, (newError) => {
 // 메서드
 const refreshMeetings = async () => {
   try {
-    if (currentChannelData.value) {
-      await meetingStore.loadActiveRooms(currentChannelData.value.channelSeq)
+    if (currentWorkSpaceSeq.value) {
+      if (activeTab.value === 'active') {
+        await meetingStore.loadActiveRooms(currentWorkSpaceSeq.value)
+      } else {
+        await meetingStore.loadEndedRooms(currentWorkSpaceSeq.value)
+      }
     }
   } catch (error) {
     console.error('회의 목록 새로고침 실패:', error)
   }
 }
 
+// 탭 변경 핸들러
+const onTabChange = async (tab) => {
+  try {
+    if (currentWorkSpaceSeq.value) {
+      if (tab === 'ended' && meetingStore.endedRooms.length === 0) {
+        await meetingStore.loadEndedRooms(currentWorkSpaceSeq.value)
+      }
+    }
+  } catch (error) {
+    console.error('회의 목록 로드 실패:', error)
+  }
+}
+
+// 더블클릭으로 회의 상세 정보 열기
+const openRoomDetail = async (room) => {
+  try {
+    await meetingStore.loadRoomDetail(room.roomId)
+    showRoomDetailModal.value = true
+  } catch (error) {
+    console.error('회의 상세 정보 로드 실패:', error)
+  }
+}
+
+const closeRoomDetailModal = () => {
+  showRoomDetailModal.value = false
+}
+
+// 참여자 색상 가져오기
+const getParticipantColor = (participant) => {
+  const statusColor = participant.statusColor
+  const colorMap = {
+    'success': 'success',
+    'warning': 'warning',
+    'grey': 'grey',
+    'error': 'error'
+  }
+  return colorMap[statusColor] || 'primary'
+}
+
 const joinFirstActiveRoom = async () => {
   if (activeRooms.value.length > 0) {
-    await joinRoom(activeRooms.value[0])
+    try {
+      await joinRoom(activeRooms.value[0])
+    } catch (error) {
+      console.error('첫 회의 참여 실패:', error)
+      // 에러는 meetingStore에서 이미 설정되므로 스낵바만 표시
+      if (meetingStore.error) {
+        showError.value = true
+      }
+    }
   }
 }
 
@@ -365,6 +612,10 @@ const joinRoom = async (room) => {
     await meetingStore.joinRoom(room.roomId)
   } catch (error) {
     console.error('회의 참여 실패:', error)
+    // 에러는 meetingStore에서 이미 설정되므로 스낵바만 표시
+    if (meetingStore.error) {
+      showError.value = true
+    }
   }
 }
 
@@ -389,6 +640,7 @@ const closeCreateRoomModal = () => {
 const confirmCreateRoom = async () => {
   try {
     await meetingStore.createRoom(
+      workspaceStore.currentWorkspaceInfo.workSpaceSeq,
       newRoomName.value,
       newRoomDescription.value,
       selectedMembers.value
@@ -397,6 +649,10 @@ const confirmCreateRoom = async () => {
     await refreshMeetings()
   } catch (error) {
     console.error('회의 생성 실패:', error)
+    // 에러는 meetingStore에서 이미 설정되므로 스낵바만 표시
+    if (meetingStore.error) {
+      showError.value = true
+    }
   }
 }
 
@@ -442,12 +698,18 @@ const initialize = async () => {
     
     if (needsChannelLoad) {
       await meetingStore.loadChannels(currentWorkSpaceSeq.value)
+    }
+    
+    // 채널이 있으면 첫 번째 채널 선택하고 활성/종료된 회의 목록 로드
+    if (meetingStore.channels.length > 0) {
+      const defaultChannel = meetingStore.channels[0]
+      meetingStore.selectChannel(defaultChannel)
       
-      // 첫 번째 채널 선택 (기본 채널)
-      if (meetingStore.channels.length > 0) {
-        const defaultChannel = meetingStore.channels[0]
-        meetingStore.selectChannel(defaultChannel)
-      }
+      // 활성 회의 목록과 종료된 회의 목록 동시에 로드
+      await Promise.all([
+        meetingStore.loadActiveRooms(currentWorkSpaceSeq.value),
+        meetingStore.loadEndedRooms(currentWorkSpaceSeq.value)
+      ])
     }
   } catch (error) {
     console.error('초기화 실패:', error)
@@ -466,15 +728,10 @@ watch(() => workspaceStore.currentWorkspaceInfo, async (newWorkspace, oldWorkspa
 }, { deep: true })
 
 // 생명주기
-onMounted(() => {
-  // 컴포넌트가 마운트될 때는 최소한의 초기화만 수행
-  // 실제 데이터 로드는 워크스페이스 변경 감지에서 처리
+onMounted(async () => {
+  // 컴포넌트가 마운트될 때 초기화 수행
   if (currentWorkSpaceSeq.value) {
-    meetingStore.setCurrentUser(
-      currentMemberSeq.value,
-      currentAuthority.value,
-      currentWorkSpaceSeq.value
-    )
+    await initialize()
   }
 })
 
@@ -883,6 +1140,262 @@ onUnmounted(() => {
 .no-meetings p {
   margin: 0;
   font-size: 14px;
+}
+
+.dot-inner {
+  width: 8px;
+  height: 8px;
+  background: rgb(var(--v-theme-primary));
+  border-radius: 50%;
+}
+
+/* 회의 상세 모달 스타일 */
+.meeting-detail-modal {
+  background: rgb(var(--v-theme-surface));
+}
+
+.meeting-detail-content {
+  padding: 24px;
+  max-height: 600px;
+  overflow-y: auto;
+}
+
+.meeting-info-section {
+  margin-bottom: 32px;
+}
+
+.participants-section {
+  margin-bottom: 16px;
+}
+
+.info-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 16px;
+}
+
+.info-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px;
+  background: rgba(var(--v-theme-on-surface), 0.05);
+  border-radius: 8px;
+  border: 1px solid rgba(var(--v-theme-on-surface), 0.1);
+}
+
+.info-icon {
+  color: rgb(var(--v-theme-primary));
+  font-size: 20px;
+}
+
+.info-content {
+  flex: 1;
+}
+
+.info-label {
+  font-size: 12px;
+  color: rgba(var(--v-theme-on-surface), 0.6);
+  margin-bottom: 4px;
+}
+
+.info-value {
+  font-size: 14px;
+  font-weight: 500;
+  color: rgb(var(--v-theme-on-surface));
+}
+
+.participants-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+  gap: 12px;
+}
+
+.participant-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  background: rgba(var(--v-theme-on-surface), 0.05);
+  border-radius: 8px;
+  border: 1px solid rgba(var(--v-theme-on-surface), 0.1);
+  position: relative;
+}
+
+.participant-info {
+  flex: 1;
+}
+
+.participant-name {
+  font-size: 14px;
+  font-weight: 500;
+  color: rgb(var(--v-theme-on-surface));
+  margin-bottom: 2px;
+}
+
+.participant-status {
+  font-size: 12px;
+  color: rgba(var(--v-theme-on-surface), 0.6);
+}
+
+.host-icon {
+  margin-left: 8px;
+}
+
+/* 새 모달 스타일 */
+.modal-header-new {
+  padding: 24px 24px 16px 24px;
+  border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.1);
+}
+
+.header-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.header-left-section {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.blue-bar {
+  width: 4px;
+  height: 24px;
+  background: rgb(var(--v-theme-primary));
+  border-radius: 2px;
+}
+
+.header-text {
+  flex: 1;
+}
+
+.meeting-detail-content-new {
+  padding: 32px 24px 24px 24px;
+  max-height: 600px;
+  overflow-y: auto;
+}
+
+.meeting-info-section-new,
+.participants-section-new,
+.summary-section-new {
+  margin-bottom: 32px;
+}
+
+.section-header-new {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.section-title-new {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: rgb(var(--v-theme-on-surface));
+}
+
+.info-grid-new {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 20px;
+}
+
+.info-item-new {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 16px;
+  background: rgba(var(--v-theme-on-surface), 0.03);
+  border-radius: 12px;
+  border: 1px solid rgba(var(--v-theme-on-surface), 0.08);
+}
+
+.info-item-new .info-icon {
+  color: rgb(var(--v-theme-primary));
+  font-size: 24px;
+  margin-top: 2px;
+}
+
+.info-item-new .info-content {
+  flex: 1;
+}
+
+.info-item-new .info-label {
+  font-size: 12px;
+  color: rgba(var(--v-theme-on-surface), 0.6);
+  margin-bottom: 4px;
+}
+
+.info-item-new .info-value {
+  font-size: 14px;
+  font-weight: 600;
+  color: rgb(var(--v-theme-on-surface));
+}
+
+.participants-grid-new {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 12px;
+}
+
+.participant-card-new {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  background: rgba(var(--v-theme-on-surface), 0.03);
+  border-radius: 12px;
+  border: 1px solid rgba(var(--v-theme-on-surface), 0.08);
+  transition: all 0.2s ease;
+}
+
+.participant-card-new:hover {
+  background: rgba(var(--v-theme-primary), 0.05);
+  border-color: rgba(var(--v-theme-primary), 0.2);
+}
+
+.participant-info-new {
+  flex: 1;
+}
+
+.participant-name-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 4px;
+}
+
+.participant-card-new .participant-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: rgb(var(--v-theme-on-surface));
+}
+
+.participant-card-new .participant-status {
+  font-size: 12px;
+  color: rgba(var(--v-theme-on-surface), 0.7);
+}
+
+.summary-content-new {
+  padding: 16px;
+  background: rgba(var(--v-theme-on-surface), 0.03);
+  border-radius: 12px;
+  border: 1px solid rgba(var(--v-theme-on-surface), 0.08);
+  font-size: 14px;
+  line-height: 1.6;
+  color: rgb(var(--v-theme-on-surface));
+  white-space: pre-wrap;
+  min-height: 100px;
+}
+
+.modal-actions-new {
+  display: flex;
+  justify-content: flex-end;
+  padding: 16px 24px;
+  border-top: 1px solid rgba(var(--v-theme-on-surface), 0.1);
 }
 
 /* 반응형 디자인 */

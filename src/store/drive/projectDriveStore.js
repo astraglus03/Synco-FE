@@ -44,7 +44,7 @@ export const useProjectDriveStore = defineStore('projectDrive', () => {
   const loadItems = async (driveChannelSeq, parentId = null) => {
     isLoading.value = true
     error.value = null
-    currentDriveChannelSeq.value = 2 // 테스트용 하드코딩
+    currentDriveChannelSeq.value = driveChannelSeq
 
     try {
       const result = await projectDriveApi.getItems(driveChannelSeq, parentId)
@@ -68,10 +68,15 @@ export const useProjectDriveStore = defineStore('projectDrive', () => {
     error.value = null
 
     try {
-      const result = await projectDriveApi.uploadFiles(files, currentDriveChannelSeq.value, parentId || currentParentId.value)
+      const targetParentId = parentId !== null ? parentId : currentParentId.value
+      const result = await projectDriveApi.uploadFiles(files, currentDriveChannelSeq.value, targetParentId)
       
       if (result.success) {
-        items.value.push(...result.data)
+        // 업로드된 파일이 현재 보고 있는 폴더에 업로드된 경우에만 즉시 추가
+        // (다른 폴더에 업로드된 경우는 해당 폴더로 이동할 때 자동으로 조회됨)
+        if (targetParentId === currentParentId.value) {
+          items.value.push(...result.data)
+        }
         return { success: true, data: result.data }
       } else {
         error.value = result.error
@@ -91,26 +96,12 @@ export const useProjectDriveStore = defineStore('projectDrive', () => {
     error.value = null
 
     try {
-      const result = await projectDriveApi.createFolder(name, currentDriveChannelSeq.value, parentId || currentParentId.value)
+      const targetParentId = parentId !== null ? parentId : currentParentId.value
+      const result = await projectDriveApi.createFolder(name, currentDriveChannelSeq.value, targetParentId)
       
       if (result.success) {
-        // 폴더를 올바른 위치에 삽입 (폴더들 중에서 orders 기준으로 정렬)
-        const newFolder = result.data
-        const folders = items.value.filter(item => item.type === 'folder')
-        const files = items.value.filter(item => item.type !== 'folder')
-        
-        // 새 폴더를 폴더들 중에서 올바른 위치에 삽입
-        let insertIndex = folders.length
-        for (let i = 0; i < folders.length; i++) {
-          if ((newFolder.orders || 0) < (folders[i].orders || 0)) {
-            insertIndex = i
-            break
-          }
-        }
-        
-        // 폴더들을 다시 정렬하고 파일들과 합치기
-        folders.splice(insertIndex, 0, newFolder)
-        items.value = [...folders, ...files]
+        // 폴더 생성 후 현재 보고 있는 폴더의 목록을 다시 불러와서 갱신
+        await loadItems(currentDriveChannelSeq.value, currentParentId.value)
         
         return { success: true, data: result.data }
       } else {
@@ -131,10 +122,15 @@ export const useProjectDriveStore = defineStore('projectDrive', () => {
     error.value = null
 
     try {
-      const result = await projectDriveApi.createSharedDocument(name, currentDriveChannelSeq.value, parentId || currentParentId.value, isLocked)
+      const targetParentId = parentId !== null ? parentId : currentParentId.value
+      const result = await projectDriveApi.createSharedDocument(name, currentDriveChannelSeq.value, targetParentId, isLocked)
       
       if (result.success) {
-        items.value.push(result.data)
+        // 생성된 문서가 현재 보고 있는 폴더에 생성된 경우에만 즉시 추가
+        // (다른 폴더에 생성된 경우는 해당 폴더로 이동할 때 자동으로 조회됨)
+        if (targetParentId === currentParentId.value) {
+          items.value.push(result.data)
+        }
         return { success: true, data: result.data }
       } else {
         error.value = result.error
