@@ -474,7 +474,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import { useProjectScheduleStore } from '../../store/projectScheduleStore.js'
 import { useWorkspaceStore } from '../../store/workspaceStore.js'
 import { useWorkspaceMemberStore } from '../../store/workspaceMemberStore.js'
@@ -505,7 +505,14 @@ const selectedFilters = ref({
   assignees: []
 })
 
-// 필터 모달이 열릴 때 현재 선택된 담당자로 초기화
+// ESC로 필터 모달 닫기
+const handleKeydown = (event) => {
+  if (event.key === 'Escape' && showFilterModal.value) {
+    showFilterModal.value = false
+  }
+}
+
+// 필터 모달이 열릴 때 현재 선택된 담당자로 초기화 + ESC 리스너 토글
 watch(showFilterModal, (isOpen) => {
   if (isOpen) {
     // 현재 선택된 담당자가 있으면 필터에 추가 (한 명만)
@@ -514,8 +521,15 @@ watch(showFilterModal, (isOpen) => {
     } else {
       selectedFilters.value.assignees = []
     }
+    window.addEventListener('keydown', handleKeydown)
+  } else {
+    window.removeEventListener('keydown', handleKeydown)
   }
   // 모달이 닫혀도 selectedFilters는 유지 (필터 적용을 위해)
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('keydown', handleKeydown)
 })
 
 // 상태 옵션
