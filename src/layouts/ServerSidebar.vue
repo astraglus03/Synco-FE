@@ -579,7 +579,7 @@ onMounted(() => {
   flex-direction: column;
   align-items: center;
   gap: 6px;
-  padding: 0 0 6px 0; /* 상단 패딩 제거로 첫 아이콘 상단 간격 축소 */
+  padding: 0 0 6px 0; /* 좌측 패딩 복원: 아이콘 정렬 유지 */
   /* 스크롤바 숨기기 */
   scrollbar-width: none; /* Firefox */
   -ms-overflow-style: none; /* IE and Edge */
@@ -605,6 +605,7 @@ onMounted(() => {
   color: rgb(var(--v-theme-on-surface));
   font-weight: 600;
   font-size: 16px;
+  margin-left: 8px; /* 모든 아이콘에 동일한 좌측 여백으로 인디케이터 라인 정렬 */
 }
 
 /* 프로젝트 아이콘 텍스트 톤 다운 */
@@ -637,16 +638,31 @@ onMounted(() => {
   border-radius: 16px;
 }
 
-/* 활성 인디케이터 - 모든 서버에서 보이도록 위치/레이어 보정 */
-.server-icon.active::before {
+/* 디스코드 형태의 왼쪽 인디케이터 */
+.server-icon::before {
   content: '';
   position: absolute;
-  left: -6px; /* 과도한 음수로 잘리는 이슈 방지 */
-  width: 3px;
-  height: 20px;
-  background: rgb(var(--v-theme-primary));
+  left: -6px;
+  width: 4px;
+  height: 0;
+  background: transparent;
   border-radius: 0 4px 4px 0;
+  top: 50%;
+  transform: translateY(-50%);
+  transition: height 0.15s ease, background 0.15s ease, left 0.15s ease;
   z-index: 2;
+}
+
+/* 호버 시 작은 표시 */
+.server-icon:hover::before {
+  height: 12px;
+  background: rgba(var(--v-theme-primary), 0.6);
+}
+
+/* 활성 시 긴 표시 */
+.server-icon.active::before {
+  height: 28px;
+  background: rgb(var(--v-theme-primary));
 }
 
 .workspace-thumbnail {
