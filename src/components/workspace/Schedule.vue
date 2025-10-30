@@ -1081,7 +1081,10 @@ const getMemberName = (memberSeq) => {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 24px;
+  padding: 20px 24px;
+  background: rgb(var(--v-theme-surface)); /* 헤더 영역 분리 */
+  border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.1);
+  margin: -24px -24px 0 -24px; /* 부모 패딩 덮어 헤더 전체 폭 */
 }
 
 .schedule-header h1 {
@@ -1106,6 +1109,7 @@ const getMemberName = (memberSeq) => {
 .search-section {
   display: flex;
   align-items: center;
+  margin-top: 16px; /* 헤더와 검색 영역 간 간격 */
   margin-bottom: 24px;
   gap: 16px;
 }

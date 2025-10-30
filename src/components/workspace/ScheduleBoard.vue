@@ -731,7 +731,10 @@ watch(
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 24px;
+  padding: 20px 24px;
+  background: rgb(var(--v-theme-surface));
+  border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.1);
+  margin: -24px -24px 0 -24px; /* 전체 폭 헤더 */
 }
 
 .schedule-header h1 {
@@ -809,6 +812,7 @@ watch(
 /* 담당 업무 섹션 */
 .my-tasks-section {
   margin-bottom: 20px;
+  margin-top: 16px; /* 헤더와 본문 간 간격 */
   min-height: 60px;
   border: 2px dashed transparent;
   border-radius: 8px;
