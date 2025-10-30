@@ -888,11 +888,12 @@ onUnmounted(() => {
 /* 회의 목록 섹션 */
 .meeting-list-section {
   flex: 1;
-  padding: 40px 24px 80px 24px;
+  padding: 24px 24px 80px 24px; /* 상단 패딩 축소로 헤더와 자연스러운 연결 */
   overflow-y: auto;
-  background: rgba(var(--v-theme-on-surface), 0.02);
-  margin-top: 24px;
-  border-radius: 16px 16px 0 0;
+  background: rgb(var(--v-theme-background)); /* 헤더와 구분되는 메인 배경 */
+  margin-top: 0; /* 헤더와의 간격 제거 */
+  border-radius: 0; /* 경계 라운딩 제거로 일체감 */
+  border-top: 1px solid rgba(var(--v-theme-on-surface), 0.1); /* 기존 헤더 경계 연속성 유지 */
 }
 
 .section-header {
