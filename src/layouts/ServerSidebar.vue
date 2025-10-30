@@ -551,9 +551,10 @@ onMounted(() => {
 <style scoped>
 .server-sidebar {
   width: 72px;
-  background: rgba(0, 0, 0, 0.4);
+  background: rgb(var(--v-theme-surface)); /* 라이트 모드 톤 맞춤, 다크 자동 대응 */
   backdrop-filter: blur(10px);
-  border-right: 1px solid rgba(255, 255, 255, 0.1);
+  border-right: 1px solid rgba(var(--v-theme-on-surface), 0.08);
+  box-shadow: 1px 0 0 rgba(var(--v-theme-on-surface), 0.04);
   padding: 12px 8px;
   display: flex;
   flex-direction: column;
@@ -573,7 +574,7 @@ onMounted(() => {
   width: 100%;
   min-height: 0; /* 중요: flex child의 스크롤을 위해 필수 */
   overflow-y: auto;
-  overflow-x: hidden;
+  overflow-x: visible; /* 좌측 액티브 인디케이터가 잘리지 않도록 */
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -592,7 +593,8 @@ onMounted(() => {
   flex-shrink: 0; /* 고정 크기 유지 */
   width: 48px;
   height: 48px;
-  background: rgba(255, 255, 255, 0.1);
+  background: rgba(var(--v-theme-on-surface), 0.06);
+  border: none;
   border-radius: 50%;
   display: flex;
   align-items: center;
@@ -600,9 +602,18 @@ onMounted(() => {
   cursor: pointer;
   transition: all 0.2s ease;
   position: relative;
-  color: white;
+  color: rgb(var(--v-theme-on-surface));
   font-weight: 600;
   font-size: 16px;
+}
+
+/* 프로젝트 아이콘 텍스트 톤 다운 */
+.server-icon span {
+  color: rgba(var(--v-theme-on-surface), 0.65);
+}
+
+.server-icon.active span {
+  color: white;
 }
 
 .server-icon.add-server {
@@ -613,7 +624,7 @@ onMounted(() => {
 
 .server-icon:hover {
   border-radius: 16px;
-  background: rgba(var(--v-theme-primary), 0.2);
+  background: rgba(var(--v-theme-primary), 0.12);
 }
 
 .server-icon.home {
@@ -626,14 +637,16 @@ onMounted(() => {
   border-radius: 16px;
 }
 
+/* 활성 인디케이터 - 모든 서버에서 보이도록 위치/레이어 보정 */
 .server-icon.active::before {
   content: '';
   position: absolute;
-  left: -12px;
-  width: 4px;
+  left: -6px; /* 과도한 음수로 잘리는 이슈 방지 */
+  width: 3px;
   height: 20px;
-  background: white;
+  background: rgb(var(--v-theme-primary));
   border-radius: 0 4px 4px 0;
+  z-index: 2;
 }
 
 .workspace-thumbnail {
@@ -648,7 +661,7 @@ onMounted(() => {
   flex-shrink: 0; /* 구분선 고정 */
   width: 32px;
   height: 2px;
-  background: rgba(255, 255, 255, 0.1);
+  background: rgba(var(--v-theme-on-surface), 0.08);
   border-radius: 1px;
   margin: 0 !important; /* 여백 제거: 외부 컨테이너 gap으로만 간격 제어 */
 }
@@ -874,11 +887,11 @@ onMounted(() => {
 
 /* 화이트모드에서 워크스페이스 추가 버튼 텍스트 색상 */
 .server-icon.add-server {
-  color: rgba(255, 255, 255, 0.6) !important;
+  color: rgba(var(--v-theme-on-surface), 0.6) !important;
   font-size: 18px;
   font-weight: 300;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px dashed rgba(255, 255, 255, 0.3);
+  background: rgba(var(--v-theme-on-surface), 0.04);
+  border: 1px dashed rgba(var(--v-theme-on-surface), 0.2);
 }
 
 /* 친구 표시 스타일 */

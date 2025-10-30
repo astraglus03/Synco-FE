@@ -1371,8 +1371,9 @@ const getStatusColor = (status) => {
 .workspace-sidebar {
   width: 260px;
   background: rgb(var(--v-theme-surface));
-  backdrop-filter: blur(10px);
+  backdrop-filter: blur(6px);
   border-right: 1px solid rgba(var(--v-theme-on-surface), 0.08);
+  box-shadow: 1px 0 0 rgba(var(--v-theme-on-surface), 0.04);
   padding: 24px 0 80px 0;
   margin-left: 72px;
   position: fixed;

@@ -2141,15 +2141,16 @@ onMounted(() => {
 
 <style scoped>
 .app-header {
-  background: rgba(0, 0, 0, 0.2) !important;
+  background: rgb(var(--v-theme-surface)) !important; /* 라이트 모드: 프로젝트 톤과 일관 */
   backdrop-filter: blur(10px);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.08);
+  box-shadow: 0 1px 0 rgba(var(--v-theme-on-surface), 0.04);
   height: 60px !important;
   z-index: 1005 !important;
 }
 
 .dark-header {
-  background: rgba(0, 0, 0, 0.4) !important;
+  background: rgba(0, 0, 0, 0.4) !important; /* 다크 모드는 기존 느낌 유지 */
 }
 
 .header-left {
