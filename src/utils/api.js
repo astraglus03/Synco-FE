@@ -24,7 +24,7 @@ const decodeJWT = (token) => {
 // Axios 인스턴스
 // ----------------------
 const apiClient = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:8080',
+  baseURL: import.meta.env.VITE_API_URL,
   timeout: 30000, // 30초로 증가 (화상회의 방 생성은 시간이 오래 걸릴 수 있음)
   headers: { 'Content-Type': 'application/json' },
   withCredentials: true, // ✅ 쿠키 전송 활성화
@@ -68,7 +68,7 @@ apiClient.interceptors.response.use(
     if (error.response?.status === 401 && !originalRequest._retry) {
       originalRequest._retry = true
       try {
-        const baseUrl = (import.meta.env.VITE_API_URL || 'http://localhost:8080').replace(/\/+$/, '')
+        const baseUrl = (import.meta.env.VITE_API_URL).replace(/\/+$/, '')
         // ✅ RT는 Cookie로 자동 전송됨 (body 필요 없음)
         const { data } = await axios.post(
           `${baseUrl}/workspace-service/member/refreshAt`,

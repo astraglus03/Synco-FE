@@ -2080,7 +2080,7 @@ watch(showTaskDetailModal, async (newVal, oldVal) => {
 <style scoped>
 .team-dashboard {
   padding: 24px;
-  background-color: #f8f9fa;
+  background-color: rgb(var(--v-theme-background));
   min-height: 100vh;
 }
 
@@ -2093,12 +2093,12 @@ watch(showTaskDetailModal, async (newVal, oldVal) => {
   font-size: 28px;
   font-weight: 700;
   margin-bottom: 8px;
-  color: #1e293b;
+  color: rgb(var(--v-theme-on-surface));
 }
 
 .dashboard-header p {
   font-size: 16px;
-  color: #64748b;
+  color: rgba(var(--v-theme-on-surface), 0.85);
 }
 
 /* 2. 통계 카드 그리드 */
@@ -2214,6 +2214,7 @@ watch(showTaskDetailModal, async (newVal, oldVal) => {
   position: relative;
   z-index: 1;
   overflow: visible;
+  background: rgb(var(--v-theme-surface));
 }
 
 .progress-flow-card .v-card-text {
@@ -2238,13 +2239,13 @@ watch(showTaskDetailModal, async (newVal, oldVal) => {
 .flow-title-text h3 {
   font-size: 20px;
   font-weight: 600;
-  color: #1e293b;
+  color: rgb(var(--v-theme-on-surface));
   margin: 0;
 }
 
 .flow-period {
   font-size: 13px;
-  color: #64748b;
+  color: rgba(var(--v-theme-on-surface), 0.85);
   margin-top: 4px;
   display: block;
 }
@@ -2438,7 +2439,7 @@ watch(showTaskDetailModal, async (newVal, oldVal) => {
 
 .period-phase {
   font-size: 12px;
-  color: #64748b;
+  color: rgba(var(--v-theme-on-surface), 0.85);
   margin-bottom: 12px;
 }
 
@@ -2461,7 +2462,7 @@ watch(showTaskDetailModal, async (newVal, oldVal) => {
 
 .period-tasks {
   font-size: 12px;
-  color: #64748b;
+  color: rgba(var(--v-theme-on-surface), 0.85);
   display: flex;
   justify-content: space-between;
 }
@@ -2481,7 +2482,7 @@ watch(showTaskDetailModal, async (newVal, oldVal) => {
 
 .no-tasks-text {
   font-size: 13px;
-  color: #94a3b8;
+  color: rgba(var(--v-theme-on-surface), 0.75);
   font-weight: 500;
 }
 
@@ -2502,7 +2503,7 @@ watch(showTaskDetailModal, async (newVal, oldVal) => {
   gap: 8px;
   font-size: 18px;
   font-weight: 600;
-  color: #1e293b;
+  color: rgb(var(--v-theme-on-surface));
   padding: 20px 24px;
 }
 
@@ -2510,7 +2511,7 @@ watch(showTaskDetailModal, async (newVal, oldVal) => {
 .milestones-section h5 {
   font-size: 14px;
   font-weight: 600;
-  color: #1e293b;
+  color: rgb(var(--v-theme-on-surface));
   margin-bottom: 12px;
 }
 
@@ -2544,12 +2545,12 @@ watch(showTaskDetailModal, async (newVal, oldVal) => {
   padding: 12px;
   border-radius: 8px;
   margin-bottom: 12px;
-  background-color: #f8f9fa;
-  transition: background-color 0.2s ease;
+  background-color: rgba(var(--v-theme-on-surface), 0.03);
+  transition: background-color 0.2s ease, box-shadow 0.2s ease;
 }
 
 .deadline-item:hover {
-  background-color: #f1f3f5;
+  background-color: rgba(var(--v-theme-on-surface), 0.06);
 }
 
 .deadline-marker {
@@ -2581,7 +2582,7 @@ watch(showTaskDetailModal, async (newVal, oldVal) => {
   font-size: 14px;
   font-weight: 600;
   flex: 1;
-  color: #1e293b;
+  color: rgb(var(--v-theme-on-surface));
 }
 
 .deadline-meta {
@@ -2589,7 +2590,7 @@ watch(showTaskDetailModal, async (newVal, oldVal) => {
   align-items: center;
   gap: 12px;
   font-size: 12px;
-  color: #64748b;
+  color: rgba(var(--v-theme-on-surface), 0.85);
   margin-bottom: 6px;
 }
 
@@ -2600,7 +2601,7 @@ watch(showTaskDetailModal, async (newVal, oldVal) => {
 
 .board-label {
   font-size: 11px;
-  color: #94a3b8;
+  color: rgba(var(--v-theme-on-surface), 0.75);
 }
 
 .milestone-item {
@@ -2608,13 +2609,13 @@ watch(showTaskDetailModal, async (newVal, oldVal) => {
   gap: 12px;
   padding: 12px;
   border-radius: 8px;
-  background-color: #f8f9fa;
+  background-color: rgba(var(--v-theme-on-surface), 0.03);
   margin-bottom: 12px;
   transition: background-color 0.2s ease;
 }
 
 .milestone-item:hover {
-  background-color: #f1f3f5;
+  background-color: rgba(var(--v-theme-on-surface), 0.06);
 }
 
 .milestone-marker {
@@ -2645,13 +2646,13 @@ watch(showTaskDetailModal, async (newVal, oldVal) => {
 .milestone-title {
   font-size: 14px;
   font-weight: 600;
-  color: #1e293b;
+  color: rgb(var(--v-theme-on-surface));
   flex: 1;
 }
 
 .milestone-description {
   font-size: 13px;
-  color: #64748b;
+  color: rgba(var(--v-theme-on-surface), 0.85);
   margin-bottom: 12px;
   line-height: 1.5;
 }
@@ -2667,7 +2668,7 @@ watch(showTaskDetailModal, async (newVal, oldVal) => {
   align-items: center;
   gap: 4px;
   font-size: 12px;
-  color: #64748b;
+  color: rgba(var(--v-theme-on-surface), 0.85);
 }
 
 .milestone-date {
@@ -2675,7 +2676,7 @@ watch(showTaskDetailModal, async (newVal, oldVal) => {
   align-items: center;
   gap: 4px;
   font-size: 12px;
-  color: #64748b;
+  color: rgba(var(--v-theme-on-surface), 0.85);
 }
 
 .assignee-filter {
@@ -2746,12 +2747,12 @@ watch(showTaskDetailModal, async (newVal, oldVal) => {
   padding: 16px;
   border-radius: 8px;
   margin-bottom: 12px;
-  background-color: #f8f9fa;
+  background-color: rgba(var(--v-theme-on-surface), 0.03);
   transition: background-color 0.2s ease;
 }
 
 .assignee-task-item:hover {
-  background-color: #f1f3f5;
+  background-color: rgba(var(--v-theme-on-surface), 0.06);
 }
 
 .task-marker {
@@ -2791,7 +2792,7 @@ watch(showTaskDetailModal, async (newVal, oldVal) => {
   align-items: center;
   gap: 4px;
   font-size: 12px;
-  color: #64748b;
+  color: rgba(var(--v-theme-on-surface), 0.85);
   margin-bottom: 6px;
 }
 
@@ -2800,7 +2801,7 @@ watch(showTaskDetailModal, async (newVal, oldVal) => {
   align-items: center;
   gap: 4px;
   font-size: 12px;
-  color: #64748b;
+  color: rgba(var(--v-theme-on-surface), 0.85);
 }
 
 .task-meta {
@@ -2834,8 +2835,8 @@ watch(showTaskDetailModal, async (newVal, oldVal) => {
   top: calc(100% - 8px);
   left: 0;
   right: 0;
-  background: white;
-  border: 1px solid #e0e0e0;
+  background: rgb(var(--v-theme-surface));
+  border: 1px solid rgba(var(--v-theme-on-surface), 0.15);
   border-radius: 8px;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
   z-index: 10000;

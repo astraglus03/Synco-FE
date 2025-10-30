@@ -51,7 +51,7 @@ const sendCodeToServer = async (code) => {
         window.location.href = "/"
         return
     }
-    const baseUrl = (import.meta.env.VITE_API_URL || 'http://localhost:8080').replace(/\/+$/, '')
+    const baseUrl = (import.meta.env.VITE_API_URL).replace(/\/+$/, '')
     // 서버에 인가 코드 전달하여 토큰 교환 (백엔드 엔드포인트 통일)
     const { data } = await axios.post(
         `${baseUrl}/workspace-service/member/google/doLogin`, 
