@@ -19,6 +19,7 @@ import { useWorkspaceStore } from '@/store/workspaceStore'
 import { useWorkspaceMemberStore } from '@/store/workspaceMemberStore'
 import { Authority } from '@/models/workspace/WorkspaceModels'
 import { emitter } from "@/eventBus"; // 채팅 채널 변경 이벤트 버스
+import { getIndividualChatChannels } from "@/api/chat/chatApi"; // 1:1 채팅 목록 조회 API
 
 const router = useRouter()
 
@@ -257,168 +258,21 @@ const projectChannels = ref([
 ])
 
 // 1:1 채팅 목록 (개인 워크스페이스일 때만)
-const directMessages = ref([
-  {
-    id: "kim_minsu",
-    name: "김민수",
-    status: "online",
-    lastMessage: "안녕하세요!",
-    time: "5분 전",
-    unread: 2,
-  },
-  {
-    id: "lee_jihyun",
-    name: "이지현",
-    status: "away",
-    lastMessage: "회의 준비됐어요",
-    time: "12분 전",
-    unread: 0,
-  },
-  {
-    id: "park_junyoung",
-    name: "박준영",
-    status: "offline",
-    lastMessage: "파일 확인했습니다",
-    time: "1시간 전",
-    unread: 1,
-  },
-  {
-    id: "choi_sujin",
-    name: "최수진",
-    status: "online",
-    lastMessage: "내일 미팅 어때요?",
-    time: "2시간 전",
-    unread: 3,
-  },
-  {
-    id: "jung_hyunwoo",
-    name: "정현우",
-    status: "away",
-    lastMessage: "코드 리뷰 완료했어요",
-    time: "3시간 전",
-    unread: 0,
-  },
-  {
-    id: "han_soyoung",
-    name: "한소영",
-    status: "online",
-    lastMessage: "프레젠테이션 자료 보냈어요",
-    time: "4시간 전",
-    unread: 0,
-  },
-  {
-    id: "yoon_donghyun",
-    name: "윤동현",
-    status: "busy",
-    lastMessage: "데이터 분석 결과 나왔어요",
-    time: "5시간 전",
-    unread: 2,
-  },
-  {
-    id: "kang_minji",
-    name: "강민지",
-    status: "online",
-    lastMessage: "고객 피드백 정리했어요",
-    time: "6시간 전",
-    unread: 0,
-  },
-  {
-    id: "oh_seungmin",
-    name: "오승민",
-    status: "away",
-    lastMessage: "시스템 점검 완료했습니다",
-    time: "7시간 전",
-    unread: 1,
-  },
-  {
-    id: "lim_jiyeon",
-    name: "임지연",
-    status: "online",
-    lastMessage: "마케팅 계획 검토해주세요",
-    time: "8시간 전",
-    unread: 0,
-  },
-  {
-    id: "shin_taewon",
-    name: "신태원",
-    status: "busy",
-    lastMessage: "새 프로젝트 제안서 작성 중",
-    time: "9시간 전",
-    unread: 3,
-  },
-  {
-    id: "kwon_hyerim",
-    name: "권혜림",
-    status: "online",
-    lastMessage: "예산안 검토 부탁드려요",
-    time: "10시간 전",
-    unread: 0,
-  },
-  {
-    id: "ryu_jongho",
-    name: "류종호",
-    status: "away",
-    lastMessage: "보고서 초안 완성했어요",
-    time: "11시간 전",
-    unread: 1,
-  },
-  {
-    id: "song_jiwon",
-    name: "송지원",
-    status: "online",
-    lastMessage: "팀 미팅 일정 조율해주세요",
-    time: "12시간 전",
-    unread: 0,
-  },
-  {
-    id: "jang_myeongsu",
-    name: "장명수",
-    status: "offline",
-    lastMessage: "기술 문서 업데이트했습니다",
-    time: "1일 전",
-    unread: 2,
-  },
-  {
-    id: "kim_yeonju",
-    name: "김연주",
-    status: "online",
-    lastMessage: "고객 상담 일정 잡았어요",
-    time: "1일 전",
-    unread: 0,
-  },
-  {
-    id: "lee_hyunseok",
-    name: "이현석",
-    status: "away",
-    lastMessage: "품질 검사 결과 양호합니다",
-    time: "1일 전",
-    unread: 1,
-  },
-  {
-    id: "park_sunhee",
-    name: "박선희",
-    status: "online",
-    lastMessage: "교육 자료 준비 완료했어요",
-    time: "2일 전",
-    unread: 0,
-  },
-  {
-    id: "choi_jihoon",
-    name: "최지훈",
-    status: "busy",
-    lastMessage: "네트워크 보안 점검 중",
-    time: "2일 전",
-    unread: 1,
-  },
-  {
-    id: "jung_sohee",
-    name: "정소희",
-    status: "offline",
-    lastMessage: "인사팀과 급여 관련 논의",
-    time: "3일 전",
-    unread: 0,
-  },
-]);
+const directMessages = ref([]);
+
+const loadDirectMessages = async () => {
+  console.log("🚀 loadDirectMessages() 실행됨");
+  try {
+    const workSpaceSeq = props.currentWorkspaceData?.workSpaceSeq;
+    if (!workSpaceSeq) return;
+
+    const res = await getIndividualChatChannels(workSpaceSeq);
+    console.log("📦 1:1 채팅 목록 API 응답:", res);
+    directMessages.value = res.data.data; // ← 서버 응답 구조에 따라 조정
+  } catch (e) {
+    console.error("❌ 1:1 채팅 목록 불러오기 실패:", e);
+  }
+};
 
 // 현재 채널 목록 (Store 기반)
 const currentChannels = computed(() => {
@@ -808,9 +662,25 @@ const hasMeetingPermission = (meetingData) => {
   return hasChannelManagePermission("meeting");
 };
 
+watch(
+  () => [props.workspaceType, props.currentWorkspaceData],
+  ([newType, newWorkspace]) => {
+    console.log("👀 워크스페이스 변경 감지:", newType, newWorkspace?.workSpaceSeq);
+    if (newType?.toUpperCase() === "PERSONAL" && newWorkspace?.workSpaceSeq) {
+      console.log("🚀 워크스페이스 준비 완료 → loadDirectMessages 실행");
+      loadDirectMessages();
+    }
+  },
+  { deep: true, immediate: true }
+);
+
 // 컴포넌트 마운트 시 채널 데이터 로드
 onMounted(() => {
+  console.log("🚀 onMounted 실행됨:", props.workspaceType);
   loadChannels();
+
+  console.log("📢 현재 workspaceType:", props.workspaceType);
+  console.log("📢 현재 workSpaceSeq:", props.currentWorkspaceData?.workSpaceSeq);
 });
 
 // 워크스페이스 변경 시 채널 데이터 다시 로드
@@ -1247,34 +1117,33 @@ const getStatusColor = (status) => {
       <div class="dm-list">
         <div
           v-for="dm in directMessages"
-          :key="dm.id"
+          :key="dm.channelSeq"
           class="dm-item"
-          :class="{
-            active: currentChannel === dm.id,
-            collapsed: collapsed && workspaceType === 'project',
-          }"
-          @click="selectDirectMessage(dm.id)"
+          :class="{ active: currentChannel === dm.channelSeq }"
+          @click="selectDirectMessage(dm.channelSeq)"
         >
           <div class="dm-avatar">
-            <v-avatar size="24" :color="getStatusColor(dm.status)">
-              {{ dm.name.charAt(0) }}
+            <v-avatar size="24" color="primary">
+              <v-img
+                v-if="dm.otherProfileUrl"
+                :src="dm.otherProfileUrl"
+                alt="프로필"
+              />
+              <span v-else>{{ dm.channelName.charAt(0) }}</span>
             </v-avatar>
-            <div class="status-dot" :class="dm.status" />
           </div>
-          <div
-            v-if="!collapsed || workspaceType === 'personal'"
-            class="dm-info"
-          >
-            <div class="dm-name">{{ dm.name }}</div>
-            <div class="dm-last-message">{{ dm.lastMessage }}</div>
+
+          <div class="dm-info">
+            <div class="dm-name">{{ dm.channelName }}</div>
+            <div class="dm-last-message">
+              {{ dm.isGroupChat ? "그룹 채팅" : "1:1 채팅" }}
+            </div>
           </div>
-          <div
-            v-if="!collapsed || workspaceType === 'personal'"
-            class="dm-meta"
-          >
-            <div class="dm-time">{{ dm.time }}</div>
-            <div v-if="dm.unread > 0" class="unread-badge">
-              {{ dm.unread }}
+
+          <div class="dm-meta">
+            <div class="dm-time">워크스페이스 #{{ dm.workspaceSeq }}</div>
+            <div v-if="dm.unreadCount > 0" class="unread-badge">
+              {{ dm.unreadCount }}
             </div>
           </div>
         </div>
