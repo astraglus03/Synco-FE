@@ -118,7 +118,7 @@ onMounted(() => {
           v-bind="menuProps"
         >
           <div class="avatar-wrapper">
-            <v-avatar :size="collapsed ? 48 : 40" color="primary">
+            <v-avatar :size="40" color="primary">
               <v-img 
                 v-if="displayProfileImage" 
                 :src="displayProfileImage"
@@ -175,7 +175,7 @@ onMounted(() => {
   position: fixed;
   bottom: 0;
   left: 72px;
-  width: 260px;
+  width: 220px;
   background: rgb(var(--v-theme-surface));
   backdrop-filter: blur(6px);
   border-top: 1px solid rgba(var(--v-theme-on-surface), 0.08);
@@ -351,7 +351,7 @@ onMounted(() => {
 @media (max-width: 768px) {
   .user-status {
     left: 60px;
-    width: 240px;
+    width: 200px;
   }
 }
 </style>

@@ -1369,7 +1369,7 @@ const getStatusColor = (status) => {
 
 <style scoped>
 .workspace-sidebar {
-  width: 260px;
+  width: 220px;
   background: rgb(var(--v-theme-surface));
   backdrop-filter: blur(6px);
   border-right: 1px solid rgba(var(--v-theme-on-surface), 0.08);
@@ -1850,7 +1850,7 @@ const getStatusColor = (status) => {
 /* 반응형 디자인 */
 @media (max-width: 768px) {
   .workspace-sidebar {
-    width: 240px;
+    width: 200px;
     margin-left: 60px;
   }
 }
