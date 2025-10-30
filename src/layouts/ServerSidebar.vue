@@ -259,14 +259,14 @@ onMounted(() => {
         />
         <span v-else>{{ workspace.icon }}</span>
       </div>
-    </div>
 
-    <!-- 프로젝트 추가 버튼 -->
-    <div 
-      class="server-icon add-server"
-      @click="openCreateWorkspaceDialog"
-    >
-      <v-icon>mdi-plus</v-icon>
+      <!-- 프로젝트 추가 버튼: 목록의 마지막에 위치하고 함께 스크롤 -->
+      <div 
+        class="server-icon add-server"
+        @click="openCreateWorkspaceDialog"
+      >
+        <v-icon>mdi-plus</v-icon>
+      </div>
     </div>
 
     <!-- 프로젝트 생성 다이얼로그 -->
@@ -558,7 +558,7 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 6px;
+  gap: 2px; /* 홈-구분선-목록 사이 간격 축소 */
   position: fixed;
   left: 0;
   top: 60px;
@@ -578,7 +578,7 @@ onMounted(() => {
   flex-direction: column;
   align-items: center;
   gap: 6px;
-  padding: 6px 0;
+  padding: 0 0 6px 0; /* 상단 패딩 제거로 첫 아이콘 상단 간격 축소 */
   /* 스크롤바 숨기기 */
   scrollbar-width: none; /* Firefox */
   -ms-overflow-style: none; /* IE and Edge */
@@ -650,7 +650,7 @@ onMounted(() => {
   height: 2px;
   background: rgba(255, 255, 255, 0.1);
   border-radius: 1px;
-  /* margin: 2px 0; */
+  margin: 0 !important; /* 여백 제거: 외부 컨테이너 gap으로만 간격 제어 */
 }
 
 .sidebar-toggle-btn {

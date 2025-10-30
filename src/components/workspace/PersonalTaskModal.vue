@@ -108,7 +108,7 @@
 </template>
 
 <script setup>
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import { createPersonalTask, updatePersonalTask } from '@/api/schedule/scheduleApi'
 
 const props = defineProps({
@@ -136,6 +136,32 @@ const emit = defineEmits(['update:modelValue', 'taskCreated', 'taskUpdated'])
 const isOpen = computed({
   get: () => props.modelValue,
   set: (value) => emit('update:modelValue', value)
+})
+
+// ESC 키로 닫기
+const handleKeydown = (event) => {
+  if (event.key === 'Escape' && isOpen.value) {
+    closeModal()
+  }
+}
+
+onMounted(() => {
+  if (isOpen.value) {
+    window.addEventListener('keydown', handleKeydown)
+  }
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('keydown', handleKeydown)
+})
+
+// 모달 열림 상태에 따라 ESC 리스너 토글
+watch(isOpen, (newValue) => {
+  if (newValue) {
+    window.addEventListener('keydown', handleKeydown)
+  } else {
+    window.removeEventListener('keydown', handleKeydown)
+  }
 })
 
 // 폼 참조

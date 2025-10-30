@@ -173,7 +173,7 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, onMounted } from 'vue'
+import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import { getProjectMemberList, createTask as createTaskApi, updateTask as updateTaskApi } from '../../api/schedule/scheduleApi.js'
 
 const props = defineProps({
@@ -214,6 +214,23 @@ const emit = defineEmits(['update:modelValue', 'taskCreated', 'taskUpdated'])
 const isOpen = computed({
   get: () => props.modelValue,
   set: (value) => emit('update:modelValue', value)
+})
+
+// ESC 키로 닫기
+const handleKeydown = (event) => {
+  if (event.key === 'Escape' && isOpen.value && !isCreating.value) {
+    closeModal()
+  }
+}
+
+onMounted(() => {
+  if (isOpen.value) {
+    window.addEventListener('keydown', handleKeydown)
+  }
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('keydown', handleKeydown)
 })
 
 // 폼 참조
@@ -389,6 +406,12 @@ watch(isOpen, (newValue) => {
         boardSeq: props.showBoardSelect ? (props.boardOptions[0]?.boardSeq || null) : null
       }
     }
+  }
+  // ESC 리스너 토글
+  if (newValue) {
+    window.addEventListener('keydown', handleKeydown)
+  } else {
+    window.removeEventListener('keydown', handleKeydown)
   }
 })
 
