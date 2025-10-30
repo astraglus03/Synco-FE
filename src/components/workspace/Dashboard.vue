@@ -459,14 +459,81 @@
             <v-icon color="info" size="24">mdi-account-group</v-icon>
             <span>담당자별 업무 현황</span>
             <v-spacer />
-            <v-select
-              v-model="selectedAssignee"
-              :items="assigneeOptions"
-              density="compact"
-              variant="outlined"
-              hide-details
-              class="assignee-filter"
-            />
+            <v-menu
+              v-model="showAssigneeMenu"
+              location="bottom end"
+              :close-on-content-click="false"
+              offset="8"
+            >
+              <template #activator="{ props }">
+                <button class="assignee-filter-btn" v-bind="props">
+                  <v-icon size="16" class="mr-2">mdi-account</v-icon>
+                  <span class="label">{{ selectedAssigneeLabel }}</span>
+                  <v-icon size="16" class="ml-3 chevron">mdi-chevron-down</v-icon>
+                </button>
+              </template>
+              <v-card class="assignee-filter-menu" min-width="280">
+                <div class="menu-header">
+                  <v-icon size="18" color="primary">mdi-account-filter</v-icon>
+                  <span>담당자 선택</span>
+                </div>
+                <div class="menu-search">
+                  <v-text-field
+                    v-model="assigneeSearch"
+                    placeholder="담당자 검색"
+                    prepend-inner-icon="mdi-magnify"
+                    density="comfortable"
+                    variant="outlined"
+                    hide-details
+                    clearable
+                  />
+                </div>
+                <v-list density="comfortable" class="menu-list">
+                  <v-list-item :active="selectedAssignee === '내 업무'" @click="selectAssignee('내 업무')">
+                    <template #prepend>
+                      <v-icon>mdi-account-circle</v-icon>
+                    </template>
+                    <v-list-item-title>내 업무</v-list-item-title>
+                    <template #append>
+                      <v-icon v-if="selectedAssignee === '내 업무'" color="primary">mdi-check</v-icon>
+                    </template>
+                  </v-list-item>
+                  <v-list-item :active="selectedAssignee === '전체'" @click="selectAssignee('전체')">
+                    <template #prepend>
+                      <v-icon>mdi-infinity</v-icon>
+                    </template>
+                    <v-list-item-title>전체</v-list-item-title>
+                    <template #append>
+                      <v-icon v-if="selectedAssignee === '전체'" color="primary">mdi-check</v-icon>
+                    </template>
+                  </v-list-item>
+                  <v-divider class="my-1" />
+                  <v-list-item
+                    v-for="m in filteredAssigneeOptions"
+                    :key="m"
+                    :active="selectedAssignee === m"
+                    @click="selectAssignee(m)"
+                  >
+                    <template #prepend>
+                      <v-avatar size="22" color="primary">
+                        <span class="text-white" style="font-weight:700">{{ m.charAt(0) }}</span>
+                      </v-avatar>
+                    </template>
+                    <v-list-item-title>{{ m }}</v-list-item-title>
+                    <template #append>
+                      <v-icon v-if="selectedAssignee === m" color="primary">mdi-check</v-icon>
+                    </template>
+                  </v-list-item>
+                  <div v-if="filteredAssigneeOptions.length === 0" class="menu-empty">
+                    <v-icon size="22" color="grey">mdi-account-off</v-icon>
+                    <span>검색 결과가 없습니다</span>
+                  </div>
+                </v-list>
+                <div class="menu-actions">
+                  <v-btn variant="text" size="small" @click="showAssigneeMenu = false">닫기</v-btn>
+                </div>
+              </v-card>
+            </v-menu>
           </v-card-title>
 
           <v-card-text>
@@ -558,6 +625,8 @@ const timeFilter = ref('month')
 const customStartDate = ref('2025-09-01')
 const customEndDate = ref('2025-12-31')
 const selectedAssignee = ref('내 업무')
+const showAssigneeMenu = ref(false)
+const assigneeSearch = ref('')
 
 // 대시보드 통계 관련 refs
 const allTasks = ref([])
@@ -754,6 +823,20 @@ const assigneeOptions = computed(() => {
   const memberNames = teamMembers.value.map(member => member.name)
   return ['내 업무', '전체', ...memberNames]
 })
+
+const filteredAssigneeOptions = computed(() => {
+  const q = (assigneeSearch.value || '').toLowerCase().trim()
+  const base = (teamMembers.value || []).map(m => m.name)
+  if (!q) return base
+  return base.filter(n => (n || '').toLowerCase().includes(q))
+})
+
+const selectedAssigneeLabel = computed(() => selectedAssignee.value || '내 업무')
+
+const selectAssignee = (v) => {
+  selectedAssignee.value = v
+  showAssigneeMenu.value = false
+}
 
 // 담당자별 업무 필터링
 const filteredTasksByAssignee = computed(() => {
@@ -2598,6 +2681,40 @@ watch(showTaskDetailModal, async (newVal, oldVal) => {
 .assignee-filter {
   max-width: 150px;
 }
+
+/* 담당자 필터 - 버튼/메뉴 */
+.assignee-filter-btn {
+  display: inline-flex;
+  align-items: center;
+  padding: 8px 12px;
+  border: 1px solid #cbd5e1;
+  background: white;
+  color: #334155;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.assignee-filter-btn:hover {
+  border-color: #94a3b8;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.06);
+}
+
+.assignee-filter-btn .label { font-weight: 600; font-size: 14px; }
+.assignee-filter-btn .chevron { color: #64748b; }
+
+.assignee-filter-menu { border-radius: 12px !important; overflow: hidden; }
+.assignee-filter-menu .menu-header {
+  display: flex; align-items: center; gap: 8px;
+  padding: 12px 14px; border-bottom: 1px solid #e2e8f0; font-weight: 600; color: #0f172a;
+}
+
+.assignee-filter-menu .menu-search { padding: 10px 12px 0 12px; }
+/* 기본 텍스트필드 스타일 사용: 커스텀 제거 */
+
+.assignee-filter-menu .menu-list { max-height: 320px; overflow-y: auto; }
+.assignee-filter-menu .menu-empty { display:flex; align-items:center; justify-content:center; gap:8px; color:#94a3b8; padding: 16px 0; }
+.assignee-filter-menu .menu-actions { display:flex; align-items:center; gap:8px; padding:8px 12px 10px 12px; border-top:1px solid #e2e8f0; }
 
 .assignee-tasks {
   max-height: 600px;

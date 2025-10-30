@@ -156,14 +156,79 @@
             <v-icon color="primary">mdi-format-list-checks</v-icon>
             <h2>내 업무</h2>
           </div>
-          <v-select
-            v-model="selectedProject"
-            :items="projectFilterOptions"
-            density="compact"
-            variant="outlined"
-            hide-details
-            style="max-width: 200px;"
-          />
+          <v-menu
+            v-model="showProjectMenu"
+            :close-on-content-click="false"
+            location="bottom end"
+            offset="8"
+          >
+            <template #activator="{ props }">
+              <button class="project-filter-btn" v-bind="props">
+                <v-icon size="18" class="mr-2">mdi-briefcase</v-icon>
+                <span class="label">{{ selectedProjectLabel }}</span>
+                <v-icon size="18" class="ml-3 chevron">mdi-chevron-down</v-icon>
+              </button>
+            </template>
+            <v-card class="project-filter-menu" min-width="280">
+              <div class="menu-header">
+                <v-icon size="18" color="primary">mdi-briefcase</v-icon>
+                <span>프로젝트 선택</span>
+              </div>
+              <div class="menu-search">
+                <v-text-field
+                  v-model="projectSearch"
+                  placeholder="프로젝트 검색"
+                  prepend-inner-icon="mdi-magnify"
+                  density="comfortable"
+                  variant="outlined"
+                  hide-details
+                />
+              </div>
+              <v-list density="comfortable" class="menu-list">
+                <v-list-item
+                  :active="selectedProject === 'all'"
+                  @click="selectProject('all')"
+                >
+                  <template #prepend>
+                    <v-icon>mdi-infinity</v-icon>
+                  </template>
+                  <v-list-item-title>전체 프로젝트</v-list-item-title>
+                  <template #append>
+                    <v-icon v-if="selectedProject === 'all'" color="primary">mdi-check</v-icon>
+                  </template>
+                </v-list-item>
+                <v-divider class="my-1" />
+                <v-list-item
+                  v-for="opt in filteredProjectOptions"
+                  :key="opt.value"
+                  :active="selectedProject === opt.value"
+                  @click="selectProject(opt.value)"
+                >
+                  <template #prepend>
+                    <v-avatar size="22" color="primary">
+                      <span class="text-white" style="font-weight:700">{{ opt.title?.charAt(0) }}</span>
+                    </v-avatar>
+                  </template>
+                  <v-list-item-title>{{ opt.title }}</v-list-item-title>
+                  <template #append>
+                    <v-icon v-if="selectedProject === opt.value" color="primary">mdi-check</v-icon>
+                  </template>
+                </v-list-item>
+                <div v-if="filteredProjectOptions.length === 0" class="menu-empty">
+                  <v-icon size="22" color="grey">mdi-folder-off</v-icon>
+                  <span>검색 결과가 없습니다</span>
+                </div>
+              </v-list>
+              <div class="menu-actions">
+                <v-btn variant="text" size="small" @click="showProjectDialog = true">
+                  <v-icon start size="16">mdi-folder-plus</v-icon>
+                  새 프로젝트 만들기
+                </v-btn>
+                <v-spacer />
+                <v-btn variant="text" size="small" @click="showProjectMenu = false">닫기</v-btn>
+              </div>
+            </v-card>
+          </v-menu>
         </div>
 
         <v-tabs v-model="taskTab" color="primary" density="compact">
@@ -784,6 +849,8 @@ const userName = computed(() => authStore.user?.name || '사용자')
 const currentDate = ref('')
 const currentTime = ref('')
 const selectedProject = ref('all')
+const showProjectMenu = ref(false)
+const projectSearch = ref('')
 const taskTab = ref('all')
 const showQuickTaskDialog = ref(false)
 const showFileUploadDialog = ref(false)
@@ -876,6 +943,25 @@ const projectFilterOptions = computed(() => {
     ...projects.value.map(p => ({ title: p.name, value: p.id }))
   ]
 })
+
+const filteredProjectOptions = computed(() => {
+  const q = (projectSearch.value || '').toLowerCase().trim()
+  if (!q) return projects.value.map(p => ({ title: p.name, value: p.id }))
+  return projects.value
+    .filter(p => (p.name || '').toLowerCase().includes(q))
+    .map(p => ({ title: p.name, value: p.id }))
+})
+
+const selectedProjectLabel = computed(() => {
+  if (selectedProject.value === 'all') return '전체 프로젝트'
+  const found = projects.value.find(p => p.id === selectedProject.value)
+  return found?.name || '전체 프로젝트'
+})
+
+const selectProject = (value) => {
+  selectedProject.value = value
+  showProjectMenu.value = false
+}
 
 const filteredTasks = computed(() => {
   if (selectedProject.value === 'all') {
@@ -2150,6 +2236,74 @@ const closeErrorModal = () => {
   font-weight: 600;
   color: #1e293b;
   margin: 0;
+}
+
+/* 프로젝트 필터 버튼 */
+.project-filter-btn {
+  display: inline-flex;
+  align-items: center;
+  padding: 10px 14px;
+  border: 1px solid #cbd5e1;
+  background: white;
+  color: #334155;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.project-filter-btn:hover {
+  border-color: #94a3b8;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.06);
+}
+
+.project-filter-btn .label {
+  font-weight: 600;
+}
+
+.project-filter-btn .chevron {
+  color: #64748b;
+}
+
+/* 프로젝트 필터 메뉴 */
+.project-filter-menu {
+  border-radius: 12px !important;
+  overflow: hidden;
+}
+
+.project-filter-menu .menu-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 14px;
+  border-bottom: 1px solid #e2e8f0;
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.project-filter-menu .menu-search {
+  padding: 10px 12px 0 12px;
+}
+
+.project-filter-menu .menu-list {
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.project-filter-menu .menu-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: #94a3b8;
+  padding: 16px 0;
+}
+
+.project-filter-menu .menu-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px 10px 12px;
+  border-top: 1px solid #e2e8f0;
 }
 
 /* 업무 목록 */
