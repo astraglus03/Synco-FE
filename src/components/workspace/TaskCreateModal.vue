@@ -1,12 +1,26 @@
 <template>
-  <v-dialog v-model="isOpen" max-width="800px" persistent>
-    <v-card>
-      <v-card-title class="d-flex align-center">
-        <v-icon left color="primary">{{ isEditMode ? 'mdi-pencil' : 'mdi-plus-circle' }}</v-icon>
-        {{ isEditMode ? '업무 수정' : '새 업무 생성' }}
-      </v-card-title>
+  <v-dialog v-model="isOpen" max-width="900px" persistent class="no-scroll-dialog">
+    <v-card class="task-create-modal fixed-modal-create">
+      <!-- 모달 헤더 -->
+      <div class="modal-header">
+        <div class="modal-header-content">
+          <div class="modal-icon">
+            <v-icon>{{ isEditMode ? 'mdi-pencil' : 'mdi-plus-circle' }}</v-icon>
+          </div>
+          <h3 class="modal-title">{{ isEditMode ? '업무 수정' : '새 업무 생성' }}</h3>
+        </div>
+        <v-btn
+          icon
+          variant="text"
+          class="close-btn"
+          @click="closeModal"
+          :disabled="isCreating"
+        >
+          <v-icon>mdi-close</v-icon>
+        </v-btn>
+      </div>
       
-       <v-card-text>
+      <v-card-text class="modal-content">
         <v-form ref="formRef" v-model="isFormValid">
           <v-row>
             <!-- 왼쪽 컬럼 -->
@@ -39,7 +53,7 @@
               </div>
 
               <!-- 날짜 필드들 -->
-              <div class="mb-4">
+              <div class="mb-2">
                 <v-row>
                   <v-col cols="6">
                     <label class="text-subtitle-1 font-weight-medium mb-2 d-block">시작일</label>
@@ -50,6 +64,7 @@
                       outlined
                       :disabled="isEditMode && props.editModeLimited"
                       required
+                      hide-details
                     ></v-text-field>
                   </v-col>
                   <v-col cols="6">
@@ -61,6 +76,7 @@
                       outlined
                       :disabled="isEditMode && props.editModeLimited"
                       required
+                      hide-details
                     ></v-text-field>
                   </v-col>
                 </v-row>
@@ -383,19 +399,132 @@ onMounted(() => {
 </script>
 
 <style scoped>
-.v-card-title {
+/* 모달 스타일 */
+/* 디스코드 스타일 모달 */
+.task-create-modal {
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.24);
+  background: rgb(var(--v-theme-schedule-card-bg));
+}
+
+/* 고정 크기 모달 */
+.fixed-modal-create {
+  width: 900px !important;
+  max-height: 800px !important;
+}
+
+/* v-dialog 스크롤바 숨김 */
+.no-scroll-dialog .v-overlay__content::-webkit-scrollbar {
+  display: none;
+}
+
+.no-scroll-dialog .v-overlay__content {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* 모달 헤더 */
+/* 디스코드 스타일 헤더 */
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px 24px;
+  background: linear-gradient(135deg, #1976d2 0%, rgba(25, 118, 210, 0.8) 100%);
+  color: white;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+.modal-header-content {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.modal-icon {
+  width: 32px;
+  height: 32px;
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+}
+
+.modal-icon:hover {
+  background: rgba(255, 255, 255, 0.25);
+}
+
+.modal-icon .v-icon {
   font-size: 20px;
-  font-weight: 600;
-  color: #333;
-  padding: 24px 24px 0 24px;
+  color: white;
+}
+
+.modal-title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 700;
+  color: white;
+}
+
+.close-btn {
+  color: white !important;
+}
+
+.close-btn:hover {
+  background: rgba(255, 255, 255, 0.1) !important;
+}
+
+/* 모달 콘텐츠 */
+/* 디스코드 스타일 본문 */
+.modal-content {
+  padding: 24px;
+  background: rgb(var(--v-theme-schedule-header-bg));
 }
 
 .v-card-text {
   padding: 24px;
+  background: rgb(var(--v-theme-schedule-header-bg));
 }
 
 .v-card-actions {
-  padding: 0 24px 24px 24px;
+  padding: 20px 24px;
+  background: rgb(var(--v-theme-schedule-card-bg));
+  border-top: 1px solid rgb(var(--v-theme-schedule-border));
+}
+
+/* 디스코드 스타일 폼 필드 */
+.v-card-text :deep(.v-field) {
+  background: rgb(var(--v-theme-schedule-card-bg));
+  border-radius: 4px;
+  border: 1px solid rgb(var(--v-theme-schedule-border));
+  transition: all 0.15s ease;
+}
+
+.v-card-text :deep(.v-field:hover) {
+  border-color: rgb(var(--v-theme-schedule-border));
+}
+
+.v-card-text :deep(.v-field--focused) {
+  border-color: #1976d2;
+  box-shadow: 0 0 0 1px #1976d2;
+}
+
+.v-card-text :deep(.v-label) {
+  font-weight: 600;
+  color: rgb(var(--v-theme-schedule-text));
+}
+
+/* 디스코드 스타일 레이블 */
+.v-card-text label.text-subtitle-1 {
+  font-size: 12px;
+  font-weight: 700;
+  color: #1976d2;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 6px;
 }
 
 .v-select :deep(.v-field__input) {
@@ -408,5 +537,49 @@ onMounted(() => {
 
 .v-textarea :deep(.v-field__input) {
   padding-top: 16px;
+}
+
+/* 디스코드 스타일 버튼 */
+.v-card-actions .v-btn {
+  border-radius: 4px;
+  text-transform: none;
+  font-weight: 600;
+  padding: 0 24px;
+  height: 40px;
+  transition: all 0.15s ease;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.v-card-actions .v-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+.v-card-actions .v-btn:active {
+  transform: translateY(0);
+}
+
+.v-card-actions .v-btn :deep(.v-btn__content) {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* 선택 드롭다운 스타일 */
+.v-card-text :deep(.v-select__selection) {
+  font-weight: 500;
+}
+
+/* 디스코드 스타일 아바타 */
+.v-card-text :deep(.v-avatar) {
+  border: 1px solid rgb(var(--v-theme-schedule-border));
+}
+
+/* 텍스트 색상 보정 */
+.v-card-text :deep(.v-select__selection),
+.v-card-text :deep(.v-field__input) {
+  color: rgb(var(--v-theme-schedule-text));
 }
 </style>

@@ -170,6 +170,7 @@ onMounted(() => {
 </template>
 
 <style scoped>
+/* 디스코드 스타일 - 메인 컨테이너 (기존 배경색 유지) */
 .user-status {
   position: fixed;
   bottom: 0;
@@ -179,55 +180,66 @@ onMounted(() => {
   backdrop-filter: blur(10px);
   border-top: 1px solid rgba(255, 255, 255, 0.1);
   border-right: 1px solid rgba(255, 255, 255, 0.1);
-  padding: 16px;
+  padding: 8px;
   z-index: 101;
-  height: 80px;
+  height: 60px;
   transition: all 0.3s ease;
 }
 
 .user-status.collapsed {
   width: 72px;
   left: 72px;
-  padding: 8px;
+  padding: 6px;
 }
 
 .user-status.collapsed .user-info {
   justify-content: center;
+  padding: 4px;
 }
 
 .user-status.collapsed .avatar-wrapper {
   margin: 0 auto;
 }
 
+/* 디스코드 스타일 - 사용자 정보 영역 */
 .user-info {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 8px;
   cursor: pointer;
-  border-radius: 8px;
-  padding: 4px;
-  transition: background 0.2s ease;
+  border-radius: 4px;
+  padding: 2px 8px;
+  transition: all 0.15s ease;
+  background: transparent;
+  height: 44px;
 }
 
 .user-info:hover {
   background: rgba(255, 255, 255, 0.05);
 }
 
+.user-info:active {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+/* 디스코드 스타일 - 아바타 래퍼 */
 .avatar-wrapper {
   position: relative;
   display: inline-block;
+  flex-shrink: 0;
 }
 
+/* 디스코드 스타일 - 상태 점 (기존 색상 유지) */
 .status-dot {
   position: absolute;
-  bottom: -2px;
-  right: -2px;
-  width: 14px;
-  height: 14px;
-  border: 2px solid rgba(0, 0, 0, 0.4);
+  bottom: 0;
+  right: 0;
+  width: 12px;
+  height: 12px;
+  border: 3px solid rgba(0, 0, 0, 0.4);
   border-radius: 50%;
   z-index: 1;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+  box-shadow: none;
 }
 
 .status-dot.success {
@@ -242,30 +254,84 @@ onMounted(() => {
   background: rgb(var(--v-theme-error));
 }
 
+/* 디스코드 스타일 - 사용자 상세 정보 */
 .user-details {
   flex: 1;
+  min-width: 0;
+  overflow: hidden;
 }
 
 .user-name {
   font-size: 14px;
   font-weight: 600;
-  color: white;
+  color: #ffffff;
+  line-height: 18px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-bottom: 1px;
 }
 
 .user-status-text {
-  font-size: 12px;
-  color: rgba(255, 255, 255, 0.7);
+  font-size: 11px;
+  color: #b9bbbe;
+  line-height: 14px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-weight: 400;
 }
 
+/* 디스코드 스타일 - 상태 메뉴 (밝은 회색) */
 .status-menu {
-  border-radius: 12px;
-  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.3);
+  border-radius: 8px;
+  background: #6a6a6a !important;
+  backdrop-filter: blur(10px);
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.4);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  overflow: hidden;
 }
 
+.status-menu .v-list {
+  background: transparent !important;
+  padding: 6px 8px !important;
+}
+
+.status-menu .v-list-item {
+  border-radius: 4px;
+  min-height: 40px !important;
+  padding: 6px 8px !important;
+  margin-bottom: 2px;
+  color: #dcddde !important;
+  font-size: 14px;
+  transition: all 0.15s ease;
+}
+
+.status-menu .v-list-item:last-child {
+  margin-bottom: 0;
+}
+
+.status-menu .v-list-item:hover {
+  background: #7a7a7a !important;
+  color: #ffffff !important;
+}
+
+.status-menu .v-list-item.active {
+  background: #7a7a7a !important;
+  color: #ffffff !important;
+}
+
+.status-menu .v-list-item-title {
+  font-weight: 500;
+  font-size: 14px;
+}
+
+/* 디스코드 스타일 - 상태 인디케이터 (기존 색상 유지) */
 .status-indicator {
-  width: 12px;
-  height: 12px;
+  width: 10px;
+  height: 10px;
   border-radius: 50%;
+  margin-right: 8px;
 }
 
 .status-indicator.success {
@@ -278,10 +344,6 @@ onMounted(() => {
 
 .status-indicator.error {
   background: rgb(var(--v-theme-error));
-}
-
-.active {
-  background: rgba(var(--v-theme-primary), 0.2);
 }
 
 /* 반응형 디자인 */

@@ -218,15 +218,6 @@
             <v-icon color="primary">mdi-calendar</v-icon>
             <h2>개인 일정</h2>
           </div>
-          <v-btn
-            size="small"
-            color="primary"
-            variant="text"
-            prepend-icon="mdi-plus"
-            @click="handleQuickAction('new-schedule')"
-          >
-            추가
-          </v-btn>
         </div>
 
         <div class="schedule-container">
@@ -268,37 +259,127 @@
     </div>
     
     <!-- 파일 업로드 다이얼로그 -->
-    <v-dialog v-model="showFileUploadDialog" max-width="600">
-      <v-card>
-            <v-card-title>
-          <v-icon color="success" class="mr-2">mdi-file-upload</v-icon>
-          파일 업로드
-          <v-spacer />
-          <v-btn icon variant="text" @click="showFileUploadDialog = false">
-            <v-icon>mdi-close</v-icon>
+    <v-dialog v-model="showFileUploadDialog" max-width="700px" max-height="90vh">
+      <v-card class="upload-modal">
+        <v-card-title class="modal-header">
+          <div class="header-content">
+            <v-icon class="header-icon" color="primary">mdi-upload</v-icon>
+            <h3 class="modal-title">파일 업로드</h3>
+          </div>
+          <v-btn icon="mdi-close" variant="text" @click="closeFileUploadModal"></v-btn>
+        </v-card-title>
+        
+        <v-card-text class="modal-body">
+          <!-- 업로드할 폴더 선택 -->
+          <div class="folder-selection mb-4">
+            <label class="input-label">업로드 위치</label>
+            <div class="folder-selector" @click="showUploadFolderSelector = !showUploadFolderSelector">
+              <div class="selected-folder">
+                <v-icon class="folder-icon">mdi-folder</v-icon>
+                <span class="folder-name">{{ selectedUploadFolderName }}</span>
+                <v-icon class="dropdown-icon" :class="{ 'rotated': showUploadFolderSelector }">mdi-chevron-down</v-icon>
+              </div>
+            </div>
+            
+            <!-- 계층형 폴더 선택 드롭다운 -->
+            <div v-if="showUploadFolderSelector" class="folder-dropdown">
+              <div class="folder-list">
+                <!-- 로딩 상태 -->
+                <div v-if="loadingFolders" class="loading-state">
+                  <v-progress-circular size="20" indeterminate></v-progress-circular>
+                  <span>폴더 목록을 불러오는 중...</span>
+                </div>
+                
+                <!-- 최상위 루트 옵션 -->
+                <div 
+                  class="folder-item"
+                  :class="{ 'selected': uploadFolderLocation === null }"
+                  @click="selectUploadFolder({ folderSeq: null, folderName: '최상위 루트' })"
+                >
+                  <v-icon class="expand-placeholder"></v-icon>
+                  <v-icon class="folder-icon" color="#2196f3">mdi-home</v-icon>
+                  <span class="folder-name">최상위 루트</span>
+                  <span v-if="uploadFolderLocation === null" class="selected-indicator">
+                    <v-icon color="primary" size="16">mdi-check</v-icon>
+                  </span>
+                </div>
+                
+                <!-- 계층구조 폴더 목록 -->
+                <div 
+                  v-for="folder in flattenedFolders" 
+                  :key="folder.id"
+                  class="folder-item"
+                  :class="{ 'selected': uploadFolderLocation === folder.id }"
+                  :style="{ paddingLeft: `${20 + folder.level * 20}px` }"
+                  @click="selectUploadFolder(folder)"
+                >
+                  <v-icon class="folder-icon" color="#ff9800">mdi-folder</v-icon>
+                  <span class="folder-name">{{ folder.name }}</span>
+                  <span v-if="uploadFolderLocation === folder.id" class="selected-indicator">
+                    <v-icon color="primary" size="16">mdi-check</v-icon>
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+          
+          <div v-if="uploadFiles.length > 0" class="upload-files">
+            <div class="upload-files-header">
+              <span class="files-count">{{ uploadFiles.length }}개 파일 선택됨</span>
+            </div>
+            <div class="files-list">
+              <div 
+                v-for="(file, index) in uploadFiles" 
+                :key="index"
+                class="file-item"
+              >
+                <v-icon class="file-icon">{{ getFileIcon(file.type) }}</v-icon>
+                <div class="file-info">
+                  <div class="file-name">{{ file.name }}</div>
+                  <div class="file-size">{{ formatFileSizeFromBytes(file.size) }}</div>
+                </div>
+                <v-btn
+                  icon="mdi-close"
+                  size="small"
+                  variant="text"
+                  @click="uploadFiles.splice(index, 1)"
+                ></v-btn>
+              </div>
+            </div>
+          </div>
+          <div v-else class="upload-placeholder">
+            <v-icon size="48" color="grey">mdi-cloud-upload</v-icon>
+            <p>업로드할 파일이 없습니다</p>
+          </div>
+        </v-card-text>
+        
+        <v-card-actions class="modal-actions">
+          <v-btn variant="text" @click="$refs.fileInput.click()">
+            <v-icon left>mdi-plus</v-icon>
+            파일 추가
           </v-btn>
-            </v-card-title>
-
-        <v-card-text class="pt-4">
-          <v-file-input
-            v-model="uploadFiles"
-            label="파일 선택"
-            multiple
-            chips
-            prepend-icon="mdi-paperclip"
-            variant="outlined"
-            hint="여러 파일을 선택할 수 있습니다"
-            persistent-hint
-          />
-            </v-card-text>
-
-        <v-card-actions class="px-6 pb-4">
-          <v-spacer />
-          <v-btn variant="text" @click="showFileUploadDialog = false">취소</v-btn>
-          <v-btn color="success" @click="handleFileUpload">업로드</v-btn>
+          <v-spacer></v-spacer>
+          <v-btn variant="text" @click="closeFileUploadModal">취소</v-btn>
+          <v-btn 
+            color="primary" 
+            @click="uploadFilesToDrive"
+            :disabled="uploadFiles.length === 0"
+            :loading="isUploading"
+          >
+            업로드
+          </v-btn>
         </v-card-actions>
-          </v-card>
+      </v-card>
     </v-dialog>
+    
+    <!-- 숨겨진 파일 input -->
+    <input
+      ref="fileInput"
+      type="file"
+      multiple
+      style="display: none"
+      @change="handleFileInputChange"
+    />
 
     <!-- 프로젝트 생성 다이얼로그 -->
     <v-dialog v-model="showProjectDialog" max-width="800">
@@ -644,6 +725,41 @@
     :taskData="selectedTask"
     :isPersonal="isPersonalTask"
   />
+
+  <!-- 개인 일정 추가 모달 -->
+  <PersonalTaskModal
+    v-model="showPersonalTaskModal"
+    :work-space-seq="personalWorkspaceId"
+    :is-edit-mode="false"
+    @task-created="handlePersonalTaskCreated"
+  />
+
+  <!-- 에러 모달 -->
+  <v-dialog v-model="showErrorModal" max-width="500px" persistent class="error-dialog">
+    <v-card class="error-modal">
+      <v-card-title class="error-header">
+        <div class="error-title-content">
+          <v-icon class="error-icon" color="error">mdi-alert-circle</v-icon>
+          <h3 class="error-title">{{ errorTitle }}</h3>
+        </div>
+      </v-card-title>
+      
+      <v-card-text class="error-body">
+        <p class="error-message">{{ errorMessage }}</p>
+      </v-card-text>
+      
+      <v-card-actions class="error-actions">
+        <v-spacer></v-spacer>
+        <v-btn 
+          color="primary" 
+          variant="flat"
+          @click="closeErrorModal"
+        >
+          확인
+        </v-btn>
+      </v-card-actions>
+    </v-card>
+  </v-dialog>
 </template>
 
 <script setup>
@@ -656,6 +772,7 @@ import { createWorkspace, getFriendList, searchMembers } from '@/api/workspace/w
 import { useWorkspaceStore } from '@/store/workspaceStore'
 import { useAuthStore } from '@/store/authStore'
 import TaskDetailModal from './TaskDetailModal.vue'
+import PersonalTaskModal from './PersonalTaskModal.vue'
 
 // Stores & Router
 const workspaceStore = useWorkspaceStore()
@@ -683,6 +800,12 @@ const newTask = ref({
 
 // 파일 업로드
 const uploadFiles = ref([])
+const uploadFolderLocation = ref(null)
+const showUploadFolderSelector = ref(false)
+const allFolders = ref([])
+const loadingFolders = ref(false)
+const fileInput = ref(null)
+const isUploading = ref(false)
 
 // 새 프로젝트 폼
 const newProject = ref({
@@ -826,6 +949,12 @@ const projectsCount = computed(() => {
   return projects.value.length
 })
 
+// 개인 워크스페이스 ID
+const personalWorkspaceId = computed(() => {
+  const personalWorkspace = workspaceStore.workspaces.find(ws => ws.type === 'personal')
+  return personalWorkspace?.workSpaceSeq || null
+})
+
 // Methods
 const updateDateTime = () => {
   const now = new Date()
@@ -951,10 +1080,17 @@ const isToday = (dateString) => {
 const handleQuickAction = (action) => {
   switch (action) {
     case 'new-schedule':
-      // TODO: 개인 일정 생성 모달 구현
+      // 개인 일정 생성 모달 열기
+      showPersonalTaskModal.value = true
       break
     case 'upload-file':
       showFileUploadDialog.value = true
+      uploadFolderLocation.value = null
+      showUploadFolderSelector.value = false
+      // 폴더 목록이 없을 때만 로드
+      if (!allFolders.value || allFolders.value.length === 0) {
+        loadAllFolders()
+      }
       break
     case 'new-project':
       showProjectDialog.value = true
@@ -967,28 +1103,176 @@ const navigateToFriends = () => {
   router.push('/workspaces/personal/friends')
 }
 
+// 폴더 목록 로드
+const loadAllFolders = async () => {
+  loadingFolders.value = true
+  try {
+    const personalWorkspace = workspaceStore.workspaces.find(ws => ws.type === 'personal')
+    if (!personalWorkspace || !personalWorkspace.workSpaceSeq) {
+      allFolders.value = []
+      return
+    }
+    
+    const response = await personalDriveApi.getItems(personalWorkspace.workSpaceSeq, null)
+    const items = response?.data || response
+    
+    // 폴더만 필터링
+    const folders = Array.isArray(items) 
+      ? items.filter(item => item.type === 'folder' || item.itemType === 'FOLDER')
+      : []
+    
+    // 계층구조 생성
+    allFolders.value = buildFolderHierarchy(folders)
+  } catch (error) {
+    console.error('폴더 목록 로드 실패:', error)
+    allFolders.value = []
+  } finally {
+    loadingFolders.value = false
+  }
+}
+
+// 폴더 계층구조 생성
+const buildFolderHierarchy = (folders) => {
+  const folderMap = new Map()
+  const rootFolders = []
+  
+  // 모든 폴더를 맵에 저장
+  folders.forEach(folder => {
+    const id = folder.folderSeq || folder.id
+    folderMap.set(id, {
+      id,
+      name: folder.folderName || folder.name,
+      parentFolderSeq: folder.parentFolderSeq,
+      children: []
+    })
+  })
+  
+  // 계층구조 구성
+  folderMap.forEach(folder => {
+    if (folder.parentFolderSeq) {
+      const parent = folderMap.get(folder.parentFolderSeq)
+      if (parent) {
+        parent.children.push(folder)
+      } else {
+        rootFolders.push(folder)
+      }
+    } else {
+      rootFolders.push(folder)
+    }
+  })
+  
+  return rootFolders
+}
+
+// 폴더 계층구조를 평탄화
+const flattenedFolders = computed(() => {
+  const result = []
+  
+  const flatten = (folders, level = 0) => {
+    folders.forEach(folder => {
+      result.push({ 
+        ...folder, 
+        level
+      })
+      if (folder.children && folder.children.length > 0) {
+        flatten(folder.children, level + 1)
+      }
+    })
+  }
+  
+  flatten(allFolders.value)
+  return result
+})
+
+// 파일 input 변경 처리
+const handleFileInputChange = (event) => {
+  const files = Array.from(event.target.files)
+  // 기존 파일에 추가
+  uploadFiles.value = [...uploadFiles.value, ...files]
+  // input 초기화 (같은 파일 다시 선택 가능하도록)
+  if (fileInput.value) {
+    fileInput.value.value = ''
+  }
+}
+
+// 업로드 폴더 선택
+const selectUploadFolder = (folder) => {
+  uploadFolderLocation.value = folder.folderSeq !== undefined ? folder.folderSeq : folder.id
+  showUploadFolderSelector.value = false
+}
+
+// 선택된 업로드 폴더 이름
+const selectedUploadFolderName = computed(() => {
+  if (uploadFolderLocation.value === null) return '최상위 루트'
+  if (!uploadFolderLocation.value) return '폴더를 선택하세요'
+  
+  const findFolder = (folders, targetId) => {
+    for (const folder of folders) {
+      if (folder.id === targetId) return folder
+      if (folder.children && folder.children.length > 0) {
+        const found = findFolder(folder.children, targetId)
+        if (found) return found
+      }
+    }
+    return null
+  }
+  
+  const folder = findFolder(allFolders.value, uploadFolderLocation.value)
+  return folder ? folder.name : '알 수 없는 폴더'
+})
+
+// 파일 아이콘 결정
+const getFileIcon = (mimeType) => {
+  if (!mimeType) return 'mdi-file'
+  if (mimeType.startsWith('image/')) return 'mdi-file-image'
+  if (mimeType.startsWith('video/')) return 'mdi-file-video'
+  if (mimeType.startsWith('audio/')) return 'mdi-file-music'
+  if (mimeType.includes('pdf')) return 'mdi-file-pdf'
+  if (mimeType.includes('word')) return 'mdi-file-word'
+  if (mimeType.includes('excel') || mimeType.includes('spreadsheet')) return 'mdi-file-excel'
+  if (mimeType.includes('powerpoint') || mimeType.includes('presentation')) return 'mdi-file-powerpoint'
+  if (mimeType.includes('text')) return 'mdi-file-document'
+  return 'mdi-file'
+}
+
+// 파일 크기 포맷팅
+const formatFileSizeFromBytes = (bytes) => {
+  if (bytes === 0) return '0 Bytes'
+  const k = 1024
+  const sizes = ['Bytes', 'KB', 'MB', 'GB']
+  const i = Math.floor(Math.log(bytes) / Math.log(k))
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
+}
+
+// 파일 업로드 모달 닫기
+const closeFileUploadModal = () => {
+  showFileUploadDialog.value = false
+  uploadFiles.value = []
+  uploadFolderLocation.value = null
+  showUploadFolderSelector.value = false
+}
+
 // 파일 업로드 처리
-const handleFileUpload = async () => {
+const uploadFilesToDrive = async () => {
   if (!uploadFiles.value || uploadFiles.value.length === 0) {
-    alert('업로드할 파일을 선택해주세요.')
     return
   }
 
+  isUploading.value = true
   try {
     // 개인 워크스페이스 정보 가져오기
     const personalWorkspace = workspaceStore.workspaces.find(ws => ws.type === 'personal')
     
     if (!personalWorkspace || !personalWorkspace.workSpaceSeq) {
-      alert('개인 워크스페이스 정보를 찾을 수 없습니다.')
+      showError('파일 업로드 실패', '개인 워크스페이스 정보를 찾을 수 없습니다.')
       return
     }
-    
-    const response = await personalDriveApi.uploadFiles(uploadFiles.value, personalWorkspace.workSpaceSeq, null)
+
+    const targetFolderId = uploadFolderLocation.value
+    const response = await personalDriveApi.uploadFiles(uploadFiles.value, personalWorkspace.workSpaceSeq, targetFolderId)
     
     if (response.success) {
-      alert(`${uploadFiles.value.length}개의 파일이 업로드되었습니다.`)
-      uploadFiles.value = []
-      showFileUploadDialog.value = false
+      closeFileUploadModal()
       
       // 드라이브 파일 개수 새로고침
       await loadDriveFiles()
@@ -996,7 +1280,9 @@ const handleFileUpload = async () => {
       throw new Error(response.error || '파일 업로드 실패')
     }
   } catch (error) {
-    alert('파일 업로드에 실패했습니다: ' + (error.message || error))
+    showError('파일 업로드 실패', error.message || '파일 업로드 중 오류가 발생했습니다.')
+  } finally {
+    isUploading.value = false
   }
 }
 
@@ -1109,7 +1395,7 @@ const isInvited = (userSeq) => {
 // 프로젝트 생성 처리
 const handleCreateProject = async () => {
   if (!newProject.value.name.trim()) {
-    alert('프로젝트 이름을 입력해주세요.')
+    showError('프로젝트 생성 실패', '프로젝트 이름을 입력해주세요.')
     return
   }
 
@@ -1124,9 +1410,6 @@ const handleCreateProject = async () => {
       memberList
     )
     
-    // 성공 메시지
-    alert(`프로젝트 "${createdWorkspace.workSpaceName}"가 성공적으로 생성되었습니다!`)
-    
     // 워크스페이스 목록 새로고침
     await workspaceStore.loadMyWorkspaces()
     
@@ -1137,7 +1420,7 @@ const handleCreateProject = async () => {
     // 모달 닫기
     closeProjectDialog()
   } catch (error) {
-    alert('프로젝트 생성에 실패했습니다: ' + (error.message || error))
+    showError('프로젝트 생성 실패', error.message || '프로젝트 생성 중 오류가 발생했습니다.')
   }
 }
 
@@ -1159,7 +1442,7 @@ const closeProjectDialog = () => {
 
 const addQuickTask = () => {
   if (!newTask.value.title) {
-    alert('작업 제목을 입력해주세요.')
+    showError('작업 생성 실패', '작업 제목을 입력해주세요.')
     return
   }
 
@@ -1483,6 +1766,14 @@ const selectedTask = ref({})
 const isLoadingTask = ref(false)
 const isPersonalTask = ref(false)
 
+// 개인 일정 추가 모달 관련
+const showPersonalTaskModal = ref(false)
+
+// 에러 모달 상태
+const showErrorModal = ref(false)
+const errorMessage = ref('')
+const errorTitle = ref('')
+
 // 업무 항목 클릭 핸들러
 const handleTaskClick = async (taskSeq, isPersonal = false) => {
   if (!taskSeq) {
@@ -1503,10 +1794,10 @@ const handleTaskClick = async (taskSeq, isPersonal = false) => {
       selectedTask.value = taskDetail
       showTaskDetailModal.value = true
     } else {
-      alert('업무 정보가 없습니다.')
+      showError('업무 조회 실패', '업무 정보를 찾을 수 없습니다.')
     }
   } catch (error) {
-    alert('업무 정보를 불러오는데 실패했습니다: ' + error.message)
+    showError('업무 조회 실패', error.message || '업무 정보를 불러오는 중 오류가 발생했습니다.')
   } finally {
     isLoadingTask.value = false
   }
@@ -1528,6 +1819,25 @@ watch(showTaskDetailModal, async (newVal, oldVal) => {
     isPersonalTask.value = false
   }
 })
+
+// 개인 일정 생성 완료 후 핸들러
+const handlePersonalTaskCreated = async () => {
+  await loadPersonalSchedules()
+}
+
+// 에러 모달 표시
+const showError = (title, message) => {
+  errorTitle.value = title
+  errorMessage.value = message
+  showErrorModal.value = true
+}
+
+// 에러 모달 닫기
+const closeErrorModal = () => {
+  showErrorModal.value = false
+  errorTitle.value = ''
+  errorMessage.value = ''
+}
 </script>
 
 <style scoped>
@@ -2353,5 +2663,281 @@ watch(showTaskDetailModal, async (newVal, oldVal) => {
 
 .create-workspace-modal .create-workspace-btn {
   color: white !important;
+}
+
+/* 파일 업로드 모달 스타일 */
+.upload-modal {
+  display: flex;
+  flex-direction: column;
+}
+
+.upload-modal .modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px 24px;
+  background: linear-gradient(135deg, rgba(76, 175, 80, 0.1), rgba(76, 175, 80, 0.05));
+  border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.1);
+}
+
+.upload-modal .header-content {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.upload-modal .header-icon {
+  font-size: 24px;
+}
+
+.upload-modal .modal-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: rgb(var(--v-theme-on-surface));
+  margin: 0;
+}
+
+.upload-modal .modal-body {
+  min-height: auto;
+  max-height: 70vh;
+  overflow-y: auto;
+  padding: 24px;
+  transition: max-height 0.3s ease;
+}
+
+.upload-modal .modal-actions {
+  flex-shrink: 0;
+  padding: 16px 24px;
+  border-top: 1px solid rgba(var(--v-theme-on-surface), 0.1);
+}
+
+.upload-files {
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.upload-files-header {
+  margin-bottom: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.1);
+}
+
+.files-count {
+  font-size: 14px;
+  font-weight: 500;
+  color: #4caf50;
+}
+
+.files-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.file-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  background: rgba(var(--v-theme-on-surface), 0.02);
+  border-radius: 8px;
+  border: 1px solid rgba(var(--v-theme-on-surface), 0.1);
+}
+
+.file-icon {
+  color: #4caf50;
+  flex-shrink: 0;
+}
+
+.file-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.file-name {
+  font-size: 14px;
+  font-weight: 500;
+  color: rgb(var(--v-theme-on-surface));
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.file-size {
+  font-size: 12px;
+  color: rgba(var(--v-theme-on-surface), 0.6);
+  margin-top: 2px;
+}
+
+.upload-placeholder {
+  text-align: center;
+  padding: 40px 20px;
+  color: rgba(var(--v-theme-on-surface), 0.6);
+}
+
+.upload-placeholder p {
+  margin: 12px 0 0 0;
+  font-size: 14px;
+}
+
+.input-label {
+  display: block;
+  font-size: 14px;
+  font-weight: 500;
+  color: rgb(var(--v-theme-on-surface));
+  margin-bottom: 8px;
+}
+
+.folder-selection {
+  position: relative;
+}
+
+.folder-selector {
+  border: 1px solid rgba(var(--v-theme-on-surface), 0.2);
+  border-radius: 8px;
+  padding: 12px 16px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  background: rgba(var(--v-theme-surface), 0.8);
+}
+
+.folder-selector:hover {
+  border-color: #4caf50;
+  background: rgba(var(--v-theme-surface), 1);
+}
+
+.selected-folder {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.folder-icon {
+  color: #4caf50;
+}
+
+.folder-name {
+  flex: 1;
+  font-size: 14px;
+  color: rgb(var(--v-theme-on-surface));
+}
+
+.dropdown-icon {
+  color: rgba(var(--v-theme-on-surface), 0.6);
+  transition: transform 0.2s ease;
+}
+
+.dropdown-icon.rotated {
+  transform: rotate(180deg);
+}
+
+.folder-dropdown {
+  margin-top: 8px;
+  background: rgb(var(--v-theme-surface));
+  border: 1px solid rgba(var(--v-theme-on-surface), 0.2);
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  max-height: 500px;
+  overflow-y: auto;
+}
+
+.folder-list {
+  padding: 8px 0;
+}
+
+.folder-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  position: relative;
+}
+
+.folder-item:hover {
+  background: rgba(76, 175, 80, 0.1);
+}
+
+.folder-item.selected {
+  background: rgba(76, 175, 80, 0.15);
+  border-left: 3px solid #4caf50;
+}
+
+.expand-placeholder {
+  width: 16px;
+  height: 16px;
+  visibility: hidden;
+}
+
+.folder-item .folder-icon {
+  color: #4caf50;
+  width: 20px;
+  height: 20px;
+}
+
+.folder-item .folder-name {
+  flex: 1;
+  font-size: 14px;
+  color: rgb(var(--v-theme-on-surface));
+}
+
+.selected-indicator {
+  display: flex;
+  align-items: center;
+  margin-left: auto;
+}
+
+.loading-state {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  color: rgba(var(--v-theme-on-surface), 0.6);
+  font-size: 14px;
+}
+
+/* 에러 모달 스타일 */
+.error-modal {
+  border-radius: 12px;
+}
+
+.error-header {
+  background: linear-gradient(135deg, #ffebee 0%, #ffcdd2 100%);
+  border-radius: 12px 12px 0 0;
+  padding: 20px 24px;
+}
+
+.error-title-content {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.error-icon {
+  font-size: 24px;
+}
+
+.error-title {
+  margin: 0;
+  color: #d32f2f;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.error-body {
+  padding: 24px;
+}
+
+.error-message {
+  margin: 0;
+  color: rgb(var(--v-theme-on-surface));
+  font-size: 16px;
+  line-height: 1.5;
+}
+
+.error-actions {
+  padding: 16px 24px;
+  border-top: 1px solid rgba(var(--v-theme-on-surface), 0.1);
 }
 </style>

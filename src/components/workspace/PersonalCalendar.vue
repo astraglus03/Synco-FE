@@ -9,14 +9,10 @@
       <button @click="nextMonth" class="nav-button">
         <v-icon size="20">mdi-chevron-right</v-icon>
       </button>
-      <v-btn 
-        size="small" 
-        variant="outlined" 
-        @click="goToToday"
-        class="today-btn"
-      >
+      <button @click="goToToday" class="today-btn">
+        <v-icon size="16" class="today-icon">mdi-calendar-today</v-icon>
         오늘
-      </v-btn>
+      </button>
     </div>
 
     <!-- FullCalendar -->
@@ -183,7 +179,7 @@ function closeMorePopover() {
 
 <style scoped>
 .calendar-container {
-  background: white;
+  background: rgb(var(--v-theme-schedule-card-bg));
   border-radius: 8px;
   padding: 24px;
   height: auto;
@@ -191,6 +187,7 @@ function closeMorePopover() {
 
 /* 네비게이션 */
 .calendar-nav {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -199,8 +196,8 @@ function closeMorePopover() {
 }
 
 .nav-button {
-  background: white;
-  border: 1px solid #e0e0e0;
+  background: rgb(var(--v-theme-schedule-card-bg));
+  border: 1px solid rgb(var(--v-theme-schedule-border));
   border-radius: 6px;
   padding: 8px 12px;
   cursor: pointer;
@@ -211,8 +208,8 @@ function closeMorePopover() {
 }
 
 .nav-button:hover {
-  background: #f5f5f5;
-  border-color: #2196f3;
+  background: rgb(var(--v-theme-schedule-hover-bg));
+  border-color: #f25f39;
 }
 
 .month-display {
@@ -220,10 +217,40 @@ function closeMorePopover() {
   font-weight: 600;
   min-width: 120px;
   text-align: center;
+  color: rgb(var(--v-theme-schedule-text));
 }
 
 .today-btn {
-  margin-left: 16px;
+  position: absolute;
+  right: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: linear-gradient(135deg, #f25f39 0%, #e5492d 100%);
+  color: white;
+  border: none;
+  border-radius: 16px;
+  padding: 8px 18px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 0 2px 4px rgba(242, 95, 57, 0.25);
+}
+
+.today-btn:hover {
+  background: linear-gradient(135deg, #e5492d 0%, #d63c21 100%);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 8px rgba(242, 95, 57, 0.35);
+}
+
+.today-btn:active {
+  transform: translateY(0);
+  box-shadow: 0 2px 4px rgba(242, 95, 57, 0.25);
+}
+
+.today-icon {
+  color: white;
 }
 
 /* FullCalendar 컨테이너 */
@@ -231,19 +258,40 @@ function closeMorePopover() {
   height: auto;
 }
 
-/* 요일 헤더 스타일 */
-:deep(.fc-col-header) {
-  margin-bottom: 8px;
+/* 캘린더 외곽 테두리를 셀 경계선과 동일하게 */
+:deep(.fc-theme-standard .fc-scrollgrid) {
+  border: 1px solid rgb(var(--v-theme-schedule-border));
 }
 
+/* 모든 셀/헤더 경계선 색 통일 (세로/가로 구분선 포함) */
+:deep(.fc-theme-standard td),
+:deep(.fc-theme-standard th) {
+  border-color: rgb(var(--v-theme-schedule-border));
+}
+
+/* 요일 헤더 스타일 */
+:deep(.fc-col-header thead),
+:deep(.fc-col-header tr),
 :deep(.fc-col-header-cell) {
   padding: 12px;
   text-align: center;
   font-weight: 600;
   font-size: 14px;
-  color: #666;
-  background: #fafafa;
-  border-bottom: 2px solid #e0e0e0;
+  color: rgb(var(--v-theme-schedule-text)) !important;
+  background: rgb(var(--v-theme-schedule-header-bg)) !important;
+  background-color: rgb(var(--v-theme-schedule-header-bg)) !important;
+  border-bottom: 2px solid rgb(var(--v-theme-schedule-border)) !important;
+}
+
+:deep(.fc-col-header-cell-cushion) {
+  color: rgb(var(--v-theme-schedule-text)) !important;
+}
+
+:deep(.fc-scrollgrid-section-header),
+:deep(.fc-scrollgrid-section-header > *),
+:deep(.fc-scrollgrid-section-header td) {
+  background: rgb(var(--v-theme-schedule-header-bg)) !important;
+  background-color: rgb(var(--v-theme-schedule-header-bg)) !important;
 }
 
 /* 날짜 그리드 */
@@ -252,12 +300,12 @@ function closeMorePopover() {
 }
 
 :deep(.fc-daygrid-day) {
-  background: #ffffff;
-  border: 1px solid #f0f2f5;
+  background: rgb(var(--v-theme-schedule-card-bg)) !important;
+  border: 1px solid rgb(var(--v-theme-schedule-border)) !important;
 }
 
 :deep(.fc-daygrid-day-frame) {
-  background: #ffffff;
+  background: rgb(var(--v-theme-schedule-card-bg)) !important;
   min-height: 120px;
   padding: 40px 8px 0 8px;
   position: relative;
@@ -267,14 +315,14 @@ function closeMorePopover() {
 
 /* 다른 달 날짜 스타일 */
 :deep(.fc-day-other .fc-daygrid-day-frame) {
-  background: #f5f5f5;
+  background: rgba(var(--v-theme-schedule-hover-bg), 0.5) !important;
 }
 
 /* 날짜 숫자 */
 :deep(.fc-daygrid-day-number) {
   font-size: 12px;
   font-weight: 600;
-  color: #6b7280;
+  color: rgb(var(--v-theme-schedule-text-secondary)) !important;
   position: absolute;
   top: 6px;
   right: 8px;
@@ -286,7 +334,7 @@ function closeMorePopover() {
 /* 오늘 날짜 배지 */
 :deep(.fc-day-today .fc-daygrid-day-number) {
   background: #2196f3;
-  color: white;
+  color: white !important;
   border-radius: 50%;
   min-width: 24px;
   height: 24px;
@@ -301,23 +349,23 @@ function closeMorePopover() {
 
 /* 셀 호버 */
 :deep(.fc-daygrid-day-frame:hover) {
-  background: #f8f9fa;
+  background: rgb(var(--v-theme-schedule-hover-bg)) !important;
 }
 
 :deep(.fc-day-other .fc-daygrid-day-frame:hover) {
-  background: #eeeeee;
+  background: rgba(var(--v-theme-schedule-hover-bg), 0.8) !important;
 }
 
 /* 다른 달 날짜 흐리게 */
 :deep(.fc-day-other) {
-  background: #f7f7f7;
+  background: rgba(var(--v-theme-schedule-hover-bg), 0.5) !important;
 }
 
 :deep(.fc-day-other .fc-daygrid-day-number) {
-  color: #b3b3b3;
+  color: rgb(var(--v-theme-schedule-text-tertiary)) !important;
 }
 
-/* 이벤트(업무) 스타일 - 기존 색상 유지 */
+/* 이벤트(업무) 스타일 */
 :deep(.fc-event) {
   border-radius: 6px;
   padding: 2px 6px;
@@ -369,8 +417,8 @@ function closeMorePopover() {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  background-color: #f3f4f6;
-  color: #6b7280;
+  background-color: rgb(var(--v-theme-schedule-border)) !important;
+  color: rgb(var(--v-theme-schedule-text-secondary)) !important;
   border-radius: 6px;
   padding: 2px 8px;
   margin-top: 6px;
@@ -381,8 +429,8 @@ function closeMorePopover() {
 }
 
 :deep(.fc-more-link:hover) {
-  background-color: #e5e7eb;
-  color: #374151;
+  background-color: rgb(var(--v-theme-schedule-hover-bg)) !important;
+  color: rgb(var(--v-theme-schedule-text)) !important;
 }
 
 /* 오늘 셀 하단 잔상 방지 */
@@ -397,20 +445,68 @@ function closeMorePopover() {
 
 /* 상태별 색상 (기존과 동일) */
 :deep(.status-todo) {
-  background: #e3f2fd !important;
+  background: rgba(33, 150, 243, 0.15) !important;
   border-color: #1976d2 !important;
   color: #1976d2 !important;
 }
 
 :deep(.status-in_progress) {
-  background: #fff3e0 !important;
+  background: rgba(255, 152, 0, 0.15) !important;
   border-color: #f57c00 !important;
   color: #f57c00 !important;
 }
 
 :deep(.status-completed) {
-  background: #e8f5e9 !important;
+  background: rgba(76, 175, 80, 0.15) !important;
   border-color: #388e3c !important;
   color: #388e3c !important;
+}
+
+/* 더보기 팝오버 */
+:deep(.fc-popover) {
+  background: rgb(var(--v-theme-schedule-card-bg)) !important;
+  border: 1px solid rgb(var(--v-theme-schedule-border)) !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15) !important;
+}
+
+:deep(.fc-popover-header) {
+  background: rgb(var(--v-theme-schedule-header-bg)) !important;
+  color: rgb(var(--v-theme-schedule-text)) !important;
+  border-bottom: 1px solid rgb(var(--v-theme-schedule-border)) !important;
+}
+
+:deep(.fc-popover-title) {
+  color: rgb(var(--v-theme-schedule-text)) !important;
+}
+
+:deep(.fc-popover-close) {
+  color: rgb(var(--v-theme-schedule-text-secondary)) !important;
+  opacity: 1 !important;
+}
+
+:deep(.fc-popover-close:hover) {
+  color: rgb(var(--v-theme-schedule-text)) !important;
+}
+
+:deep(.fc-popover-body) {
+  background: rgb(var(--v-theme-schedule-card-bg)) !important;
+}
+
+/* 다크모드에서 more 팝오버를 달리 보이도록 살짝 톤 차이 적용 */
+:deep(.v-theme--dark) .calendar-container .fc-popover {
+  background: rgba(var(--v-theme-on-surface), 0.12) !important; /* 더 진하게 */
+  border-color: rgba(var(--v-theme-on-surface), 0.3) !important;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.35) !important;
+  border-radius: 10px !important;
+}
+
+:deep(.v-theme--dark) .calendar-container .fc-popover-header {
+  background: rgba(var(--v-theme-on-surface), 0.16) !important;
+  color: rgb(var(--v-theme-on-surface)) !important;
+  border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.28) !important;
+}
+
+:deep(.v-theme--dark) .calendar-container .fc-popover-body {
+  background: rgba(var(--v-theme-on-surface), 0.1) !important;
 }
 </style>

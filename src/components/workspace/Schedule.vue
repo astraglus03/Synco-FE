@@ -37,8 +37,8 @@
 
     <!-- 검색 및 필터 -->
     <div class="search-section">
-      <div class="search-bar">
-        <v-icon size="20" color="grey">mdi-magnify</v-icon>
+      <div class="search-bar-wrapper">
+        <v-icon class="search-icon">mdi-magnify</v-icon>
         <input placeholder="일정 검색..." class="search-input" />
       </div>
       <div class="filter-section">
@@ -1072,7 +1072,7 @@ const getMemberName = (memberSeq) => {
 <style scoped>
 .project-schedule {
   padding: 24px;
-  background-color: white;
+  background-color: rgb(var(--v-theme-background));
   min-height: 100vh;
 }
 
@@ -1088,6 +1088,7 @@ const getMemberName = (memberSeq) => {
   font-size: 28px;
   font-weight: 600;
   margin: 0;
+  color: rgb(var(--v-theme-schedule-text));
 }
 
 .header-actions {
@@ -1109,23 +1110,43 @@ const getMemberName = (memberSeq) => {
   gap: 16px;
 }
 
-.search-bar {
-  display: flex;
-  align-items: center;
-  background: white;
-  border-radius: 8px;
-  padding: 8px 12px;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+/* GlobalSearch 스타일 */
+.search-bar-wrapper {
+  position: relative;
   flex: 1;
   max-width: 400px;
 }
 
+.search-icon {
+  position: absolute;
+  left: 16px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: rgb(var(--v-theme-schedule-placeholder));
+  z-index: 2;
+}
+
 .search-input {
-  border: none;
-  outline: none;
-  margin-left: 8px;
-  flex: 1;
+  width: 100%;
+  height: 40px;
+  padding: 8px 16px 8px 48px;
+  border: 1px solid rgb(var(--v-theme-schedule-border));
+  border-radius: 20px;
+  background: rgb(var(--v-theme-schedule-card-bg));
+  color: rgb(var(--v-theme-schedule-text));
   font-size: 14px;
+  outline: none;
+  transition: all 0.3s ease;
+}
+
+.search-input:focus {
+  border-color: #2196f3;
+  background: rgb(var(--v-theme-schedule-card-bg));
+  box-shadow: 0 0 0 2px rgba(33, 150, 243, 0.1);
+}
+
+.search-input::placeholder {
+  color: rgb(var(--v-theme-schedule-placeholder));
 }
 
 .filter-section {
@@ -1150,7 +1171,7 @@ const getMemberName = (memberSeq) => {
   font-weight: 600;
   font-size: 14px;
   margin-right: -8px;
-  border: 2px solid white;
+  border: 2px solid rgb(var(--v-theme-schedule-card-bg));
   position: relative;
   z-index: 1;
   cursor: pointer;
@@ -1247,7 +1268,8 @@ const getMemberName = (memberSeq) => {
 .kanban-column {
   flex: 1;
   min-width: 300px;
-  background: white;
+  background: rgb(var(--v-theme-schedule-card-bg));
+  border: 1px solid rgb(var(--v-theme-schedule-border));
   border-radius: 8px;
   display: flex;
   flex-direction: column;
@@ -1264,17 +1286,17 @@ const getMemberName = (memberSeq) => {
 
 /* 할 일 컬럼 전체 색상 */
 .kanban-column:first-child {
-  background: #e3f2fd;
+  background: rgba(33, 150, 243, 0.08);
 }
 
 /* 진행중 컬럼 전체 색상 */
 .kanban-column:nth-child(2) {
-  background: #fff3e0;
+  background: rgba(255, 152, 0, 0.08);
 }
 
 /* 완료 컬럼 전체 색상 */
 .kanban-column:last-child {
-  background: #e8f5e8;
+  background: rgba(76, 175, 80, 0.08);
 }
 
 .column-header {
@@ -1283,21 +1305,21 @@ const getMemberName = (memberSeq) => {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  color: #333;
+  color: rgb(var(--v-theme-schedule-text));
   font-weight: 600;
   font-size: 16px;
 }
 
 .todo-header {
-  background: #e3f2fd;
+  background: rgba(33, 150, 243, 0.15);
 }
 
 .progress-header {
-  background: #fff3e0;
+  background: rgba(255, 152, 0, 0.15);
 }
 
 .completed-header {
-  background: #e8f5e8;
+  background: rgba(76, 175, 80, 0.15);
 }
 
 .column-title {
@@ -1343,13 +1365,13 @@ const getMemberName = (memberSeq) => {
 
 /* 태스크 카드 스타일 */
 .task-card {
-  background: white;
+  background: rgb(var(--v-theme-schedule-card-bg));
   border-radius: 8px;
   padding: 16px;
   box-shadow: 0 4px 8px rgba(0, 0, 0, 0.12), 0 2px 4px rgba(0, 0, 0, 0.08);
   cursor: pointer;
   transition: all 0.3s ease;
-  border-left: 4px solid #e0e0e0;
+  border-left: 4px solid rgb(var(--v-theme-schedule-border));
   position: relative;
   transform: translateZ(0);
   margin-bottom: 12px;
@@ -1409,7 +1431,7 @@ const getMemberName = (memberSeq) => {
 .task-title {
   font-size: 14px;
   font-weight: 600;
-  color: #333;
+  color: rgb(var(--v-theme-schedule-text));
   line-height: 1.4;
   flex: 1;
   margin-right: 8px;
@@ -1417,13 +1439,13 @@ const getMemberName = (memberSeq) => {
 
 .task-date {
   font-size: 12px;
-  color: #666;
+  color: rgb(var(--v-theme-schedule-text-secondary));
   margin-bottom: 6px;
 }
 
 .task-description {
   font-size: 12px;
-  color: #888;
+  color: rgb(var(--v-theme-schedule-text-tertiary));
   line-height: 1.4;
   white-space: nowrap;
   overflow: hidden;
@@ -1450,7 +1472,7 @@ const getMemberName = (memberSeq) => {
     align-items: stretch;
   }
   
-  .search-bar {
+  .search-bar-wrapper {
     max-width: none;
   }
 }
@@ -1461,17 +1483,17 @@ const getMemberName = (memberSeq) => {
 }
 
 .column-content::-webkit-scrollbar-track {
-  background: #f1f1f1;
+  background: rgb(var(--v-theme-schedule-hover-bg));
   border-radius: 3px;
 }
 
 .column-content::-webkit-scrollbar-thumb {
-  background: #c1c1c1;
+  background: rgba(var(--v-theme-schedule-text-secondary), 0.4);
   border-radius: 3px;
 }
 
 .column-content::-webkit-scrollbar-thumb:hover {
-  background: #a8a8a8;
+  background: rgba(var(--v-theme-schedule-text-secondary), 0.6);
 }
 
 /* 로딩 및 에러 상태 스타일 */
@@ -1482,24 +1504,25 @@ const getMemberName = (memberSeq) => {
   justify-content: center;
   padding: 40px 20px;
   text-align: center;
-  color: #666;
+  color: rgb(var(--v-theme-schedule-text-secondary));
 }
 
 .loading-state p, .error-state p {
   margin-top: 16px;
   font-size: 14px;
+  color: rgb(var(--v-theme-schedule-text-secondary));
 }
 
 .error-state {
-  color: #d32f2f;
+  color: rgb(var(--v-theme-error));
 }
 
 /* 담당자 표시 스타일 */
 .task-assignee {
   font-size: 11px;
-  color: #666;
+  color: rgb(var(--v-theme-schedule-text-secondary));
   font-weight: 500;
-  background: #f5f5f5;
+  background: rgb(var(--v-theme-schedule-hover-bg));
   padding: 2px 6px;
   border-radius: 4px;
   white-space: nowrap;
@@ -1520,6 +1543,9 @@ const getMemberName = (memberSeq) => {
   display: flex;
   align-items: center;
   justify-content: center;
+  border: 2px solid #2196f3 !important;
+  background: rgb(var(--v-theme-schedule-card-bg)) !important;
+  color: #2196f3 !important;
 }
 
 .multi-filter-btn :deep(.v-btn__content) {
@@ -1536,7 +1562,7 @@ const getMemberName = (memberSeq) => {
 }
 
 .multi-filter-btn.active {
-  background: #f8f9fa !important;
+  background: rgb(var(--v-theme-schedule-hover-bg)) !important;
   color: #1976d2 !important;
   border-color: #1976d2 !important;
   box-shadow: 0 2px 8px rgba(25, 118, 210, 0.2);
@@ -1600,10 +1626,10 @@ const getMemberName = (memberSeq) => {
 }
 
 .filter-dropdown-content {
-  background: white;
+  background: rgb(var(--v-theme-schedule-card-bg));
   border-radius: 12px;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
-  border: 1px solid #e0e0e0;
+  border: 1px solid rgb(var(--v-theme-schedule-border));
   overflow: hidden;
   animation: slideDown 0.2s ease-out;
 }
@@ -1625,8 +1651,8 @@ const getMemberName = (memberSeq) => {
   justify-content: space-between;
   align-items: center;
   padding: 20px 24px;
-  background: #f8f9fa;
-  border-bottom: 1px solid #e1e5e9;
+  background: rgb(var(--v-theme-schedule-header-bg));
+  border-bottom: 1px solid rgb(var(--v-theme-schedule-border));
 }
 
 .header-left {
@@ -1639,23 +1665,23 @@ const getMemberName = (memberSeq) => {
   margin: 0;
   font-size: 16px;
   font-weight: 600;
-  color: #172b4d;
+  color: rgb(var(--v-theme-schedule-text));
 }
 
 .close-filter-btn {
-  color: #6b778c !important;
+  color: rgb(var(--v-theme-schedule-text-secondary)) !important;
 }
 
 .close-filter-btn:hover {
-  background: #e9ecef !important;
-  color: #172b4d !important;
+  background: rgb(var(--v-theme-schedule-hover-bg)) !important;
+  color: rgb(var(--v-theme-schedule-text)) !important;
 }
 
 /* 선택된 필터 표시 */
 .active-filters {
   padding: 16px 24px;
-  background: #f0f8ff;
-  border-bottom: 1px solid #e1e5e9;
+  background: rgba(33, 150, 243, 0.1);
+  border-bottom: 1px solid rgb(var(--v-theme-schedule-border));
 }
 
 .active-filters-header {
@@ -1698,13 +1724,13 @@ const getMemberName = (memberSeq) => {
   gap: 8px;
   margin-bottom: 12px;
   padding-bottom: 6px;
-  border-bottom: 2px solid #e1e5e9;
+  border-bottom: 2px solid rgb(var(--v-theme-schedule-border));
 }
 
 .section-title-simple {
   font-size: 14px;
   font-weight: 600;
-  color: #172b4d;
+  color: rgb(var(--v-theme-schedule-text));
   text-transform: uppercase;
   letter-spacing: 0.3px;
 }
@@ -1720,7 +1746,7 @@ const getMemberName = (memberSeq) => {
   align-items: center;
   gap: 8px;
   padding: 8px 12px;
-  background: #f8f9fa;
+  background: rgb(var(--v-theme-schedule-header-bg));
   border: 1px solid transparent;
   border-radius: 6px;
   cursor: pointer;
@@ -1729,14 +1755,14 @@ const getMemberName = (memberSeq) => {
 }
 
 .filter-option-simple:hover {
-  background: #e3f2fd;
+  background: rgba(33, 150, 243, 0.1);
   border-color: #2196f3;
   transform: translateY(-1px);
   box-shadow: 0 2px 6px rgba(33, 150, 243, 0.15);
 }
 
 .filter-option-simple.selected {
-  background: #e3f2fd;
+  background: rgba(33, 150, 243, 0.15);
   border-color: #1976d2;
   box-shadow: 0 2px 6px rgba(25, 118, 210, 0.2);
 }
@@ -1770,7 +1796,7 @@ const getMemberName = (memberSeq) => {
 .option-label-simple {
   font-size: 12px;
   font-weight: 500;
-  color: #172b4d;
+  color: rgb(var(--v-theme-schedule-text));
   white-space: nowrap;
 }
 
@@ -1780,8 +1806,8 @@ const getMemberName = (memberSeq) => {
   justify-content: space-between;
   align-items: center;
   padding: 16px 24px;
-  background: #f8f9fa;
-  border-top: 1px solid #e1e5e9;
+  background: rgb(var(--v-theme-schedule-header-bg));
+  border-top: 1px solid rgb(var(--v-theme-schedule-border));
   gap: 12px;
 }
 
@@ -1793,8 +1819,8 @@ const getMemberName = (memberSeq) => {
 }
 
 .clear-filters-btn {
-  color: #6b778c !important;
-  border-color: #e1e5e9 !important;
+  color: rgb(var(--v-theme-schedule-text-secondary)) !important;
+  border-color: rgb(var(--v-theme-schedule-border)) !important;
 }
 
 .apply-filters-btn {

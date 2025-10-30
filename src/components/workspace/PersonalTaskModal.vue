@@ -1,30 +1,36 @@
 <template>
-  <v-dialog v-model="isOpen" max-width="600px" persistent>
-    <v-card>
-      <v-card-title class="d-flex align-center">
-        <v-icon left color="primary">{{ isEditMode ? 'mdi-pencil' : 'mdi-plus-circle' }}</v-icon>
-        {{ isEditMode ? '일정 수정' : '새 일정 추가' }}
-      </v-card-title>
+  <v-dialog v-model="isOpen" max-width="600px" persistent class="no-scroll-dialog">
+    <v-card class="personal-task-modal">
+      <!-- 모달 헤더 -->
+      <div class="modal-header">
+        <div class="modal-header-content">
+          <div class="modal-icon">
+            <v-icon>{{ isEditMode ? 'mdi-pencil' : 'mdi-plus-circle' }}</v-icon>
+          </div>
+          <h3 class="modal-title">{{ isEditMode ? '일정 수정' : '새 일정 추가' }}</h3>
+        </div>
+      </div>
       
-      <v-card-text>
+      <v-card-text class="modal-content">
         <v-form ref="formRef" v-model="isFormValid">
           <!-- 일정 제목 -->
-          <div class="mb-4">
+          <div class="mb-3">
+            <label class="text-subtitle-1 font-weight-medium mb-2">제목</label>
             <v-text-field
               v-model="taskData.taskTitle"
-              label="제목"
               placeholder="예: 회의 준비"
               :rules="titleRules"
               variant="outlined"
+              density="comfortable"
               required
             ></v-text-field>
           </div>
 
           <!-- 일정 내용 -->
-          <div class="mb-4">
+          <div class="mb-3">
+            <label class="text-subtitle-1 font-weight-medium mb-2">내용</label>
             <v-textarea
               v-model="taskData.taskContent"
-              label="내용"
               placeholder="일정에 대한 자세한 설명을 입력하세요..."
               :rules="contentsRules"
               variant="outlined"
@@ -34,38 +40,43 @@
           </div>
 
           <!-- 일정 상태 -->
-          <div class="mb-4">
+          <div class="mb-3">
+            <label class="text-subtitle-1 font-weight-medium mb-2">상태</label>
             <v-select
               v-model="taskData.taskStatus"
-              label="상태"
               :items="taskStatusOptions"
               item-title="title"
               item-value="value"
               variant="outlined"
+              density="comfortable"
               required
             ></v-select>
           </div>
 
           <!-- 날짜 필드들 -->
-          <div class="mb-4">
+          <div class="mb-2">
             <v-row>
               <v-col cols="6">
+                <label class="text-subtitle-1 font-weight-medium mb-2">시작일</label>
                 <v-text-field
                   v-model="taskData.startDate"
-                  label="시작일"
                   type="date"
                   :rules="dateRules"
                   variant="outlined"
+                  density="comfortable"
+                  hide-details
                   required
                 ></v-text-field>
               </v-col>
               <v-col cols="6">
+                <label class="text-subtitle-1 font-weight-medium mb-2">종료일</label>
                 <v-text-field
                   v-model="taskData.endDate"
-                  label="종료일"
                   type="date"
                   :rules="dateRules"
                   variant="outlined"
+                  density="comfortable"
+                  hide-details
                   required
                 ></v-text-field>
               </v-col>
@@ -74,7 +85,8 @@
         </v-form>
       </v-card-text>
 
-      <v-card-actions class="px-6 pb-4">
+      <v-card-actions class="modal-actions">
+        <v-spacer></v-spacer>
         <v-btn
           variant="outlined"
           @click="closeModal"
@@ -82,7 +94,6 @@
         >
           취소
         </v-btn>
-        <v-spacer></v-spacer>
         <v-btn
           color="primary"
           @click="saveTask"
@@ -261,31 +272,190 @@ watch([isOpen, () => props.editTaskData], ([newValue]) => {
 </script>
 
 <style scoped>
-.v-card-title {
+.no-scroll-dialog :deep(.v-overlay__content) {
+  max-height: 90vh;
+  overflow-y: auto;
+}
+
+.personal-task-modal {
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+/* 모달 헤더 */
+.modal-header {
+  padding: 20px 24px;
+  background: linear-gradient(135deg, #1976d2, rgba(25, 118, 210, 0.8));
+  color: white;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+.modal-header-content {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.modal-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.modal-icon .v-icon {
+  color: white;
   font-size: 20px;
+}
+
+.modal-title {
+  margin: 0;
+  font-size: 18px;
   font-weight: 600;
-  color: #333;
-  padding: 24px 24px 10px 24px;
+  color: white;
+  letter-spacing: -0.3px;
 }
 
-.v-card-text {
+/* 모달 본문 */
+.modal-content {
   padding: 24px;
+  background: rgb(var(--v-theme-schedule-card-bg));
 }
 
-.v-card-actions {
-  padding: 0 24px 24px 24px;
+.modal-content label.text-subtitle-1 {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  color: rgb(var(--v-theme-schedule-text));
+  margin-bottom: 8px;
+  text-transform: none;
+  letter-spacing: 0;
 }
 
-.v-select :deep(.v-field__input) {
-  padding-top: 16px;
+/* 폼 필드 스타일 */
+.modal-content :deep(.v-field) {
+  border-radius: 4px;
+  background: rgb(var(--v-theme-schedule-card-bg));
+  border: 1px solid rgb(var(--v-theme-schedule-border));
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+  transition: all 0.15s ease;
 }
 
-.v-text-field :deep(.v-field__input) {
-  padding-top: 16px;
+.modal-content :deep(.v-field:hover) {
+  border-color: rgb(var(--v-theme-schedule-border));
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
 }
 
-.v-textarea :deep(.v-field__input) {
-  padding-top: 16px;
+.modal-content :deep(.v-field--focused) {
+  border-color: #1976d2 !important;
+  box-shadow: 0 0 0 2px rgba(25, 118, 210, 0.1) !important;
+  background: rgb(var(--v-theme-schedule-card-bg));
+}
+
+.modal-content :deep(.v-field__outline) {
+  display: none;
+}
+
+.modal-content :deep(.v-field__input) {
+  padding: 12px 14px;
+  font-size: 14px;
+  color: rgb(var(--v-theme-schedule-text));
+  min-height: auto;
+}
+
+.modal-content :deep(.v-field__input::placeholder) {
+  color: rgb(var(--v-theme-schedule-placeholder));
+  opacity: 1;
+}
+
+.modal-content :deep(textarea.v-field__input) {
+  padding: 12px 14px;
+  line-height: 1.6;
+}
+
+/* Select 특별 스타일 */
+.modal-content :deep(.v-select .v-field__input) {
+  padding-top: 12px;
+  padding-bottom: 12px;
+}
+
+.modal-content :deep(.v-select__selection-text) {
+  font-size: 14px;
+  color: rgb(var(--v-theme-schedule-text));
+}
+
+/* Date input 스타일 */
+.modal-content :deep(input[type="date"]) {
+  font-size: 14px;
+  color: rgb(var(--v-theme-schedule-text));
+}
+
+/* 모달 액션 (버튼 영역) */
+.modal-actions {
+  padding: 16px 24px;
+  background: rgb(var(--v-theme-schedule-header-bg));
+  border-top: 1px solid rgb(var(--v-theme-schedule-border));
+  gap: 8px;
+}
+
+.modal-actions .v-btn {
+  border-radius: 4px;
+  text-transform: none;
+  font-weight: 600;
+  padding: 0 24px;
+  height: 40px;
+  transition: all 0.15s ease;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.modal-actions .v-btn :deep(.v-btn__content) {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.modal-actions .v-btn[variant="outlined"] {
+  border: 1px solid rgb(var(--v-theme-schedule-border));
+  color: rgb(var(--v-theme-schedule-text));
+  background: rgb(var(--v-theme-schedule-card-bg));
+}
+
+.modal-actions .v-btn[variant="outlined"]:hover {
+  border-color: rgb(var(--v-theme-schedule-border));
+  background: rgb(var(--v-theme-schedule-hover-bg));
+}
+
+.modal-actions .v-btn[color="primary"] {
+  background: #1976d2;
+  color: white;
+  box-shadow: 0 1px 2px rgba(25, 118, 210, 0.2);
+}
+
+.modal-actions .v-btn[color="primary"]:hover {
+  background: #1976d2;
+  filter: brightness(0.9);
+  box-shadow: 0 2px 4px rgba(25, 118, 210, 0.3);
+}
+
+.modal-actions .v-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Row 간격 조정 */
+.v-row {
+  margin-top: 0;
+  margin-bottom: 0;
+}
+
+.v-col {
+  padding-top: 0;
+  padding-bottom: 0;
 }
 </style>
 

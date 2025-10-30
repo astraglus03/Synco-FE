@@ -221,77 +221,15 @@
   />
 
   <!-- 일정 상세보기 모달 -->
-  <v-dialog v-model="showTaskDetailModal" max-width="600px">
-    <v-card v-if="selectedTask">
-      <v-card-title class="d-flex align-center">
-        <v-icon left color="primary">mdi-information</v-icon>
-        <span>일정 상세</span>
-        <v-spacer></v-spacer>
-        <v-btn icon variant="text" @click="closeTaskDetailModal">
-          <v-icon>mdi-close</v-icon>
-        </v-btn>
-      </v-card-title>
-
-      <v-divider></v-divider>
-
-      <v-card-text class="pt-4">
-        <div v-if="loadingTaskDetail" class="text-center py-8">
-          <v-progress-circular indeterminate color="primary"></v-progress-circular>
-          <p class="mt-4">일정을 불러오는 중...</p>
-        </div>
-        <div v-else class="task-detail">
-          <div class="detail-item">
-            <div class="detail-label">제목</div>
-            <div class="detail-value">{{ selectedTask.taskTitle }}</div>
-          </div>
-
-          <div class="detail-item">
-            <div class="detail-label">내용</div>
-            <div class="detail-value">{{ selectedTask.taskContent || '-' }}</div>
-          </div>
-
-          <div class="detail-item">
-            <div class="detail-label">상태</div>
-            <v-chip 
-              :color="getStatusColor(selectedTask.taskStatus)" 
-              size="small"
-            >
-              {{ getStatusText(selectedTask.taskStatus) }}
-            </v-chip>
-          </div>
-
-          <div class="detail-item">
-            <div class="detail-label">시작일</div>
-            <div class="detail-value">{{ selectedTask.startDate }}</div>
-          </div>
-
-          <div class="detail-item">
-            <div class="detail-label">종료일</div>
-            <div class="detail-value">{{ selectedTask.endDate }}</div>
-          </div>
-        </div>
-      </v-card-text>
-
-      <v-divider></v-divider>
-
-      <v-card-actions class="px-4 py-3">
-        <v-btn color="error" @click="confirmDeleteTask">
-          <v-icon left>mdi-delete</v-icon>
-          삭제
-        </v-btn>
-        <v-spacer></v-spacer>
-        <v-btn variant="text" @click="closeTaskDetailModal">닫기</v-btn>
-        <v-btn color="primary" @click="editTaskFromDetail">
-          <v-icon left>mdi-pencil</v-icon>
-          수정
-        </v-btn>
-      </v-card-actions>
-    </v-card>
-  </v-dialog>
+  <TaskDetailModal
+    v-model="showTaskDetailModal"
+    :taskData="selectedTask"
+    :isPersonal="true"
+  />
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useWorkspaceStore } from '@/store/workspaceStore'
 import { 
   getPersonalTasks, 
@@ -303,6 +241,7 @@ import {
 } from '@/api/schedule/scheduleApi'
 import PersonalCalendar from './PersonalCalendar.vue'
 import PersonalTaskModal from './PersonalTaskModal.vue'
+import TaskDetailModal from './TaskDetailModal.vue'
 
 const workspaceStore = useWorkspaceStore()
 
@@ -510,19 +449,6 @@ const handleTaskClick = async (task) => {
   }
 }
 
-// 일정 상세 모달에서 수정 버튼
-const editTaskFromDetail = () => {
-  showTaskDetailModal.value = false
-  isEditMode.value = true
-  showTaskModal.value = true
-}
-
-// 일정 상세 모달 닫기
-const closeTaskDetailModal = () => {
-  showTaskDetailModal.value = false
-  selectedTask.value = null
-}
-
 // 일정 생성 완료 후
 const handleTaskCreated = () => {
   loadPersonalTasks()
@@ -533,43 +459,12 @@ const handleTaskUpdated = () => {
   loadPersonalTasks()
 }
 
-// 상세 모달에서 삭제 확인
-const confirmDeleteTask = async () => {
-  if (!selectedTask.value) return
-  
-  if (confirm(`"${selectedTask.value.taskTitle}" 일정을 삭제하시겠습니까?`)) {
-    try {
-      await deletePersonalTask(selectedTask.value.taskSeq)
-      alert('일정이 삭제되었습니다.')
-      showTaskDetailModal.value = false
-      selectedTask.value = null
-      await loadPersonalTasks()
-    } catch (error) {
-      console.error('일정 삭제 실패:', error)
-      alert('일정 삭제에 실패했습니다.')
-    }
+// 상세 모달이 닫힐 때 데이터 새로고침
+watch(showTaskDetailModal, async (newVal, oldVal) => {
+  if (oldVal === true && newVal === false) {
+    await loadPersonalTasks()
   }
-}
-
-// 상태 텍스트 변환
-const getStatusText = (status) => {
-  const statusMap = {
-    'TODO': '할 일',
-    'IN_PROGRESS': '진행중',
-    'COMPLETED': '완료'
-  }
-  return statusMap[status] || status
-}
-
-// 상태 색상
-const getStatusColor = (status) => {
-  const colorMap = {
-    'TODO': 'orange',
-    'IN_PROGRESS': 'blue',
-    'COMPLETED': 'green'
-  }
-  return colorMap[status] || 'grey'
-}
+})
 
 onMounted(async () => {
   await loadPersonalTasks()
@@ -579,7 +474,7 @@ onMounted(async () => {
 <style scoped>
 .personal-kanban-board {
   padding: 24px;
-  background-color: white;
+  background-color: rgb(var(--v-theme-background));
   min-height: 100vh;
 }
 
@@ -619,7 +514,8 @@ onMounted(async () => {
 .kanban-column {
   flex: 1;
   min-width: 300px;
-  background: white;
+  background: rgb(var(--v-theme-schedule-card-bg));
+  border: 1px solid rgb(var(--v-theme-schedule-border));
   border-radius: 8px;
   display: flex;
   flex-direction: column;
@@ -636,17 +532,17 @@ onMounted(async () => {
 
 /* 할 일 컬럼 전체 색상 */
 .kanban-column:first-child {
-  background: #e3f2fd;
+  background: rgba(33, 150, 243, 0.08);
 }
 
 /* 진행중 컬럼 전체 색상 */
 .kanban-column:nth-child(2) {
-  background: #fff3e0;
+  background: rgba(255, 152, 0, 0.08);
 }
 
 /* 완료 컬럼 전체 색상 */
 .kanban-column:last-child {
-  background: #e8f5e8;
+  background: rgba(76, 175, 80, 0.08);
 }
 
 .column-header {
@@ -655,21 +551,21 @@ onMounted(async () => {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  color: #333;
+  color: rgb(var(--v-theme-schedule-text));
   font-weight: 600;
   font-size: 16px;
 }
 
 .todo-header {
-  background: #e3f2fd;
+  background: rgba(33, 150, 243, 0.15);
 }
 
 .progress-header {
-  background: #fff3e0;
+  background: rgba(255, 152, 0, 0.15);
 }
 
 .completed-header {
-  background: #e8f5e8;
+  background: rgba(76, 175, 80, 0.15);
 }
 
 .column-title {
@@ -715,13 +611,13 @@ onMounted(async () => {
 
 /* 태스크 카드 스타일 */
 .task-card {
-  background: white;
+  background: rgb(var(--v-theme-schedule-card-bg));
   border-radius: 8px;
   padding: 16px;
   box-shadow: 0 4px 8px rgba(0, 0, 0, 0.12), 0 2px 4px rgba(0, 0, 0, 0.08);
   cursor: pointer;
   transition: all 0.3s ease;
-  border-left: 4px solid #e0e0e0;
+  border-left: 4px solid rgb(var(--v-theme-schedule-border));
   position: relative;
   transform: translateZ(0);
   margin-bottom: 12px;
@@ -776,7 +672,7 @@ onMounted(async () => {
 .task-title {
   font-size: 14px;
   font-weight: 600;
-  color: #333;
+  color: rgb(var(--v-theme-schedule-text));
   line-height: 1.4;
   flex: 1;
   margin-right: 8px;
@@ -784,13 +680,13 @@ onMounted(async () => {
 
 .task-date {
   font-size: 12px;
-  color: #666;
+  color: rgb(var(--v-theme-schedule-text-secondary));
   margin-bottom: 6px;
 }
 
 .task-description {
   font-size: 12px;
-  color: #888;
+  color: rgb(var(--v-theme-schedule-text-tertiary));
   line-height: 1.4;
 }
 
@@ -816,43 +712,16 @@ onMounted(async () => {
 }
 
 .column-content::-webkit-scrollbar-track {
-  background: #f1f1f1;
+  background: rgb(var(--v-theme-schedule-hover-bg));
   border-radius: 3px;
 }
 
 .column-content::-webkit-scrollbar-thumb {
-  background: #c1c1c1;
+  background: rgba(var(--v-theme-schedule-text-secondary), 0.4);
   border-radius: 3px;
 }
 
 .column-content::-webkit-scrollbar-thumb:hover {
-  background: #a8a8a8;
-}
-
-/* 일정 상세 모달 스타일 */
-.task-detail {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-
-.detail-item {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.detail-label {
-  font-size: 12px;
-  font-weight: 600;
-  color: #666;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-}
-
-.detail-value {
-  font-size: 14px;
-  color: #333;
-  word-break: break-word;
+  background: rgba(var(--v-theme-schedule-text-secondary), 0.6);
 }
 </style>

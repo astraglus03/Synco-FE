@@ -5,8 +5,8 @@
       <h1>개인 일정관리</h1>
       <div class="header-actions">
         <!-- 검색 바 -->
-        <div class="search-bar">
-          <v-icon size="20" color="grey">mdi-magnify</v-icon>
+        <div class="search-bar-wrapper">
+          <v-icon class="search-icon">mdi-magnify</v-icon>
           <input placeholder="업무 검색..." class="search-input" />
         </div>
         <div class="header-icons"></div>
@@ -591,6 +591,8 @@ const onDragLeave = (event) => {
 
 // 보드 생성 모달 열기
 const openBoardModal = () => {
+  isEditMode.value = false
+  editBoardData.value = null
   showBoardModal.value = true
 }
 
@@ -720,7 +722,7 @@ watch(
 <style scoped>
 .personal-schedule {
   padding: 24px;
-  background-color: white;
+  background-color: rgb(var(--v-theme-background));
   min-height: 100vh;
 }
 
@@ -736,6 +738,7 @@ watch(
   font-size: 28px;
   font-weight: 600;
   margin: 0;
+  color: rgb(var(--v-theme-schedule-text));
 }
 
 .header-actions {
@@ -749,24 +752,43 @@ watch(
   gap: 12px;
 }
 
-/* 검색 바 (헤더 내부) */
-.header-actions .search-bar {
-  display: flex;
-  align-items: center;
-  background: white;
-  border-radius: 8px;
-  padding: 8px 12px;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+/* 검색 바 (헤더 내부) - GlobalSearch 스타일 */
+.header-actions .search-bar-wrapper {
+  position: relative;
   max-width: 300px;
   margin-right: 16px;
 }
 
-.search-input {
-  border: none;
-  outline: none;
-  margin-left: 8px;
-  flex: 1;
+.header-actions .search-icon {
+  position: absolute;
+  left: 16px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: rgb(var(--v-theme-schedule-placeholder));
+  z-index: 2;
+}
+
+.header-actions .search-input {
+  width: 100%;
+  height: 40px;
+  padding: 8px 16px 8px 48px;
+  border: 1px solid rgb(var(--v-theme-schedule-border));
+  border-radius: 20px;
+  background: rgb(var(--v-theme-schedule-card-bg));
+  color: rgb(var(--v-theme-schedule-text));
   font-size: 14px;
+  outline: none;
+  transition: all 0.3s ease;
+}
+
+.header-actions .search-input:focus {
+  border-color: #2196f3;
+  background: rgb(var(--v-theme-schedule-card-bg));
+  box-shadow: 0 0 0 2px rgba(33, 150, 243, 0.1);
+}
+
+.header-actions .search-input::placeholder {
+  color: rgb(var(--v-theme-schedule-placeholder));
 }
 
 /* 섹션 헤더 */
@@ -781,6 +803,7 @@ watch(
   font-size: 20px;
   font-weight: 600;
   margin: 0;
+  color: rgb(var(--v-theme-schedule-text));
 }
 
 /* 담당 업무 섹션 */
@@ -801,7 +824,7 @@ watch(
 .empty-message {
   text-align: center;
   padding: 20px;
-  color: #666;
+  color: rgba(var(--v-theme-schedule-text-secondary), 0.8);
 }
 
 .empty-message p {
@@ -825,8 +848,8 @@ watch(
 }
 
 .scroll-btn {
-  background: white;
-  border: 1px solid #e0e0e0;
+  background: rgb(var(--v-theme-schedule-card-bg));
+  border: 1px solid rgb(var(--v-theme-schedule-border));
   border-radius: 50%;
   width: 40px;
   height: 40px;
@@ -840,7 +863,7 @@ watch(
 }
 
 .scroll-btn:hover:not(:disabled) {
-  background: #f5f5f5;
+  background: rgb(var(--v-theme-schedule-hover-bg));
   transform: scale(1.05);
 }
 
@@ -850,11 +873,11 @@ watch(
 }
 
 .task-card {
-  background: white;
+  background: rgb(var(--v-theme-schedule-card-bg));
   border-radius: 8px;
   padding: 8px 16px 16px 16px; /* 상단 패딩만 소폭 축소 */
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
-  border: 1px solid #e0e0e0;
+  border: 1px solid rgb(var(--v-theme-schedule-border));
   cursor: move;
   transition: all 0.3s ease;
   min-width: 200px;
@@ -895,7 +918,7 @@ watch(
 .task-title {
   font-size: 14px;
   font-weight: 600;
-  color: #333;
+  color: rgb(var(--v-theme-schedule-text));
   flex: 1;
 }
 
@@ -911,7 +934,7 @@ watch(
 
 .task-description {
   font-size: 12px;
-  color: #666;
+  color: rgb(var(--v-theme-schedule-text-secondary));
   line-height: 1.3;
   white-space: nowrap;
   overflow: hidden;
@@ -924,7 +947,7 @@ watch(
   align-items: center;
   gap: 4px;
   font-size: 11px;
-  color: #888;
+  color: rgb(var(--v-theme-schedule-text-tertiary));
 }
 
 /* 칸반 보드 섹션 */
@@ -943,7 +966,7 @@ watch(
 .kanban-board {
   border-radius: 8px;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-  border: 1px solid #e0e0e0;
+  border: 1px solid rgb(var(--v-theme-schedule-border));
   overflow: hidden;
   min-width: 300px;
   flex-shrink: 0;
@@ -962,13 +985,20 @@ watch(
 
 .board-header {
   padding: 16px 20px;
-  color: #333;
+  color: rgb(var(--v-theme-schedule-text));
   display: flex;
   justify-content: space-between;
   align-items: center;
   font-weight: 600;
   font-size: 16px;
   border-radius: 8px 8px 0 0;
+}
+
+.board-title {
+  font-size: 18px;
+  font-weight: 600;
+  margin: 0;
+  color: rgb(var(--v-theme-schedule-text));
 }
 
 .board-actions {
@@ -999,11 +1029,6 @@ watch(
   opacity: 1;
 }
 
-.board-title {
-  font-size: 18px;
-  font-weight: 600;
-  margin: 0;
-}
 
 
 .board-content {
@@ -1020,10 +1045,10 @@ watch(
 }
 
 .kanban-board .task-card {
-  background: white;
+  background: rgb(var(--v-theme-schedule-card-bg));
   border-radius: 8px;
   padding: 12px 16px 16px 16px; /* 상단 패딩만 소폭 축소 */
-  border: 1px solid rgba(0, 0, 0, 0.1);
+  border: 1px solid rgb(var(--v-theme-schedule-border));
   cursor: move;
   transition: all 0.3s ease;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
@@ -1045,7 +1070,7 @@ watch(
 .kanban-board .task-title {
   font-size: 14px;
   font-weight: 600;
-  color: #333;
+  color: rgb(var(--v-theme-schedule-text));
   flex: 1;
   margin-right: 8px;
 }
@@ -1058,7 +1083,7 @@ watch(
 
 .kanban-board .task-description {
   font-size: 12px;
-  color: #666;
+  color: rgb(var(--v-theme-schedule-text-secondary));
   line-height: 1.4;
   white-space: nowrap;
   overflow: hidden;
@@ -1071,7 +1096,7 @@ watch(
   align-items: center;
   gap: 4px;
   font-size: 11px;
-  color: #888;
+  color: rgb(var(--v-theme-schedule-text-tertiary));
 }
 
 /* 로딩 및 에러 상태 */
@@ -1082,7 +1107,7 @@ watch(
   justify-content: center;
   padding: 60px 20px;
   text-align: center;
-  color: #666;
+  color: rgb(var(--v-theme-schedule-text-secondary));
 }
 
 .loading-state p, .error-state p, .empty-state p, .coming-soon p {
@@ -1091,13 +1116,14 @@ watch(
 }
 
 .error-state {
-  color: #d32f2f;
+  color: rgb(var(--v-theme-error));
 }
 
 .empty-state h3, .coming-soon h3 {
   margin-top: 16px;
   font-size: 18px;
   font-weight: 600;
+  color: rgb(var(--v-theme-schedule-text));
 }
 
 /* 스크롤바 스타일 */
@@ -1106,17 +1132,17 @@ watch(
 }
 
 .kanban-boards::-webkit-scrollbar-track {
-  background: #f1f1f1;
+  background: rgb(var(--v-theme-schedule-hover-bg));
   border-radius: 4px;
 }
 
 .kanban-boards::-webkit-scrollbar-thumb {
-  background: #c1c1c1;
+  background: rgba(var(--v-theme-schedule-text-secondary), 0.4);
   border-radius: 4px;
 }
 
 .kanban-boards::-webkit-scrollbar-thumb:hover {
-  background: #a8a8a8;
+  background: rgba(var(--v-theme-schedule-text-secondary), 0.6);
 }
 
 .board-content::-webkit-scrollbar {
@@ -1124,17 +1150,17 @@ watch(
 }
 
 .board-content::-webkit-scrollbar-track {
-  background: #f1f1f1;
+  background: rgb(var(--v-theme-schedule-hover-bg));
   border-radius: 3px;
 }
 
 .board-content::-webkit-scrollbar-thumb {
-  background: #c1c1c1;
+  background: rgba(var(--v-theme-schedule-text-secondary), 0.4);
   border-radius: 3px;
 }
 
 .board-content::-webkit-scrollbar-thumb:hover {
-  background: #a8a8a8;
+  background: rgba(var(--v-theme-schedule-text-secondary), 0.6);
 }
 
 /* 반응형 디자인 */
@@ -1156,7 +1182,7 @@ watch(
     width: 100%;
   }
   
-  .header-actions .search-bar {
+  .header-actions .search-bar-wrapper {
     max-width: 100%;
     margin-right: 0;
   }

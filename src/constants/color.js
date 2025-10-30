@@ -10,6 +10,15 @@ export const colors = {
     success: "#22c55e", // 성공 메시지 색상
     error: "#dc2626", // 오류 메시지 색상
     warning: "#f59e0b", // 경고 메시지 색상
+    // Schedule 다크모드 전용
+    scheduleCardBg: "#1a1a2e",
+    scheduleBorder: "#2a2a3e",
+    scheduleText: "#f8fafc",
+    scheduleTextSecondary: "#cbd5e1",
+    scheduleTextTertiary: "#94a3b8",
+    schedulePlaceholder: "#64748b",
+    scheduleHoverBg: "#252538",
+    scheduleHeaderBg: "#1e1e32",
   },
   // 화이트모드 색상 (흰색 + 블루-그레이)
   light: {
@@ -22,5 +31,14 @@ export const colors = {
     success: "#10b981", // 연한 에메랄드 그린
     error: "#ef4444", // 연한 빨간색
     warning: "#f59e0b", // 연한 앰버 옐로우
+    // Schedule 라이트모드 (기존 하드코딩 값 그대로)
+    scheduleCardBg: "#ffffff",
+    scheduleBorder: "#e0e0e0",
+    scheduleText: "#333333",
+    scheduleTextSecondary: "#666666",
+    scheduleTextTertiary: "#888888",
+    schedulePlaceholder: "#999999",
+    scheduleHoverBg: "#f5f5f5",
+    scheduleHeaderBg: "#f8f9fa",
   }
 };

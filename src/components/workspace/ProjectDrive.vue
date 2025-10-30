@@ -804,19 +804,25 @@ const handleFileUpload = (event) => {
 }
 
 // 파일 업로드 처리
+const isUploading = ref(false)
 const uploadFilesToDrive = async () => {
   if (uploadFiles.value.length === 0) return
   
-  const targetFolderId = uploadFolderLocation.value
-  const result = await driveStore.uploadFiles(uploadFiles.value, targetFolderId)
-  
-  if (result.success) {
-    uploadFiles.value = []
-    uploadFolderLocation.value = null
-    showUploadModal.value = false
-    showUploadFolderSelector.value = false
-  } else {
-    showError('파일 업로드 실패', result.error || '파일 업로드 중 오류가 발생했습니다.')
+  isUploading.value = true
+  try {
+    const targetFolderId = uploadFolderLocation.value
+    const result = await driveStore.uploadFiles(uploadFiles.value, targetFolderId)
+    
+    if (result.success) {
+      uploadFiles.value = []
+      uploadFolderLocation.value = null
+      showUploadModal.value = false
+      showUploadFolderSelector.value = false
+    } else {
+      showError('파일 업로드 실패', result.error || '파일 업로드 중 오류가 발생했습니다.')
+    }
+  } finally {
+    isUploading.value = false
   }
 }
 
@@ -1798,6 +1804,7 @@ watch(() => workspaceStore.currentWorkspace, () => {
             color="primary" 
             @click="uploadFilesToDrive"
             :disabled="uploadFiles.length === 0"
+            :loading="isUploading"
           >
             업로드
           </v-btn>

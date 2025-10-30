@@ -434,7 +434,7 @@ onBeforeUnmount(() => {
   height: calc(100vh - 200px);
   display: flex;
   flex-direction: column;
-  background: white;
+  background: rgb(var(--v-theme-schedule-card-bg));
   border-radius: 8px;
   overflow: hidden;
 }
@@ -444,12 +444,12 @@ onBeforeUnmount(() => {
   justify-content: space-between;
   align-items: center;
   padding: 16px 24px;
-  border-bottom: 1px solid #e0e0e0;
+  border-bottom: 1px solid rgb(var(--v-theme-schedule-border));
 }
 
 .nav-label {
   font-size: 12px;
-  color: #666;
+  color: rgb(var(--v-theme-schedule-text-secondary));
   margin-left: 16px;
 }
 
@@ -460,8 +460,9 @@ onBeforeUnmount(() => {
 
 .unit-button {
   padding: 8px 16px;
-  border: 1px solid #e0e0e0;
-  background: white;
+  border: 1px solid rgb(var(--v-theme-schedule-border));
+  background: rgb(var(--v-theme-schedule-card-bg));
+  color: rgb(var(--v-theme-schedule-text));
   cursor: pointer;
   font-size: 14px;
   transition: all 0.2s;
@@ -491,6 +492,7 @@ onBeforeUnmount(() => {
   font-weight: 500;
   min-width: 150px;
   text-align: center;
+  color: rgb(var(--v-theme-schedule-text));
 }
 
 .timeline-content {
@@ -502,7 +504,7 @@ onBeforeUnmount(() => {
 /* 왼쪽: 업무 목록 */
 .task-list {
   width: 250px;
-  border-right: 1px solid #e0e0e0;
+  border-right: 1px solid rgb(var(--v-theme-schedule-border));
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -510,14 +512,15 @@ onBeforeUnmount(() => {
 
 .task-list-header {
   padding: 8px;
-  border-bottom: 2px solid #e0e0e0; /* 그리드 헤더와 두께 맞춤 */
-  background: #f5f5f5;
+  border-bottom: 2px solid rgb(var(--v-theme-schedule-border)); /* 그리드 헤더와 두께 맞춤 */
+  background: rgb(var(--v-theme-schedule-header-bg));
 }
 
 .task-list-header h3 {
   margin: 0;
   font-size: 16px;
   font-weight: 600;
+  color: rgb(var(--v-theme-schedule-text));
 }
 
 .task-items {
@@ -540,15 +543,15 @@ onBeforeUnmount(() => {
 
 /* 업무 항목 구분선 - 타임라인 행의 구분선과 색상/두께를 맞춤 */
 .task-items .task-item:not(:last-child) {
-  border-bottom: 1px solid #f0f0f0;
+  border-bottom: 1px solid rgba(var(--v-theme-schedule-border), 0.5);
 }
 
 .task-item:hover {
-  background: #f5f5f5;
+  background: rgb(var(--v-theme-schedule-hover-bg));
 }
 
 .task-item.active {
-  background: #e3f2fd;
+  background: rgba(33, 150, 243, 0.1);
   border-color: #2196f3;
 }
 
@@ -556,11 +559,12 @@ onBeforeUnmount(() => {
   font-size: 13px;
   font-weight: 500;
   margin-bottom: 0;            /* 한 줄 정렬 */
+  color: rgb(var(--v-theme-schedule-text));
 }
 
 .task-assignee {
   font-size: 12px;
-  color: #666;
+  color: rgb(var(--v-theme-schedule-text-secondary));
   margin-left: 8px;            /* 제목과 간격 */
 }
 
@@ -574,8 +578,8 @@ onBeforeUnmount(() => {
 
 .grid-header {
   display: flex;
-  border-bottom: 2px solid #e0e0e0;
-  background: #fafafa;
+  border-bottom: 2px solid rgb(var(--v-theme-schedule-border));
+  background: rgb(var(--v-theme-schedule-header-bg));
   position: sticky;
   top: 0;
   z-index: 10;
@@ -592,6 +596,7 @@ onBeforeUnmount(() => {
   font-size: 12px;
   font-weight: 500;
   margin-bottom: 4px;
+  color: rgb(var(--v-theme-schedule-text));
 }
 
 .date-marker {
@@ -606,7 +611,7 @@ onBeforeUnmount(() => {
 
 .grid-row {
   display: flex;
-  border-bottom: 1px solid #f0f0f0;
+  border-bottom: 1px solid rgba(var(--v-theme-schedule-border), 0.5);
   position: relative;
   min-height: 40px; /* 행 높이 축소 */
 }
@@ -615,7 +620,7 @@ onBeforeUnmount(() => {
   flex: 1;
   min-width: 120px;
   min-height: 40px; /* 셀 높이 축소 */
-  border-right: 1px solid #f0f0f0;
+  border-right: 1px solid rgba(var(--v-theme-schedule-border), 0.5);
   position: relative;
   padding: 4px;
 }
@@ -644,7 +649,7 @@ onBeforeUnmount(() => {
 .task-label {
   font-size: 12px;
   font-weight: 500;
-  color: #333;
+  color: rgb(var(--v-theme-schedule-text));
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -655,7 +660,8 @@ onBeforeUnmount(() => {
   font-size: 10px;
   padding: 2px 6px;
   border-radius: 10px;
-  background: rgba(255, 255, 255, 0.8);
+  background: rgba(var(--v-theme-schedule-card-bg), 0.9);
+  color: rgb(var(--v-theme-schedule-text));
   font-weight: 500;
   margin-left: 6px;
   flex-shrink: 0;
@@ -663,15 +669,30 @@ onBeforeUnmount(() => {
 
 /* 상태별 색상 */
 .status-todo {
-  background: #e3f2fd;
+  background: rgba(33, 150, 243, 0.15);
+  border: 1px solid rgba(33, 150, 243, 0.3);
+}
+
+.status-todo .status-badge {
+  color: #1976d2;
 }
 
 .status-progress {
-  background: #fff3e0;
+  background: rgba(255, 152, 0, 0.15);
+  border: 1px solid rgba(255, 152, 0, 0.3);
+}
+
+.status-progress .status-badge {
+  color: #f57c00;
 }
 
 .status-completed {
-  background: #e8f5e8;
+  background: rgba(76, 175, 80, 0.15);
+  border: 1px solid rgba(76, 175, 80, 0.3);
+}
+
+.status-completed .status-badge {
+  color: #388e3c;
 }
 
 /* 스크롤바 스타일 */
@@ -683,18 +704,18 @@ onBeforeUnmount(() => {
 
 .task-items::-webkit-scrollbar-track,
 .timeline-grid::-webkit-scrollbar-track {
-  background: #f1f1f1;
+  background: rgb(var(--v-theme-schedule-hover-bg));
 }
 
 .task-items::-webkit-scrollbar-thumb,
 .timeline-grid::-webkit-scrollbar-thumb {
-  background: #c1c1c1;
+  background: rgba(var(--v-theme-schedule-text-secondary), 0.4);
   border-radius: 3px;
 }
 
 .task-items::-webkit-scrollbar-thumb:hover,
 .timeline-grid::-webkit-scrollbar-thumb:hover {
-  background: #a8a8a8;
+  background: rgba(var(--v-theme-schedule-text-secondary), 0.6);
 }
 
 </style>
