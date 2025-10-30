@@ -1370,9 +1370,9 @@ const getStatusColor = (status) => {
 <style scoped>
 .workspace-sidebar {
   width: 260px;
-  background: rgba(0, 0, 0, 0.2);
+  background: rgb(var(--v-theme-surface));
   backdrop-filter: blur(10px);
-  border-right: 1px solid rgba(255, 255, 255, 0.1);
+  border-right: 1px solid rgba(var(--v-theme-on-surface), 0.08);
   padding: 24px 0 80px 0;
   margin-left: 72px;
   position: fixed;
@@ -1390,12 +1390,12 @@ const getStatusColor = (status) => {
 }
 
 .workspace-sidebar::-webkit-scrollbar-track {
-  background: #f1f1f1;
+  background: rgba(var(--v-theme-on-surface), 0.08);
   border-radius: 3px;
 }
 
 .workspace-sidebar::-webkit-scrollbar-thumb {
-  background: #c1c1c1;
+  background: rgba(var(--v-theme-on-surface), 0.25);
   border-radius: 3px;
 }
 
@@ -1421,8 +1421,8 @@ const getStatusColor = (status) => {
   gap: 12px;
   padding: 8px 16px;
   margin-bottom: 8px;
-  background: rgba(var(--v-theme-primary), 0.05);
-  border-bottom: 1px solid rgba(var(--v-theme-primary), 0.1);
+  background: rgba(var(--v-theme-on-surface), 0.02);
+  border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.06);
 }
 
 .workspace-sidebar.collapsed .project-info {
@@ -1485,8 +1485,7 @@ const getStatusColor = (status) => {
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.5px;
-  color: rgb(var(--v-theme-on-surface));
-  opacity: 0.6;
+  color: rgba(var(--v-theme-on-surface), 0.75);
   display: flex;
   align-items: center;
 }
@@ -1521,14 +1520,14 @@ const getStatusColor = (status) => {
 
 .channel-item:hover,
 .dm-item:hover {
-  background: rgba(var(--v-theme-primary), 0.1);
+  background: rgba(var(--v-theme-primary), 0.12);
   color: rgb(var(--v-theme-on-surface));
   opacity: 1;
 }
 
 .channel-item.active,
 .dm-item.active {
-  background: rgba(var(--v-theme-primary), 0.2);
+  background: rgba(var(--v-theme-primary), 0.18);
   color: rgb(var(--v-theme-on-surface));
   opacity: 1;
   border-right: 2px solid rgb(var(--v-theme-primary));
