@@ -9,7 +9,7 @@ import KakaoRedirect from '@/views/auth/KakaoRedirect.vue'
 import NaverRedirect from '@/views/auth/NaverRedirect.vue'
 import SocialMemberId from '@/views/auth/SocialMemberId.vue'
 import Chat from '@/components/workspace/Chat.vue'
-
+import MeetingView from '@/views/MeetingView.vue'
 
 const routes = [
   {
@@ -52,6 +52,13 @@ const routes = [
     name: 'DocumentEditor',
     component: () => import('@/components/workspace/SharedDocEditor.vue'),
     props: true,
+  },
+  {
+    path: '/meeting/:roomId',
+    name: 'MeetingView',
+    component: MeetingView,
+    props: true,
+    meta: { requiresAuth: true },
   },
   {
     path: "/oauth/google/redirect",
