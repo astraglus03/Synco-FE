@@ -127,7 +127,9 @@ export const useWorkspaceStore = defineStore('workspace', () => {
         name: ws.workSpaceName,
         type: 'project',
         profile: ws.thumbnailImageUrl,
-        icon: ws.iconText
+        icon: ws.iconText,
+        startDate: ws.startDate || ws.projectStartDate,
+        endDate: ws.endDate || ws.projectEndDate
       }))
       
       workspaces.value = personalWorkspace 

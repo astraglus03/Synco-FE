@@ -474,7 +474,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, watch, onBeforeUnmount } from 'vue'
 import { useProjectScheduleStore } from '../../store/projectScheduleStore.js'
 import { useWorkspaceStore } from '../../store/workspaceStore.js'
 import { useWorkspaceMemberStore } from '../../store/workspaceMemberStore.js'
@@ -597,7 +597,76 @@ onMounted(async () => {
   } catch (error) {
     console.error('데이터 로딩 실패:', error)
   }
+  // 알림에서 넘어온 Task 상세 열기 이벤트 리스너
+  window.addEventListener('open-task-detail', onOpenTaskDetailFromAlarm)
+
+  // 내비게이션 직후 세션 스토어를 통해 전달된 taskSeq/channelSeq 처리 (이벤트 미리스닝 대비)
+  try {
+    const pendingTaskSeq = sessionStorage.getItem('openTaskDetailTaskSeq')
+    if (pendingTaskSeq) {
+      sessionStorage.removeItem('openTaskDetailTaskSeq')
+      onOpenTaskDetailFromAlarm({ detail: { taskSeq: Number(pendingTaskSeq) } })
+    }
+    const pendingChannelSeq = sessionStorage.getItem('openTaskDetailChannelSeq')
+    if (pendingChannelSeq) {
+      sessionStorage.removeItem('openTaskDetailChannelSeq')
+      onOpenTaskDetailFromAlarm({ detail: { channelSeq: Number(pendingChannelSeq) } })
+    }
+  } catch {}
 })
+
+onBeforeUnmount(() => {
+  window.removeEventListener('open-task-detail', onOpenTaskDetailFromAlarm)
+})
+
+const onOpenTaskDetailFromAlarm = async (e) => {
+  try {
+    const detail = e?.detail || {}
+    console.log('[알림 연동] open-task-detail 수신:', detail)
+    const taskSeq = detail.taskSeq || detail.channelSeq
+    const channelSeq = detail.channelSeq
+    if (taskSeq) {
+      const response = await getTaskDetail(taskSeq)
+      const taskDetail = response?.data || response
+      if (taskDetail) {
+        selectedTaskData.value = taskDetail
+        isTaskDetailModalOpen.value = true
+        console.log('[알림 연동] 상세 모달 오픈 성공:', taskDetail?.taskSeq || taskSeq)
+      }
+      return
+    }
+    if (channelSeq) {
+      // 태스크 데이터 로딩 보장
+      let attempts = 0
+      const maxAttempts = 10
+      while (attempts < maxAttempts) {
+        attempts++
+        if (!projectScheduleStore.taskData || projectScheduleStore.taskData.length === 0) {
+          await refreshTasks()
+          await new Promise(r => setTimeout(r, 150))
+        } else {
+          break
+        }
+      }
+
+      const tasks = Array.isArray(projectScheduleStore.taskData) ? projectScheduleStore.taskData : []
+      if (tasks.length === 0) return
+      const sorted = [...tasks].sort((a, b) => new Date(b.endDate || b.createdAt || 0) - new Date(a.endDate || a.createdAt || 0))
+      const candidate = sorted[0]
+      if (candidate?.taskSeq) {
+        const res = await getTaskDetail(candidate.taskSeq)
+        const taskDetail = res?.data || res
+        if (taskDetail) {
+          selectedTaskData.value = taskDetail
+          isTaskDetailModalOpen.value = true
+          console.log('[알림 연동] 채널 기반 Fallback 오픈:', candidate.taskSeq)
+        }
+      }
+    }
+  } catch (err) {
+    console.error('[알림 연동] 태스크 상세 열기 실패:', err)
+  }
+}
 
 // 워크스페이스 멤버 목록 로드
 const loadWorkspaceMembers = async () => {

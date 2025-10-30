@@ -28,8 +28,8 @@ const refreshNotifications = async () => {
 // ----------------------
 // 워크스페이스 생성 API
 // ----------------------
-export const createWorkspace = async (workSpaceName, workSpaceThumbnailImage, memberList) => {
-  const reqDto = new TeamWorkSpaceCreateReqDto(workSpaceName, workSpaceThumbnailImage, memberList)
+export const createWorkspace = async (workSpaceName, workSpaceThumbnailImage, memberList, startDate, endDate) => {
+  const reqDto = new TeamWorkSpaceCreateReqDto(workSpaceName, workSpaceThumbnailImage, memberList, startDate, endDate)
   const formData = reqDto.toFormData()
   
   const res = await apiPostFormData('/workspace-service/workspace/create', formData)
@@ -93,8 +93,8 @@ export const getWorkspaceMembers = async (workSpaceSeq) => {
 // ----------------------
 // 워크스페이스 수정 API
 // ----------------------
-export const updateWorkspace = async (workSpaceSeq, workSpaceName, workSpaceThumbnailImage) => {
-  const reqDto = new TeamWorkSpaceEditReqDto(workSpaceSeq, workSpaceName, workSpaceThumbnailImage)
+export const updateWorkspace = async (workSpaceSeq, workSpaceName, workSpaceThumbnailImage, startDate, endDate) => {
+  const reqDto = new TeamWorkSpaceEditReqDto(workSpaceSeq, workSpaceName, workSpaceThumbnailImage, startDate, endDate)
   const formData = reqDto.toFormData()
   
   const res = await apiPatchFormData('/workspace-service/workspace/edit', formData)

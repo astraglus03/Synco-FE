@@ -108,6 +108,24 @@ class SSEConnection {
         this.lastMessageTime = Date.now()
       })
 
+      // 백엔드 일반 알림 이벤트 (event: alarm)
+      this.eventSource.addEventListener('alarm', (event) => {
+        console.log('[SSE] 🔔 alarm 이벤트 수신')
+        this.lastMessageTime = Date.now()
+        try {
+          const data = JSON.parse(event.data)
+          this.notifyCallbacks(data)
+        } catch (error) {
+          console.error('[SSE] ❌ alarm 파싱 실패:', error)
+        }
+      })
+
+      // 초기 연결 이벤트 (event: connect)
+      this.eventSource.addEventListener('connect', (event) => {
+        console.log('[SSE] ✅ connect 이벤트 수신')
+        this.lastMessageTime = Date.now()
+      })
+
       // 특정 알림 타입 이벤트 (예: FRIEND_REQUEST)
       this.eventSource.addEventListener('FRIEND_REQUEST', (event) => {
         console.log('[SSE] 👥 친구 요청 알림')
@@ -118,6 +136,18 @@ class SSEConnection {
           this.notifyCallbacks({ type: 'FRIEND_REQUEST', ...data })
         } catch (error) {
           console.error('[SSE] ❌ 친구 요청 파싱 실패:', error)
+        }
+      })
+
+      // 멤버 상태 변경 이벤트 (event: member-status)
+      this.eventSource.addEventListener('member-status', (event) => {
+        console.log('[SSE] 👤 member-status 이벤트 수신')
+        this.lastMessageTime = Date.now()
+        try {
+          const data = JSON.parse(event.data)
+          this.notifyCallbacks({ type: 'member-status', ...data })
+        } catch (error) {
+          console.error('[SSE] ❌ member-status 파싱 실패:', error)
         }
       })
 

@@ -19,6 +19,8 @@ const newWorkspaceName = ref('')
 const newWorkspaceProfile = ref('')
 const newWorkspaceProfileFile = ref(null)
 const profileInput = ref(null)
+const newWorkspaceStartDate = ref('') // yyyy-MM-dd
+const newWorkspaceEndDate = ref('')   // yyyy-MM-dd
 
 // 친구 관련 상태
 const friendSearchQuery = ref('')
@@ -164,6 +166,18 @@ const handleCreateWorkspace = async () => {
     alert('프로젝트 이름을 입력해주세요.')
     return
   }
+  if (!newWorkspaceStartDate.value) {
+    alert('프로젝트 시작일을 선택하세요.')
+    return
+  }
+  if (!newWorkspaceEndDate.value) {
+    alert('프로젝트 종료일을 선택하세요.')
+    return
+  }
+  if (new Date(newWorkspaceStartDate.value) > new Date(newWorkspaceEndDate.value)) {
+    alert('종료일은 시작일 이후여야 합니다.')
+    return
+  }
 
   try {
     // memberList 생성 (memberSeq 배열)
@@ -173,7 +187,9 @@ const handleCreateWorkspace = async () => {
     const createdWorkspace = await createWorkspace(
       newWorkspaceName.value,
       newWorkspaceProfileFile.value,
-      memberList
+      memberList,
+      `${newWorkspaceStartDate.value}T00:00:00`,
+      `${newWorkspaceEndDate.value}T23:59:59`
     )
     
     // 성공 메시지
@@ -200,6 +216,8 @@ const closeCreateWorkspaceDialog = () => {
   newWorkspaceName.value = ''
   newWorkspaceProfile.value = ''
   newWorkspaceProfileFile.value = null
+  newWorkspaceStartDate.value = ''
+  newWorkspaceEndDate.value = ''
   selectedFriends.value = []
   invitedMembers.value = []
   friendSearchQuery.value = ''
@@ -509,6 +527,37 @@ onMounted(() => {
                     <v-icon size="48" color="grey">mdi-account-plus</v-icon>
                     <p>초대할 멤버를 선택하세요</p>
                   </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          
+          <!-- 프로젝트 기간 -->
+          <div class="workspace-info-section">
+            <div class="workspace-basic-row" style="align-items: center;">
+              <div class="workspace-name-group">
+                <label class="input-label">프로젝트 기간</label>
+                <div style="display:flex; gap:12px;">
+                  <v-text-field
+                    v-model="newWorkspaceStartDate"
+                    type="date"
+                    label="시작일"
+                    variant="outlined"
+                    density="compact"
+                    hide-details
+                    :max="newWorkspaceEndDate || undefined"
+                    required
+                  />
+                  <v-text-field
+                    v-model="newWorkspaceEndDate"
+                    type="date"
+                    label="종료일"
+                    variant="outlined"
+                    density="compact"
+                    hide-details
+                    :min="newWorkspaceStartDate || undefined"
+                    required
+                  />
                 </div>
               </div>
             </div>

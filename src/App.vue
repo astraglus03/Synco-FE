@@ -1,11 +1,18 @@
 <script setup>
 import { onMounted, onUnmounted, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/store/authStore'
 import { useNotificationStore } from '@/store/notificationStore'
 
 // 스토어 인스턴스 생성
 const authStore = useAuthStore()
 const notificationStore = useNotificationStore()
+const router = useRouter()
+
+// 해상도 변화나 회전 시 알림 사이드바 강제 닫기 (모바일~태블릿 포함)
+const closeNotificationSidebar = () => {
+  notificationStore.notificationSidebarVisible = false
+}
 
 // 앱 초기화
 onMounted(async () => {
@@ -34,6 +41,8 @@ onMounted(async () => {
     // 알림 사이드바는 항상 닫혀있어야 함
     notificationStore.notificationSidebarVisible = false
   }
+  window.addEventListener('resize', closeNotificationSidebar)
+  window.addEventListener('orientationchange', closeNotificationSidebar)
 })
 
 // authStore의 memberSeq 감시 - 로그인/로그아웃 감지
@@ -71,6 +80,9 @@ watch(() => authStore.memberSeq, async (newMemberSeq, oldMemberSeq) => {
 // 컴포넌트 언마운트 시 SSE 연결 종료
 onUnmounted(() => {
   notificationStore.disconnectSSE()
+  // 전역 리스너 해제
+  window.removeEventListener('resize', closeNotificationSidebar)
+  window.removeEventListener('orientationchange', closeNotificationSidebar)
 })
 </script>
 

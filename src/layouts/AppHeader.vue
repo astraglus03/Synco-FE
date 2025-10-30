@@ -7,6 +7,7 @@ import { useWorkspaceMemberStore } from '@/store/workspaceMemberStore'
 import { useNotificationStore } from '@/store/notificationStore'
 import { Authority } from '@/models/workspace/WorkspaceModels'
 import { getWorkspaceMembers, updateWorkspace, delegateSuperAuthority, deleteWorkspace, inviteWorkspaceMembers, kickWorkspaceMember, getFriendList, searchMembers } from '@/api/workspace/workSpaceApi'
+import { acceptFriendRequest, rejectFriendRequest } from '@/api/friend/friend'
 import * as authApi from '@/api/member/auth'
 
 const props = defineProps({
@@ -38,6 +39,8 @@ const notificationSidebarVisible = computed({
 
 // 프로필 메뉴 상태
 const profileMenuOpen = ref(false)
+// 친구 요청 액션 로딩 상태 (알림별)
+const friendActionLoading = ref({})
 
 // 사용자 프로필 정보 (authStore에서 가져옴)
 const profileImageUrl = ref('')
@@ -425,10 +428,11 @@ const personalFilters = ref([
 
 // 프로젝트 스페이스용 필터 옵션
 const projectFilters = ref([
-  { key: 'all', label: '전체', icon: 'mdi-bell', alarmType: null },
+  { key: 'all', label: '모든 알림', icon: 'mdi-bell', alarmType: null }, // 모든 프로젝트 포함
+  { key: 'workspace', label: '프로젝트', icon: 'mdi-folder', alarmType: null }, // 현재 프로젝트 전체 알림
   { key: 'task', label: '프로젝트 업무', icon: 'mdi-clipboard-list', alarmType: 'alarm-task' },
   { key: 'meeting', label: '회의', icon: 'mdi-calendar-clock', alarmType: 'alarm-meeting' },
-  { key: 'drive', label: '파일 공유', icon: 'mdi-file-share', alarmType: 'alarm-drive' }
+  { key: 'drive', label: '파일 공유', icon: 'mdi-file-upload', alarmType: 'alarm-drive' }
 ])
 
 // 현재 워크스페이스에 따른 필터 옵션
@@ -452,15 +456,104 @@ const setActiveFilter = (filterKey) => {
 
 // 알림 클릭 처리
 const handleNotificationClick = async (notification) => {
-  // console.log('[AppHeader] 🖱️ 알림 클릭:', notification)
-  if (!notification.read) {
-    // console.log('[AppHeader] 🔄 읽음 처리 시작...')
-    await notificationStore.markAsRead(notification.id)
-    // console.log('[AppHeader] ✅ 읽음 처리 완료')
-  } else {
-    // console.log('[AppHeader] ℹ️ 이미 읽은 알림입니다')
+  try {
+    // 1) 공통: 읽음 처리
+    if (!notification.read) {
+      await notificationStore.markAsRead(notification.id)
+    }
+
+    const data = notification.data || {}
+    const type = notification.type
+
+    // 2) 라우팅 분기
+    if (type === 'alarm-friend') {
+      // 친구 요청은 카드 내 버튼으로 처리. 클릭 시 친구 페이지로 이동만 수행
+      router.push('/workspaces/personal/friends')
+      return
+    }
+
+    if (type === 'alarm-project') {
+      // 워크스페이스 초대 → 해당 워크스페이스 대시보드로 이동
+      const workSpaceSeq = data.workSpaceSeq || notification.workSpaceSeq
+      if (workSpaceSeq) {
+        const workspaceId = `workspace_${workSpaceSeq}`
+        router.push(`/workspaces/${workspaceId}/dashboard`)
+      }
+      return
+    }
+
+    if (type === 'alarm-task') {
+      // 업무 등록/댓글 → 팀 일정으로 이동 후 상세 모달 오픈
+      const workSpaceSeq = data.workSpaceSeq || data.workspaceSeq || data.projectSeq || notification.workSpaceSeq
+      const channelSeq = data.channelSeq || data.scheduleChannelSeq || data.channel?.channelSeq
+      const taskSeq = data.taskSeq || data.targetSeq || data.taskId || data.id || data.task?.taskSeq || channelSeq
+      console.log('[알림 네비] alarm-task payload:', { workSpaceSeq, taskSeq, channelSeq, raw: data })
+      if (workSpaceSeq) {
+        // 요구사항: /workspaces/{seq}/schedules/team-schedule 로 이동
+        const path = `/workspaces/${workSpaceSeq}/schedules/team-schedule`
+        router.push(path).then(() => {
+          if (taskSeq) {
+            try {
+              sessionStorage.setItem('openTaskDetailTaskSeq', String(taskSeq))
+            } catch {}
+            // 일정 시간 동안 재시도 (뷰 마운트 타이밍 보정)
+            let attempts = 0
+            const maxAttempts = 10
+            const timer = setInterval(() => {
+              console.log('[알림 네비] dispatch open-task-detail attempt', attempts + 1, 'taskSeq=', taskSeq)
+              attempts++
+              window.dispatchEvent(new CustomEvent('open-task-detail', { detail: { taskSeq } }))
+              if (attempts >= maxAttempts) {
+                clearInterval(timer)
+              }
+            }, 150)
+          }
+        })
+      }
+      return
+    }
+
+    // 워크스페이스 강제 탈퇴(추정): 읽음 처리만
+    const isKick = data?.subType === 'KICK' || /강제\s*탈퇴/.test(notification.message || '')
+    if (isKick) {
+      return
+    }
+  } catch (e) {
+    console.error('[알림 클릭 처리 실패]:', e)
   }
-  // 알림 타입에 따른 추가 처리 (향후 확장)
+}
+
+// 친구 요청 수락/거절
+const handleAcceptFriend = async (notification) => {
+  try {
+    friendActionLoading.value[notification.id] = true
+    const friendSeq = notification.data?.friendSeq || notification.data?.targetSeq
+    if (friendSeq) {
+      await acceptFriendRequest(friendSeq)
+    }
+  } catch (e) {
+    console.error('친구 요청 수락 실패:', e)
+  } finally {
+    await notificationStore.markAsRead(notification.id)
+    router.push('/workspaces/personal/friends')
+    friendActionLoading.value[notification.id] = false
+  }
+}
+
+const handleRejectFriend = async (notification) => {
+  try {
+    friendActionLoading.value[notification.id] = true
+    const friendSeq = notification.data?.friendSeq || notification.data?.targetSeq
+    if (friendSeq) {
+      await rejectFriendRequest(friendSeq)
+    }
+  } catch (e) {
+    console.error('친구 요청 거절 실패:', e)
+  } finally {
+    await notificationStore.markAsRead(notification.id)
+    router.push('/workspaces/personal/friends')
+    friendActionLoading.value[notification.id] = false
+  }
 }
 
 // 알림 읽음 처리 (notificationStore로 위임)
@@ -507,14 +600,19 @@ const viewAllNotifications = () => {
 // 알림 아이콘 가져오기
 const getNotificationIcon = (type) => {
   const icons = {
-    // 개인 스페이스 아이콘
+    // 신규 알림 타입 (백엔드 기준)
+    'alarm-friend': 'mdi-account-plus',
+    'alarm-task': 'mdi-clipboard-text',
+    'alarm-project': 'mdi-folder-account',
+    'alarm-meeting': 'mdi-video',
+    'alarm-drive': 'mdi-file-upload',
+
+    // 레거시/더미 타입 호환
     friend_request: 'mdi-account-plus',
     personal_task_assigned: 'mdi-clipboard-plus',
     personal_task_due_soon: 'mdi-clock-alert',
     personal_message: 'mdi-message',
     personal_achievement: 'mdi-trophy',
-    
-    // 팀 스페이스 아이콘
     team_task_assigned: 'mdi-clipboard-multiple',
     team_meeting_reminder: 'mdi-calendar-clock',
     team_message: 'mdi-message-text',
@@ -528,14 +626,19 @@ const getNotificationIcon = (type) => {
 // 알림 색상 가져오기
 const getNotificationColor = (type) => {
   const colors = {
-    // 개인 스페이스 색상
+    // 신규 알림 타입 (백엔드 기준)
+    'alarm-friend': 'blue',
+    'alarm-task': 'orange',
+    'alarm-project': 'purple',
+    'alarm-meeting': 'indigo',
+    'alarm-drive': 'cyan',
+
+    // 레거시/더미 타입 호환
     friend_request: 'blue',
     personal_task_assigned: 'orange',
     personal_task_due_soon: 'red',
     personal_message: 'green',
     personal_achievement: 'amber',
-    
-    // 팀 스페이스 색상
     team_task_assigned: 'purple',
     team_meeting_reminder: 'indigo',
     team_message: 'teal',
@@ -544,6 +647,18 @@ const getNotificationColor = (type) => {
     team_project_update: 'pink'
   }
   return colors[type] || 'primary'
+}
+
+// 알림 타입 텍스트
+const getNotificationTypeText = (type) => {
+  const map = {
+    'alarm-friend': '친구',
+    'alarm-task': '업무',
+    'alarm-project': '프로젝트',
+    'alarm-meeting': '회의',
+    'alarm-drive': '파일'
+  }
+  return map[type] || '알림'
 }
 
 // 우선순위 색상 가져오기
@@ -576,6 +691,8 @@ const expandedChannels = ref(new Set())
 
 // 팀명 (실제 워크스페이스 이름 사용)
 const teamName = ref('')
+const projectStartDate = ref('') // yyyy-MM-dd
+const projectEndDate = ref('')   // yyyy-MM-dd
 
 // 썸네일 이미지
 const thumbnailImage = ref(null)
@@ -600,6 +717,11 @@ watch(() => workspaceStore.currentWorkspaceInfo, (newWorkspace) => {
   if (newWorkspace) {
     teamName.value = newWorkspace.name || '워크스페이스'
     thumbnailPreview.value = newWorkspace.profile || ''
+    // 날짜 초기화 (백엔드 LocalDateTime → yyyy-MM-dd)
+    const start = newWorkspace.startDate || newWorkspace.projectStartDate
+    const end = newWorkspace.endDate || newWorkspace.projectEndDate
+    projectStartDate.value = start ? new Date(start).toISOString().split('T')[0] : ''
+    projectEndDate.value = end ? new Date(end).toISOString().split('T')[0] : ''
   }
 }, { immediate: true })
 
@@ -879,6 +1001,11 @@ const handleBeforeUnload = () => {
   workspaceSettingsOpen.value = false
 }
 
+// 창 크기 변경 시 알림 사이드바 강제 닫기 (해상도와 무관하게 항상 닫힘 보장)
+const handleWindowResize = () => {
+  notificationSidebarVisible.value = false
+}
+
 // 초기 로드
 onMounted(async () => {
   // 워크스페이스 목록 로드
@@ -888,11 +1015,15 @@ onMounted(async () => {
   
   // 새로고침 시 모달창 닫기
   window.addEventListener('beforeunload', handleBeforeUnload)
+
+  // 해상도 변경 시 알림 사이드바 항상 닫기
+  window.addEventListener('resize', handleWindowResize)
 })
 
 // 컴포넌트 언마운트 시 이벤트 리스너 정리
 onUnmounted(() => {
   window.removeEventListener('beforeunload', handleBeforeUnload)
+  window.removeEventListener('resize', handleWindowResize)
 })
 
 // 썸네일 이미지 선택
@@ -919,11 +1050,16 @@ const updateWorkspaceInfo = async () => {
   try {
     // 썸네일 이미지를 변경하지 않았으면 null 대신 undefined 전달
     const thumbnailToSend = thumbnailImage.value instanceof File ? thumbnailImage.value : undefined
+    // LocalDateTime 문자열로 변환 (00:00:00 고정)
+    const startDateToSend = projectStartDate.value ? `${projectStartDate.value}T00:00:00` : undefined
+    const endDateToSend = projectEndDate.value ? `${projectEndDate.value}T23:59:59` : undefined
     
     const updatedWorkspace = await updateWorkspace(
-      currentWorkspace.workSpaceSeq, 
-      teamName.value, 
-      thumbnailToSend
+      currentWorkspace.workSpaceSeq,
+      teamName.value,
+      thumbnailToSend,
+      startDateToSend,
+      endDateToSend
     )
     
     // 워크스페이스 목록 새로고침
@@ -1484,6 +1620,35 @@ onMounted(() => {
                       class="modern-input"
           />
                   </div>
+
+                  <div class="date-section">
+                    <label class="field-label">프로젝트 기간</label>
+                    <div class="date-row">
+                      <v-text-field
+                        v-model="projectStartDate"
+                        type="date"
+                        label="시작일"
+                        variant="solo-filled"
+                        flat
+                        density="comfortable"
+                        hide-details
+                        class="modern-input"
+                        :max="projectEndDate || undefined"
+                        required
+                      />
+                      <v-text-field
+                        v-model="projectEndDate"
+                        type="date"
+                        label="종료일"
+                        variant="solo-filled"
+                        flat
+                        density="comfortable"
+                        hide-details
+                        class="modern-input"
+                        :min="projectStartDate || undefined"
+                      />
+                    </div>
+                  </div>
           
           <input
             type="file"
@@ -1978,6 +2143,7 @@ onMounted(() => {
 
   <!-- 알림 사이드바 -->
   <v-navigation-drawer
+    v-if="notificationSidebarVisible"
     v-model="notificationSidebarVisible"
     location="right"
     width="400"
@@ -2052,21 +2218,58 @@ onMounted(() => {
         @click="handleNotificationClick(notification)"
       >
         <div class="notification-icon">
-          <div :class="['icon-wrapper', getNotificationColor(notification.type)]">
-            <v-icon size="18">{{ getNotificationIcon(notification.type) }}</v-icon>
-          </div>
+          <v-avatar size="28" :color="getNotificationColor(notification.type)" class="type-avatar">
+            <v-icon size="18" color="white">{{ getNotificationIcon(notification.type) }}</v-icon>
+          </v-avatar>
+          <span v-if="!notification.read" class="unread-dot"></span>
         </div>
-        
+
         <div class="notification-body">
+          <div class="notification-header-row">
+            <v-chip
+              size="x-small"
+              :color="getNotificationColor(notification.type)"
+              variant="tonal"
+              class="type-chip"
+            >
+              {{ getNotificationTypeText(notification.type) }}
+            </v-chip>
+            <span class="notification-time">{{ notification.time }}</span>
+          </div>
           <p class="notification-text">{{ notification.message }}</p>
           <div class="notification-footer">
-            <span class="notification-time">{{ notification.time }}</span>
             <div v-if="notification.priority" class="priority-badge">
               {{ getPriorityText(notification.priority) }}
             </div>
+            <div v-if="notification.type === 'alarm-friend'" class="friend-actions">
+              <v-btn
+                size="small"
+                color="primary"
+                variant="elevated"
+                prepend-icon="mdi-check"
+                :loading="friendActionLoading[notification.id] === true"
+                :disabled="friendActionLoading[notification.id] === true"
+                class="friend-action-btn accept"
+                @click.stop="handleAcceptFriend(notification)"
+              >
+                수락
+              </v-btn>
+              <v-btn
+                size="small"
+                color="error"
+                variant="tonal"
+                prepend-icon="mdi-close"
+                :loading="friendActionLoading[notification.id] === true"
+                :disabled="friendActionLoading[notification.id] === true"
+                class="friend-action-btn reject"
+                @click.stop="handleRejectFriend(notification)"
+              >
+                거절
+              </v-btn>
+            </div>
           </div>
         </div>
-        
+
         <div class="notification-actions">
           <button
             v-if="!notification.read"
@@ -3228,30 +3431,18 @@ onMounted(() => {
 .notification-icon {
   margin-right: 12px;
   flex-shrink: 0;
+  position: relative;
 }
 
-.icon-wrapper {
-  width: 36px;
-  height: 36px;
-  border-radius: 8px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: white;
-  font-weight: 600;
+.unread-dot {
+  position: absolute;
+  right: -2px;
+  top: -2px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #ef4444;
 }
-
-.icon-wrapper.blue { background: #3b82f6; }
-.icon-wrapper.orange { background: #f59e0b; }
-.icon-wrapper.red { background: #ef4444; }
-.icon-wrapper.green { background: #10b981; }
-.icon-wrapper.amber { background: #f59e0b; }
-.icon-wrapper.purple { background: #8b5cf6; }
-.icon-wrapper.indigo { background: #6366f1; }
-.icon-wrapper.teal { background: #14b8a6; }
-.icon-wrapper.cyan { background: #06b6d4; }
-.icon-wrapper.lime { background: #84cc16; }
-.icon-wrapper.pink { background: #ec4899; }
 
 .notification-body {
   flex: 1;
@@ -3259,13 +3450,9 @@ onMounted(() => {
   padding-right: 8px;
 }
 
-.notification-text {
-  font-size: 14px;
-  font-weight: 500;
-  color: #111827;
-  line-height: 1.5;
-  margin: 0 0 8px 0;
-}
+.notification-header-row { display: flex; align-items: center; justify-content: space-between; }
+.type-chip { text-transform: none; }
+.notification-text { font-size: 14px; font-weight: 500; color: #111827; line-height: 1.5; margin: 2px 0 6px 0; }
 
 .notification-footer {
   display: flex;
@@ -3304,6 +3491,21 @@ onMounted(() => {
 
 .notification-card:hover .notification-actions {
   opacity: 1;
+}
+
+/* 친구 요청 액션 버튼 */
+.friend-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.friend-action-btn.accept {
+  border-radius: 8px;
+}
+
+.friend-action-btn.reject {
+  border-radius: 8px;
 }
 
 .action-button {
