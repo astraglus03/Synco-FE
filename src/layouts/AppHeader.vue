@@ -6,7 +6,7 @@ import { useWorkspaceStore } from '@/store/workspaceStore'
 import { useWorkspaceMemberStore } from '@/store/workspaceMemberStore'
 import { useNotificationStore } from '@/store/notificationStore'
 import { Authority } from '@/models/workspace/WorkspaceModels'
-import { getWorkspaceMembers, updateWorkspace, delegateSuperAuthority } from '@/services/WorkspaceService'
+import { getWorkspaceMembers, updateWorkspace, delegateSuperAuthority, deleteWorkspace, inviteWorkspaceMembers, kickWorkspaceMember, getFriendList, searchMembers } from '@/api/workspace/workSpaceApi'
 import * as authApi from '@/api/member/auth'
 
 const props = defineProps({
@@ -550,7 +550,7 @@ const getPriorityText = (priority) => {
 
 // 워크스페이스 설정 관련
 const workspaceSettingsOpen = ref(false)
-const settingsTab = ref('info') // 'info' 또는 'permissions'
+const settingsTab = ref('info') // 'info', 'invite', 'permissions'
 const isWorkspaceOwner = ref(true)
 const expandedChannels = ref(new Set())
 
@@ -582,6 +582,24 @@ watch(() => workspaceStore.currentWorkspaceInfo, (newWorkspace) => {
     thumbnailPreview.value = newWorkspace.profile || ''
   }
 }, { immediate: true })
+
+// 커스텀 토스트 시스템
+const showToast = ref(false)
+const toastMessage = ref('')
+const toastTitle = ref('')
+const toastType = ref('success') // success, error, warning
+
+const showCustomToast = (title, message, type = 'success') => {
+  toastTitle.value = title
+  toastMessage.value = message
+  toastType.value = type
+  showToast.value = true
+
+  // 5초 후 자동으로 닫기
+  setTimeout(() => {
+    showToast.value = false
+  }, 5000)
+}
 
 // 현재 로그인한 사용자 ID (authStore에서 가져옴)
 const currentUserId = computed(() => {
@@ -733,7 +751,7 @@ const updatePermission = async (featureKey, memberId, newPermission) => {
   
   // 1. SUPER 사용자가 자신의 권한을 변경하려는 경우 막기
   if (memberId === currentUserId.value && currentPermission === 'SUPER') {
-    alert('SUPER 권한을 가진 사용자는 자신의 권한을 변경할 수 없습니다.')
+    showCustomToast('권한 변경 불가', 'SUPER 권한을 가진 사용자는 자신의 권한을 변경할 수 없습니다.', 'warning')
     return
   }
   
@@ -764,14 +782,49 @@ const updatePermission = async (featureKey, memberId, newPermission) => {
       await workspaceStore.loadMyWorkspaces()
       await loadMembers()
       
-      alert('프로젝트 SUPER 권한이 위임되었습니다.')
+      // 모달 닫힌 후 토스트 표시
+      setTimeout(() => {
+        showCustomToast('권한 위임 완료', '프로젝트 SUPER 권한이 위임되었습니다.', 'success')
+      }, 100)
     } catch (error) {
       console.error('권한 위임 실패:', error)
-      alert('권한 위임에 실패했습니다.')
+      showCustomToast('권한 위임 실패', '권한 위임에 실패했습니다.', 'error')
     }
   } else {
     // 일반 권한 변경 (PARTICIPANT ↔ MANAGER)
     memberPermissions.value[featureKey][memberId] = newPermission
+  }
+}
+
+// 멤버 강제 탈퇴
+const handleKickMember = async (member) => {
+  const confirmed = confirm(`${member.name}님을 워크스페이스에서 강제 탈퇴시키시겠습니까?\n\n이 작업은 취소할 수 없습니다.`)
+  
+  if (!confirmed) {
+    return
+  }
+  
+  try {
+    const currentWorkspace = workspaceStore.currentWorkspaceInfo
+    
+    await kickWorkspaceMember(currentWorkspace.workSpaceSeq, member.memberSeq)
+    
+    // 멤버 목록 새로고침
+    await loadMembers()
+    
+    // 워크스페이스 정보 최신화 (멤버 수 업데이트)
+    await workspaceStore.loadMyWorkspaces()
+    
+    // 워크스페이스 멤버 스토어도 최신화
+    console.log('🔄 워크스페이스 멤버 스토어 업데이트 시작 (강제탈퇴):', currentWorkspace.workSpaceSeq)
+    if (workspaceMemberStore && workspaceMemberStore.loadWorkspaceMembers) {
+      await workspaceMemberStore.loadWorkspaceMembers(currentWorkspace.workSpaceSeq)
+    }
+    
+    showCustomToast('강제 탈퇴 완료', `${member.name}님이 워크스페이스에서 탈퇴되었습니다.`, 'success')
+  } catch (error) {
+    console.error('멤버 강제 탈퇴 실패:', error)
+    showCustomToast('강제 탈퇴 실패', '멤버 강제 탈퇴에 실패했습니다.', 'error')
   }
 }
 
@@ -791,6 +844,13 @@ watch(() => props.currentWorkspace, () => {
 watch(() => workspaceSettingsOpen.value, (newValue) => {
   if (newValue) {
     loadMembers()
+    // 멤버 초대 탭을 위한 친구 목록 로드
+    loadInviteFriends()
+  } else {
+    // 다이얼로그가 닫힐 때 초대 목록 초기화
+    invitedMembers.value = []
+    inviteSearchQuery.value = ''
+    inviteSearchResults.value = []
   }
 })
 
@@ -876,6 +936,210 @@ const saveWorkspaceSettings = async () => {
   workspaceSettingsOpen.value = false
 }
 
+// 워크스페이스 삭제 관련
+const deleteConfirmDialog = ref(false)
+const deleteConfirmText = ref('')
+const isDeletingWorkspace = ref(false)
+
+// 멤버 초대 관련
+const inviteFriends = ref([])
+const inviteSearchQuery = ref('')
+const inviteSearchResults = ref([])
+const invitedMembers = ref([])
+const isLoadingInviteFriends = ref(false)
+const isLoadingInviteSearch = ref(false)
+
+// 친구 목록 로드 (초대용)
+const loadInviteFriends = async () => {
+  try {
+    isLoadingInviteFriends.value = true
+    const response = await getFriendList('', 0, 50)
+    
+    const friendList = Array.isArray(response) ? response : (response.content || [])
+    
+    inviteFriends.value = friendList.map(friend => ({
+      id: friend.memberId || friend.id,
+      memberSeq: friend.memberSeq || friend.friendSeq,
+      name: friend.name,
+      email: friend.email,
+      profileImage: friend.profileImage,
+      avatarText: friend.name ? friend.name.charAt(0) : '?',
+      isFriend: true
+    }))
+  } catch (error) {
+    // 에러 무시
+  } finally {
+    isLoadingInviteFriends.value = false
+  }
+}
+
+// 회원 검색 (초대용)
+const searchInviteMembers = ref(null)
+watch(inviteSearchQuery, (newValue) => {
+  if (searchInviteMembers.value) {
+    clearTimeout(searchInviteMembers.value)
+  }
+  
+  if (!newValue.trim()) {
+    inviteSearchResults.value = []
+    return
+  }
+  
+  searchInviteMembers.value = setTimeout(async () => {
+    try {
+      isLoadingInviteSearch.value = true
+      const response = await searchMembers(newValue, 0, 20)
+      
+      const memberList = Array.isArray(response) ? response : (response.content || [])
+      
+      inviteSearchResults.value = memberList.map(member => ({
+        id: member.memberId || member.id,
+        memberSeq: member.memberSeq,
+        name: member.name,
+        email: member.email,
+        profileImage: member.profileImage,
+        avatarText: member.name ? member.name.charAt(0) : '?',
+        isFriend: member.isFriend || false
+      }))
+    } catch (error) {
+      inviteSearchResults.value = []
+    } finally {
+      isLoadingInviteSearch.value = false
+    }
+  }, 300)
+})
+
+// 초대 목록에 추가
+const addToInviteList = (user) => {
+  if (!isInvited(user.memberSeq || user.id)) {
+    invitedMembers.value.push(user)
+  }
+}
+
+// 초대 목록에서 제거
+const removeFromInviteList = (userSeq) => {
+  const index = invitedMembers.value.findIndex(member => (member.memberSeq || member.id) === userSeq)
+  if (index > -1) {
+    invitedMembers.value.splice(index, 1)
+  }
+}
+
+// 초대 목록 토글 (추가/제거)
+const toggleInviteList = (user) => {
+  const userSeq = user.memberSeq || user.id
+  
+  // 이미 워크스페이스 멤버인지 확인
+  if (isAlreadyMember(userSeq)) {
+    return // 이미 멤버면 토글 불가
+  }
+  
+  if (isInvited(userSeq)) {
+    removeFromInviteList(userSeq)
+  } else {
+    addToInviteList(user)
+  }
+}
+
+// 초대되었는지 확인
+const isInvited = (userSeq) => {
+  return invitedMembers.value.some(member => (member.memberSeq || member.id) === userSeq)
+}
+
+// 이미 워크스페이스 멤버인지 확인
+const isAlreadyMember = (userSeq) => {
+  return teamMembers.value.some(member => member.memberSeq == userSeq || member.id == userSeq)
+}
+
+// 멤버 초대 처리
+const handleInviteMembers = async () => {
+  if (invitedMembers.value.length === 0) {
+    showCustomToast('멤버 선택 필요', '초대할 멤버를 선택해주세요.', 'warning')
+    return
+  }
+  
+  const currentWorkspace = workspaceStore.currentWorkspaceInfo
+  const inviteCount = invitedMembers.value.length
+  
+  try {
+    const memberList = invitedMembers.value.map(member => member.memberSeq)
+    
+    await inviteWorkspaceMembers(currentWorkspace.workSpaceSeq, memberList, null)
+    
+    // 초대 목록 초기화
+    invitedMembers.value = []
+    inviteSearchQuery.value = ''
+    inviteSearchResults.value = []
+    
+    // 멤버 목록 새로고침
+    await loadMembers()
+    
+    // 워크스페이스 정보 최신화 (멤버 수 업데이트)
+    await workspaceStore.loadMyWorkspaces()
+    
+    // 워크스페이스 멤버 스토어도 최신화
+    console.log('🔄 워크스페이스 멤버 스토어 업데이트 시작 (초대):', currentWorkspace.workSpaceSeq)
+    if (workspaceMemberStore && workspaceMemberStore.loadWorkspaceMembers) {
+      await workspaceMemberStore.loadWorkspaceMembers(currentWorkspace.workSpaceSeq)
+    }
+    
+    // 모달 닫기
+    workspaceSettingsOpen.value = false
+    
+    // 성공 메시지 (모달 닫힌 후 표시)
+    setTimeout(() => {
+      showCustomToast('멤버 초대 완료', `${inviteCount}명의 멤버를 초대했습니다.`, 'success')
+    }, 100)
+    
+  } catch (error) {
+    console.error('멤버 초대 실패:', error)
+    showCustomToast('멤버 초대 실패', '멤버 초대에 실패했습니다.', 'error')
+  }
+}
+
+// 워크스페이스 삭제 확인 다이얼로그 열기
+const openDeleteConfirmDialog = () => {
+  deleteConfirmText.value = ''
+  deleteConfirmDialog.value = true
+}
+
+// 워크스페이스 삭제 처리
+const handleDeleteWorkspace = async () => {
+  const currentWorkspace = workspaceStore.currentWorkspaceInfo
+  
+  // 확인 텍스트 검증
+  if (deleteConfirmText.value !== currentWorkspace.name) {
+    showCustomToast('이름 불일치', '워크스페이스 이름이 일치하지 않습니다.', 'warning')
+    return
+  }
+  
+  try {
+    isDeletingWorkspace.value = true
+    
+    // API 호출
+    await deleteWorkspace(currentWorkspace.workSpaceSeq)
+    
+    // 워크스페이스 목록 새로고침
+    await workspaceStore.loadMyWorkspaces()
+    
+    // 다이얼로그 닫기
+    deleteConfirmDialog.value = false
+    workspaceSettingsOpen.value = false
+    
+    // 개인 워크스페이스로 리다이렉트
+    await router.push('/workspaces/personal/dashboard')
+    
+    // 성공 메시지 (이동 후 표시)
+    setTimeout(() => {
+      showCustomToast('워크스페이스 삭제 완료', `워크스페이스 "${currentWorkspace.name}"가 삭제되었습니다.`, 'success')
+    }, 300)
+    
+  } catch (error) {
+    showCustomToast('워크스페이스 삭제 실패', '워크스페이스 삭제에 실패했습니다.', 'error')
+  } finally {
+    isDeletingWorkspace.value = false
+  }
+}
+
 // 알림 사이드바 토글
 const toggleNotificationSidebar = () => {
   notificationSidebarVisible.value = !notificationSidebarVisible.value
@@ -923,7 +1187,7 @@ const userInitial = computed(() => {
 // 마이페이지로 이동 (SPA 라우팅)
 const goToMyPage = () => {
   profileMenuOpen.value = false
-  router.push('/workspace/personal/profile')
+  router.push('/workspaces/personal/profile')
 }
 
 // 로그아웃
@@ -1084,93 +1348,109 @@ onMounted(() => {
     </div>
   </v-app-bar>
 
-  <!-- 팀 설정 다이얼로그 -->
-  <v-dialog v-model="workspaceSettingsOpen" max-width="600" scrollable>
-    <v-card class="team-settings-dialog">
-      <!-- 헤더 -->
-      <div class="dialog-header">
-        <div class="header-content">
-          <div class="header-left">
-            <v-icon class="header-icon">mdi-cog</v-icon>
-            <h2 class="dialog-title">팀 설정</h2>
+  <!-- 프로젝트 설정 다이얼로그 - 새로운 디자인 -->
+  <v-dialog v-model="workspaceSettingsOpen" max-width="900" scrollable persistent>
+    <v-card class="modern-settings-dialog">
+      <!-- 모던한 헤더 -->
+      <div class="modern-header">
+        <div class="header-gradient"></div>
+        <div class="header-content-wrapper">
+          <div class="header-left-section">
+            <div class="icon-badge">
+              <v-icon size="28">mdi-cog-outline</v-icon>
+            </div>
+            <div class="title-section">
+              <h1 class="main-title">프로젝트 설정</h1>
+              <p class="subtitle">{{ props.currentWorkspace?.name || '워크스페이스' }}</p>
+            </div>
         </div>
         <v-btn 
             icon
           variant="text" 
           @click="workspaceSettingsOpen = false"
-            class="close-btn"
+            class="modern-close-btn"
+            size="large"
           >
             <v-icon>mdi-close</v-icon>
           </v-btn>
         </div>
       </div>
 
-      <v-divider />
-
-      <!-- 탭 네비게이션 -->
-      <v-tabs
-        v-model="settingsTab"
-        bg-color="surface"
-        color="primary"
-        fixed-tabs
-      >
-        <v-tab value="info">
-          <v-icon start>mdi-account-group</v-icon>
-          팀 정보
-        </v-tab>
-        <v-tab value="permissions">
-          <v-icon start>mdi-shield-account</v-icon>
-          멤버 권한 관리
-        </v-tab>
-      </v-tabs>
-
-      <v-divider />
+      <!-- 탭 네비게이션 - 카드 스타일 -->
+      <div class="tabs-container">
+        <div class="tab-pills">
+          <button
+            :class="['tab-pill', { active: settingsTab === 'info' }]"
+            @click="settingsTab = 'info'"
+          >
+            <v-icon size="20">mdi-information-outline</v-icon>
+            <span>프로젝트 정보</span>
+          </button>
+          <button
+            v-if="isCurrentUserSuper"
+            :class="['tab-pill', { active: settingsTab === 'invite' }]"
+            @click="settingsTab = 'invite'"
+          >
+            <v-icon size="20">mdi-account-multiple-plus</v-icon>
+            <span>멤버 초대</span>
+          </button>
+          <button
+            :class="['tab-pill', { active: settingsTab === 'permissions' }]"
+            @click="settingsTab = 'permissions'"
+          >
+            <v-icon size="20">mdi-account-cog</v-icon>
+            <span>멤버 관리</span>
+          </button>
+        </div>
+      </div>
 
       <!-- 탭 컨텐츠 -->
-      <v-window v-model="settingsTab">
-        <!-- 팀 정보 탭 -->
-        <v-window-item value="info">
-          <div class="team-name-section">
-        <div class="section-header">
-          <v-icon class="section-icon">mdi-account-group</v-icon>
-          <h3 class="section-title">팀 정보</h3>
+      <v-card-text class="modern-content">
+        <v-window v-model="settingsTab" class="settings-window">
+          <!-- 팀 정보 탭 -->
+          <v-window-item value="info">
+            <div class="content-section">
+              <!-- 프로젝트 프로필 카드 -->
+              <div class="profile-card">
+                <div class="card-label">
+                  <v-icon size="18">mdi-image-edit</v-icon>
+                  <span>프로젝트 아이덴티티</span>
         </div>
         
-        <!-- 팀 정보 (썸네일 + 팀명) -->
-        <div class="team-info-container">
-          <!-- 썸네일 이미지 -->
-          <div class="thumbnail-preview-wrapper">
-            <v-avatar size="80" class="thumbnail-preview" color="primary">
+                <div class="profile-content">
+                  <div class="avatar-section">
+                    <div class="avatar-wrapper" @click="$refs.thumbnailInput.click()">
+                      <v-avatar size="120" class="project-avatar" color="primary">
               <v-img 
                 v-if="thumbnailPreview"
                 :src="thumbnailPreview"
-                alt="팀 썸네일"
+                          alt="프로젝트 썸네일"
                 cover
               />
-              <span v-else class="text-white font-weight-bold" style="font-size: 20px;">
+                        <span v-else class="avatar-text">
                 {{ teamName.charAt(0).toUpperCase() }}
               </span>
             </v-avatar>
-            <v-btn
-              icon
-              size="small"
-              variant="elevated"
-              color="primary"
-              class="upload-icon-btn"
-              @click="$refs.thumbnailInput.click()"
-            >
-              <v-icon size="16">mdi-camera</v-icon>
-            </v-btn>
+                      <div class="avatar-overlay">
+                        <v-icon size="32" color="white">mdi-camera</v-icon>
+                        <span class="overlay-text">변경</span>
+                      </div>
+                    </div>
+                    <p class="avatar-hint">클릭하여 프로젝트 이미지 변경</p>
           </div>
           
-          <!-- 팀명 입력 -->
+                  <div class="name-section">
+                    <label class="field-label">프로젝트 이름</label>
           <v-text-field
             v-model="teamName"
-            label="팀명"
-            variant="outlined"
+                      placeholder="프로젝트 이름을 입력하세요"
+                      variant="solo-filled"
+                      flat
             density="comfortable"
-            class="team-name-field"
+                      hide-details
+                      class="modern-input"
           />
+                  </div>
           
           <input
             type="file"
@@ -1179,130 +1459,391 @@ onMounted(() => {
             style="display: none"
             ref="thumbnailInput"
           />
+                </div>
+        </div>
+        
+              <!-- 위험 영역 -->
+              <div class="danger-card" v-if="isCurrentUserSuper">
+                <div class="card-label danger">
+                  <v-icon size="18" color="error">mdi-alert-octagon</v-icon>
+                  <span>위험 영역</span>
+          </div>
+          
+                <div class="danger-content">
+                  <div class="warning-box">
+                    <v-icon size="48" color="error" class="mb-3">mdi-delete-alert</v-icon>
+                    <h4 class="warning-title">프로젝트 삭제</h4>
+                    <p class="warning-text">
+                      프로젝트를 삭제하면 모든 데이터(채팅, 파일, 일정, 회의 기록 등)가<br>
+                      <strong>영구적으로 삭제</strong>되며 복구할 수 없습니다.
+                    </p>
+          <v-btn
+            color="error"
+                      variant="flat"
+            prepend-icon="mdi-delete-forever"
+            @click="openDeleteConfirmDialog"
+                      size="large"
+                      class="mt-4"
+          >
+                      프로젝트 영구 삭제
+          </v-btn>
+                  </div>
+                </div>
         </div>
       </div>
         </v-window-item>
 
-        <!-- 멤버 권한 관리 탭 -->
-        <v-window-item value="permissions">
-          <div class="permissions-section">
-        <div class="section-header">
-          <v-icon class="section-icon">mdi-shield-account</v-icon>
-          <h3 class="section-title">멤버 권한 관리</h3>
-        </div>
-        
-        <!-- 기능 목록 -->
-        <div class="features-list">
-          <div 
-            v-for="feature in sidebarFeatures" 
-            :key="feature.key"
-            class="feature-card"
-          >
-            <!-- 기능 헤더 -->
-            <div class="feature-header">
-              <div class="feature-info">
-                <v-icon class="feature-icon">{{ feature.icon }}</v-icon>
-                <span class="feature-name">{{ feature.name }}</span>
+        <!-- 멤버 초대 탭 -->
+        <v-window-item value="invite">
+          <!-- 검색바 (상단 고정) -->
+          <div class="invite-search-header">
+            <v-text-field
+              v-model="inviteSearchQuery"
+              placeholder="이름 또는 이메일로 검색"
+              variant="solo-filled"
+              flat
+              density="comfortable"
+              prepend-inner-icon="mdi-magnify"
+              clearable
+              hide-details
+              class="modern-search"
+            />
+          </div>
+
+          <div class="invite-layout" :class="{ 'has-search': inviteSearchQuery }">
+            <!-- 왼쪽: 친구 목록 -->
+            <div class="invite-panel">
+              <div class="area-header">
+                <v-icon size="18">mdi-account-heart</v-icon>
+                <span>친구 목록</span>
+              </div>
+              
+              <div class="invite-members-area">
+                <div v-if="isLoadingInviteFriends" class="modern-loading">
+                  <v-progress-circular indeterminate color="primary" size="32" />
+                  <p>친구 목록을 불러오는 중...</p>
+                </div>
+                
+                <div v-else-if="inviteFriends.length === 0" class="modern-empty">
+                  <v-icon size="48" color="grey-lighten-1">mdi-account-off-outline</v-icon>
+                  <h4>친구가 없습니다</h4>
+                  <p>친구를 추가한 후 프로젝트에 초대할 수 있습니다</p>
+                </div>
+                
+                <div v-else class="invite-member-list">
+                  <div
+                    v-for="friend in inviteFriends"
+                    :key="friend.memberSeq"
+                    class="invite-member-item"
+                    :class="{ 
+                      selected: isInvited(friend.memberSeq),
+                      disabled: isAlreadyMember(friend.memberSeq)
+                    }"
+                    @click="toggleInviteList(friend)"
+                  >
+                    <v-avatar size="40" color="primary">
+                      <v-img v-if="friend.profileImage" :src="friend.profileImage" />
+                      <span v-else>{{ friend.avatarText }}</span>
+                    </v-avatar>
+                    <div class="member-info">
+                      <p class="member-name">
+                        {{ friend.name }}
+                        <v-chip 
+                          v-if="isAlreadyMember(friend.memberSeq)"
+                          size="x-small"
+                          color="success"
+                          variant="flat"
+                          class="ml-2"
+                        >
+                          멤버
+                        </v-chip>
+                      </p>
+                      <p class="member-email">{{ friend.email }}</p>
+                    </div>
+                    <v-icon 
+                      v-if="isAlreadyMember(friend.memberSeq)"
+                      color="success"
+                      size="24"
+                    >
+                      mdi-account-check
+                    </v-icon>
+                    <v-icon 
+                      v-else-if="isInvited(friend.memberSeq)"
+                      color="primary"
+                      size="24"
+                    >
+                      mdi-check-circle
+                    </v-icon>
+                  </div>
+                </div>
               </div>
             </div>
 
-            <!-- 팀원 목록 -->
-            <div class="members-section">
-              <div class="members-header">
-                <span class="members-title">팀원 권한</span>
-                <div class="permission-legend">
-                  <div class="legend-item super">
-                    <v-icon size="14">mdi-shield-crown</v-icon>
-                    <span>SUPER</span>
+            <!-- 가운데: 검색 결과 (검색 중일 때만 표시) -->
+            <div v-if="inviteSearchQuery" class="invite-panel search-panel">
+              <div class="area-header">
+                <v-icon size="18">mdi-account-search</v-icon>
+                <span>검색 결과</span>
+              </div>
+              
+              <div class="invite-members-area">
+                <div v-if="isLoadingInviteSearch" class="modern-loading">
+                  <v-progress-circular indeterminate color="primary" size="32" />
+                  <p>검색 중...</p>
+                </div>
+                
+                <div v-else-if="inviteSearchResults.length === 0" class="modern-empty">
+                  <v-icon size="48" color="grey-lighten-1">mdi-account-question-outline</v-icon>
+                  <h4>검색 결과 없음</h4>
+                  <p>다른 이름이나 이메일로 검색해보세요</p>
+                </div>
+                
+                <div v-else class="invite-member-list">
+                  <div
+                    v-for="member in inviteSearchResults"
+                    :key="member.memberSeq"
+                    class="invite-member-item"
+                    :class="{ 
+                      selected: isInvited(member.memberSeq),
+                      disabled: isAlreadyMember(member.memberSeq)
+                    }"
+                    @click="toggleInviteList(member)"
+                  >
+                    <v-avatar size="40" color="primary">
+                      <v-img v-if="member.profileImage" :src="member.profileImage" />
+                      <span v-else>{{ member.avatarText }}</span>
+                    </v-avatar>
+                    <div class="member-info">
+                      <p class="member-name">
+                        {{ member.name }}
+                        <v-chip 
+                          v-if="isAlreadyMember(member.memberSeq)"
+                          size="x-small"
+                          color="success"
+                          variant="flat"
+                          class="ml-2"
+                        >
+                          멤버
+                        </v-chip>
+                      </p>
+                      <p class="member-email">{{ member.email }}</p>
+                    </div>
+                    <v-icon 
+                      v-if="isAlreadyMember(member.memberSeq)"
+                      color="success"
+                      size="24"
+                    >
+                      mdi-account-check
+                    </v-icon>
+                    <v-icon 
+                      v-else-if="isInvited(member.memberSeq)"
+                      color="primary"
+                      size="24"
+                    >
+                      mdi-check-circle
+                    </v-icon>
                   </div>
-                  <div class="legend-item participant">
-                    <v-icon size="14">mdi-account</v-icon>
-                    <span>PARTICIPANT</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- 오른쪽: 초대 목록 -->
+            <div class="invite-panel invite-list-panel">
+              <div class="area-header">
+                <v-icon size="18">mdi-account-multiple-plus</v-icon>
+                <span>초대 목록 ({{ invitedMembers.length }}명)</span>
+              </div>
+
+              <div class="invite-list-area">
+                <div v-if="invitedMembers.length === 0" class="modern-empty">
+                  <v-icon size="64" color="grey-lighten-1">mdi-account-plus-outline</v-icon>
+                  <h4>초대할 멤버를 선택하세요</h4>
+                  <p>왼쪽에서 친구를 클릭하여 추가</p>
+                </div>
+
+                <div v-else class="invited-member-list">
+                  <div
+                    v-for="member in invitedMembers"
+                    :key="member.memberSeq || member.id"
+                    class="invited-member-item"
+                  >
+                    <v-avatar size="40" color="primary">
+                      <v-img v-if="member.profileImage" :src="member.profileImage" />
+                      <span v-else>{{ member.avatarText }}</span>
+                    </v-avatar>
+                    <div class="member-info">
+                      <p class="member-name">{{ member.name }}</p>
+                      <p class="member-email">{{ member.email }}</p>
+                    </div>
+                    <v-btn
+                      icon
+                      size="small"
+                      variant="text"
+                      @click="removeFromInviteList(member.memberSeq || member.id)"
+                    >
+                      <v-icon size="20">mdi-close</v-icon>
+                    </v-btn>
+                  </div>
+                </div>
+              </div>
+
+              <!-- 초대 버튼 -->
+              <div class="invite-action">
+                <v-btn
+                  color="primary"
+                  variant="flat"
+                  size="large"
+                  @click="handleInviteMembers"
+                  prepend-icon="mdi-send"
+                  block
+                  :disabled="invitedMembers.length === 0"
+                >
+                  {{ invitedMembers.length > 0 ? `${invitedMembers.length}명 초대하기` : '멤버를 선택하세요' }}
+                </v-btn>
+              </div>
+            </div>
+          </div>
+        </v-window-item>
+
+        <!-- 멤버 권한 관리 탭 -->
+        <v-window-item value="permissions">
+          <div class="content-section">
+            <!-- 권한 안내 -->
+            <div class="info-banner">
+              <v-icon color="primary" size="20">mdi-information</v-icon>
+              <div class="info-text">
+                <strong>권한 관리 안내</strong>
+                <p>프로젝트 멤버의 권한을 관리할 수 있습니다. SUPER 권한자만 다른 멤버의 권한을 변경할 수 있습니다.</p>
+              </div>
+        </div>
+        
+            <!-- 권한 범례 -->
+            <div class="permission-legend-card">
+              <div class="legend-item-modern">
+                <div class="legend-badge super">
+                  <v-icon size="16">mdi-shield-crown</v-icon>
+              </div>
+                <div class="legend-info">
+                  <strong>소유자 (SUPER)</strong>
+                  <p>프로젝트의 모든 권한을 가지며 멤버 관리 및 프로젝트 삭제 가능</p>
+            </div>
+                  </div>
+              <div class="legend-item-modern">
+                <div class="legend-badge participant">
+                  <v-icon size="16">mdi-account</v-icon>
+                </div>
+                <div class="legend-info">
+                  <strong>참여자 (PARTICIPANT)</strong>
+                  <p>프로젝트의 일반 기능을 사용할 수 있는 멤버</p>
                   </div>
                 </div>
               </div>
               
-              <div class="members-list">
+            <!-- 멤버 권한 목록 -->
+            <div class="members-card">
+              <div class="card-label">
+                <v-icon size="18">mdi-account-group</v-icon>
+                <span>팀원 목록 ({{ teamMembers.length }}명)</span>
+              </div>
+              
+              <div class="members-content">
                 <!-- 로딩 상태 -->
-                <div v-if="isLoadingMembers" class="loading-state">
-                  <v-progress-circular indeterminate size="24" color="primary" />
-                  <span>멤버 목록을 불러오는 중...</span>
+                <div v-if="isLoadingMembers" class="modern-loading">
+                  <v-progress-circular indeterminate size="32" color="primary" />
+                  <p>멤버 목록을 불러오는 중...</p>
                 </div>
                 
                 <!-- 멤버 목록이 없는 경우 -->
-                <div v-else-if="teamMembers.length === 0" class="empty-state">
-                  <v-icon size="48" color="grey">mdi-account-group-outline</v-icon>
-                  <span>멤버가 없습니다.</span>
+                <div v-else-if="teamMembers.length === 0" class="modern-empty">
+                  <v-icon size="64" color="grey-lighten-1">mdi-account-group-outline</v-icon>
+                  <h4>멤버가 없습니다</h4>
                 </div>
                 
                 <!-- 멤버 목록 -->
+                <div v-else class="permission-member-list">
                 <div 
-                  v-else
                   v-for="member in sortedTeamMembers" 
                   :key="member.id"
-                  class="member-item"
+                    class="permission-member-item"
                 >
-                  <div class="member-info">
-                    <v-avatar size="32" color="primary">
+                    <div class="member-left">
+                      <v-avatar size="48" color="primary">
                       <span class="text-white font-weight-bold">{{ member.avatar }}</span>
                     </v-avatar>
-                    <div class="member-details">
-                      <div class="member-name">
-                        {{ member.name }}
+                      <div class="member-info">
+                        <div class="member-name-row">
+                          <p class="member-name">{{ member.name }}</p>
                         <v-chip 
                           v-if="Number(member.id) === Number(currentUserId)"
                           size="x-small"
                           color="primary"
-                          variant="flat"
-                          class="ml-2"
+                            variant="tonal"
                         >
-                          본인
+                            나
                         </v-chip>
                       </div>
+                        <div class="member-status">
                       <div 
-                        class="status-dot"
+                            class="status-indicator"
                         :class="getStatusColor(member.status)"
                       ></div>
+                          <span class="status-text">{{ member.status === 'online' ? '온라인' : member.status === 'away' ? '자리비움' : '오프라인' }}</span>
+                        </div>
                     </div>
                   </div>
                   
-                  <div class="permission-toggle">
-                    <!-- SUPER 권한을 가진 사용자만 권한 변경 가능 -->
-                    <v-btn-toggle
-                      v-if="feature.key === 'project' && isCurrentUserSuper"
-                      :model-value="memberPermissions[feature.key][member.id]"
-                      @update:model-value="updatePermission(feature.key, member.id, $event)"
-                      :disabled="member.id === currentUserId && memberPermissions[feature.key][member.id] === 'SUPER'"
-                      mandatory
-                      density="compact"
-                      class="permission-buttons"
-                    >
-                      <v-btn value="PARTICIPANT" size="small" class="participant-btn">
-                        <v-icon size="14">mdi-account</v-icon>
-                        <span>참여</span>
-                      </v-btn>
-                      <v-btn value="SUPER" size="small" class="super-btn">
-                        <v-icon size="14">mdi-shield-crown</v-icon>
-                        <span>소유자</span>
-                      </v-btn>
-                    </v-btn-toggle>
-                    
-                    <!-- 권한 변경 불가능한 경우 현재 권한만 표시 -->
-                    <div v-else-if="feature.key === 'project'" class="permission-display">
+                    <div class="permission-control">
+                      <!-- SUPER 권한을 가진 사용자가 다른 멤버를 관리하는 경우 -->
+                      <div v-if="isCurrentUserSuper && Number(member.memberSeq) !== Number(currentUserId)" class="unified-permission-group">
+                        <!-- 소유자 버튼 -->
+                        <v-btn
+                          :class="['unified-btn', 'unified-btn-left', 'super-btn', { 'active': memberPermissions['project'][member.id] === 'SUPER' }]"
+                          @click="updatePermission('project', member.id, 'SUPER')"
+                        >
+                          <v-icon size="16">mdi-shield-crown</v-icon>
+                          <span>소유자</span>
+                        </v-btn>
+                        
+                        <!-- 참여자 버튼 -->
+                        <v-btn
+                          :class="[
+                            'unified-btn', 
+                            'participant-btn', 
+                            { 'active': memberPermissions['project'][member.id] === 'PARTICIPANT' },
+                            { 'unified-btn-right': memberPermissions['project'][member.id] === 'SUPER' },
+                            { 'unified-btn-middle': memberPermissions['project'][member.id] === 'PARTICIPANT' }
+                          ]"
+                          @click="updatePermission('project', member.id, 'PARTICIPANT')"
+                        >
+                          <v-icon size="16">mdi-account</v-icon>
+                          <span>참여자</span>
+                        </v-btn>
+                        
+                        <!-- 강제 탈퇴 버튼 (PARTICIPANT인 경우만) -->
+                        <v-btn
+                          v-if="memberPermissions['project'][member.id] === 'PARTICIPANT'"
+                          class="unified-btn unified-btn-right kick-btn-unified"
+                          @click="handleKickMember(member)"
+                        >
+                          <v-icon size="16">mdi-account-remove</v-icon>
+                          <span>강제 탈퇴</span>
+                        </v-btn>
+                      </div>
+                      
+                      <!-- 본인이거나 권한 변경 불가능한 경우 현재 권한만 표시 -->
                       <v-chip 
-                        :color="memberPermissions[feature.key][member.id] === 'SUPER' ? 'primary' : 'grey'"
-                        size="small"
-                        variant="outlined"
+                        v-else
+                        :color="memberPermissions['project'][member.id] === 'SUPER' ? 'error' : 'primary'"
+                        variant="flat"
+                        class="permission-display-chip"
                       >
                         <v-icon 
-                          size="14" 
-                          :icon="memberPermissions[feature.key][member.id] === 'SUPER' ? 'mdi-shield-crown' : 'mdi-account'"
+                          start
+                          size="16" 
+                          :icon="memberPermissions['project'][member.id] === 'SUPER' ? 'mdi-shield-crown' : 'mdi-account'"
                         ></v-icon>
-                        <span>{{ memberPermissions[feature.key][member.id] === 'SUPER' ? '소유자' : '참여' }}</span>
+                        <span>{{ memberPermissions['project'][member.id] === 'SUPER' ? '소유자' : '참여자' }}</span>
                       </v-chip>
-                    </div>
-                    
-                  </div>
                 </div>
               </div>
             </div>
@@ -1310,27 +1851,95 @@ onMounted(() => {
         </div>
       </div>
         </v-window-item>
-      </v-window>
-
-      <!-- 액션 버튼 -->
-      <div class="dialog-actions">
-        <v-btn 
-          variant="outlined"
+        </v-window>
+      </v-card-text>
+      
+      <!-- 모던한 하단 액션 버튼 -->
+      <div class="modern-actions">
+        <v-btn
+          variant="text"
+          size="large"
           @click="workspaceSettingsOpen = false"
           class="cancel-btn"
         >
           취소
         </v-btn>
-        <v-btn 
-          color="primary" 
+        <v-btn
+          v-if="settingsTab === 'info'"
+          color="primary"
+          variant="flat"
+          size="large"
           @click="saveWorkspaceSettings"
+          prepend-icon="mdi-content-save"
           :disabled="!hasChanges"
           class="save-btn"
         >
-          <v-icon left>mdi-content-save</v-icon>
-          저장
+          변경사항 저장
         </v-btn>
       </div>
+    </v-card>
+  </v-dialog>
+
+  <!-- 워크스페이스 삭제 확인 다이얼로그 -->
+  <v-dialog v-model="deleteConfirmDialog" max-width="500" persistent>
+    <v-card>
+      <v-card-title class="text-h5 text-error d-flex align-center">
+        <v-icon color="error" class="mr-2">mdi-alert-circle</v-icon>
+        워크스페이스 삭제 확인
+      </v-card-title>
+      
+      <v-card-text class="pt-4">
+        <v-alert
+          type="error"
+          variant="tonal"
+          density="comfortable"
+          class="mb-4"
+        >
+          <strong>경고:</strong> 이 작업은 되돌릴 수 없습니다!
+        </v-alert>
+        
+        <p class="mb-4">
+          워크스페이스 <strong>"{{ props.currentWorkspace?.name }}"</strong>를 삭제하시겠습니까?
+        </p>
+        
+        <p class="mb-4">
+          이 워크스페이스의 모든 데이터(채팅, 파일, 일정 등)가 영구적으로 삭제됩니다.
+        </p>
+        
+        <p class="mb-2">
+          계속하려면 워크스페이스 이름을 정확히 입력하세요:
+        </p>
+        
+        <v-text-field
+          v-model="deleteConfirmText"
+          :placeholder="props.currentWorkspace?.name"
+          variant="outlined"
+          density="comfortable"
+          :error="deleteConfirmText && deleteConfirmText !== props.currentWorkspace?.name"
+          :error-messages="deleteConfirmText && deleteConfirmText !== props.currentWorkspace?.name ? '워크스페이스 이름이 일치하지 않습니다' : ''"
+          autofocus
+        />
+      </v-card-text>
+      
+      <v-card-actions>
+        <v-spacer />
+        <v-btn
+          text
+          @click="deleteConfirmDialog = false"
+          :disabled="isDeletingWorkspace"
+        >
+          취소
+        </v-btn>
+        <v-btn
+          color="error"
+          variant="elevated"
+          @click="handleDeleteWorkspace"
+          :disabled="deleteConfirmText !== props.currentWorkspace?.name"
+          :loading="isDeletingWorkspace"
+        >
+          영구 삭제
+        </v-btn>
+      </v-card-actions>
     </v-card>
   </v-dialog>
 
@@ -1443,6 +2052,30 @@ onMounted(() => {
     </div>
 
   </v-navigation-drawer>
+
+  <!-- 커스텀 토스트 메시지 -->
+  <div v-if="showToast" :class="['custom-toast', `toast-${toastType}`]">
+    <div class="toast-content">
+      <div class="toast-icon">
+        <v-icon color="white" size="24">
+          {{ toastType === 'success' ? 'mdi-check-circle' : toastType === 'error' ? 'mdi-alert-circle' : 'mdi-alert' }}
+        </v-icon>
+      </div>
+      <div class="toast-message">
+        <p class="toast-title">{{ toastTitle }}</p>
+        <p class="toast-text">{{ toastMessage }}</p>
+      </div>
+      <v-btn
+        icon
+        size="small"
+        variant="text"
+        class="toast-close"
+        @click="showToast = false"
+      >
+        <v-icon color="white" size="20">mdi-close</v-icon>
+      </v-btn>
+    </div>
+  </div>
 </template>
 
 <style scoped>
@@ -1497,419 +2130,878 @@ onMounted(() => {
   z-index: 1008;
 }
 
-/* 팀 설정 버튼 */
-.team-settings-btn {
-  color: rgba(var(--v-theme-on-surface), 0.7) !important;
-  transition: all 0.2s ease !important;
-}
+/* =====================================================
+   프로젝트 설정 모달 - 모던한 새 디자인
+   ===================================================== */
 
-.team-settings-btn:hover {
-  color: rgb(var(--v-theme-primary)) !important;
-  background: rgba(var(--v-theme-primary), 0.08) !important;
-}
-
-/* 팀 설정 다이얼로그 */
-.team-settings-dialog {
-  border-radius: 16px !important;
+.modern-settings-dialog {
+  border-radius: 24px !important;
   overflow: hidden;
-  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1) !important;
+  box-shadow: 0 24px 48px rgba(0, 0, 0, 0.16) !important;
 }
 
-.dialog-header {
-  padding: 24px 24px 16px;
-  background: rgb(var(--v-theme-surface));
-  border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.12);
+/* 모던한 헤더 */
+.modern-header {
+  position: relative;
+  padding: 32px 32px 24px;
+  background: linear-gradient(135deg, rgb(var(--v-theme-primary)) 0%, rgba(var(--v-theme-primary), 0.85) 100%);
+  color: white;
 }
 
-.header-content {
+.header-gradient {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1440 320"><path fill="rgba(255,255,255,0.1)" d="M0,96L48,112C96,128,192,160,288,160C384,160,480,128,576,122.7C672,117,768,139,864,149.3C960,160,1056,160,1152,138.7C1248,117,1344,75,1392,53.3L1440,32L1440,320L1392,320C1344,320,1248,320,1152,320C1056,320,960,320,864,320C768,320,672,320,576,320C480,320,384,320,288,320C192,320,96,320,48,320L0,320Z"></path></svg>') no-repeat bottom;
+  background-size: cover;
+  opacity: 0.4;
+}
+
+.header-content-wrapper {
+  position: relative;
+  z-index: 1;
   display: flex;
   align-items: center;
   justify-content: space-between;
 }
 
-.header-left {
+.header-left-section {
   display: flex;
+  align-items: center;
+  gap: 20px;
+}
+
+.icon-badge {
+  width: 60px;
+  height: 60px;
+  background: rgba(255, 255, 255, 0.2);
+  backdrop-filter: blur(10px);
+  border-radius: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+}
+
+.title-section {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.main-title {
+  font-size: 28px;
+  font-weight: 700;
+  margin: 0;
+  letter-spacing: -0.5px;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.subtitle {
+  font-size: 14px;
+  opacity: 0.9;
+  margin: 0;
+  font-weight: 500;
+}
+
+.modern-close-btn {
+  background: rgba(255, 255, 255, 0.2) !important;
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.3) !important;
+}
+
+.modern-close-btn:hover {
+  background: rgba(255, 255, 255, 0.3) !important;
+  transform: rotate(90deg);
+}
+
+/* 탭 네비게이션 */
+.tabs-container {
+  padding: 20px 32px 0;
+  background: rgb(var(--v-theme-surface));
+}
+
+.tab-pills {
+  display: flex;
+  gap: 8px;
+  border-bottom: 2px solid rgba(var(--v-theme-on-surface), 0.08);
+}
+
+.tab-pill {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 24px;
+  background: transparent;
+  border: none;
+  border-radius: 12px 12px 0 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: rgba(var(--v-theme-on-surface), 0.6);
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+  border-bottom: 3px solid transparent;
+}
+
+.tab-pill:hover {
+  background: rgba(var(--v-theme-primary), 0.08);
+  color: rgb(var(--v-theme-primary));
+}
+
+.tab-pill.active {
+  background: rgba(var(--v-theme-primary), 0.12);
+  color: rgb(var(--v-theme-primary));
+  border-bottom-color: rgb(var(--v-theme-primary));
+}
+
+/* 컨텐츠 영역 */
+.modern-content {
+  padding: 0 !important;
+  max-height: 60vh;
+  overflow-y: auto;
+}
+
+.settings-window {
+  min-height: 400px;
+}
+
+.content-section {
+  padding: 24px 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+/* 카드 공통 스타일 */
+.profile-card,
+.danger-card,
+.members-card,
+.invite-queue-card {
+  background: rgb(var(--v-theme-surface));
+  border: 1px solid rgba(var(--v-theme-on-surface), 0.12);
+  border-radius: 16px;
+  overflow: hidden;
+  transition: all 0.3s ease;
+}
+
+.profile-card:hover,
+.members-card:hover {
+  border-color: rgba(var(--v-theme-primary), 0.3);
+  box-shadow: 0 4px 16px rgba(var(--v-theme-primary), 0.08);
+}
+
+.card-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 16px 20px;
+  background: rgba(var(--v-theme-primary), 0.05);
+  border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.08);
+  font-size: 14px;
+  font-weight: 600;
+  color: rgb(var(--v-theme-primary));
+}
+
+.card-label.danger {
+  background: rgba(var(--v-theme-error), 0.05);
+  color: rgb(var(--v-theme-error));
+}
+
+/* 프로필 섹션 */
+.profile-content {
+  padding: 32px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.avatar-section {
+  display: flex;
+  flex-direction: column;
   align-items: center;
   gap: 12px;
 }
 
-.header-icon {
-  font-size: 24px;
-  color: rgb(var(--v-theme-primary));
+.avatar-wrapper {
+  position: relative;
+  cursor: pointer;
+  transition: transform 0.3s ease;
 }
 
-.dialog-title {
-  font-size: 20px;
+.avatar-wrapper:hover {
+  transform: scale(1.05);
+}
+
+.avatar-wrapper:hover .avatar-overlay {
+  opacity: 1;
+}
+
+.project-avatar {
+  border: 4px solid rgba(var(--v-theme-primary), 0.2);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+}
+
+.avatar-text {
+  font-size: 48px;
+  font-weight: 700;
+  color: white;
+}
+
+.avatar-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(4px);
+  border-radius: 50%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.overlay-text {
+  color: white;
+  font-size: 13px;
   font-weight: 600;
+  margin-top: 4px;
+}
+
+.avatar-hint {
+  font-size: 13px;
+  color: rgba(var(--v-theme-on-surface), 0.6);
   margin: 0;
-  letter-spacing: -0.025em;
-  color: rgb(var(--v-theme-on-surface));
 }
 
-.close-btn {
-  color: rgba(var(--v-theme-on-surface), 0.6) !important;
-  background: rgba(var(--v-theme-on-surface), 0.08) !important;
-  border-radius: 8px !important;
-  transition: all 0.2s ease !important;
+.name-section {
+  flex: 1;
 }
 
-.close-btn:hover {
-  background: rgba(var(--v-theme-on-surface), 0.12) !important;
-  color: rgb(var(--v-theme-on-surface)) !important;
+.field-label {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  color: rgba(var(--v-theme-on-surface), 0.8);
+  margin-bottom: 8px;
 }
 
-/* 섹션 스타일 */
-.team-name-section,
-.permissions-section {
+.modern-input :deep(.v-field) {
+  border-radius: 12px;
+  font-size: 16px;
+}
+
+/* 위험 영역 */
+.danger-card {
+  border-color: rgba(var(--v-theme-error), 0.3);
+}
+
+.danger-content {
   padding: 24px;
 }
 
-.section-header {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 20px;
+.warning-box {
+  text-align: center;
+  padding: 24px;
+  background: rgba(var(--v-theme-error), 0.05);
+  border-radius: 12px;
 }
 
-.section-icon {
-  color: rgb(var(--v-theme-primary));
-  font-size: 20px;
-}
-
-.section-title {
+.warning-title {
   font-size: 18px;
   font-weight: 600;
-  color: rgb(var(--v-theme-on-surface));
+  color: rgb(var(--v-theme-error));
+  margin: 12px 0 8px;
+}
+
+.warning-text {
+  font-size: 14px;
+  color: rgba(var(--v-theme-on-surface), 0.7);
+  line-height: 1.6;
   margin: 0;
 }
 
-.team-name-field {
-  max-width: 400px;
-  font-size: 16px;
+/* 멤버 초대 레이아웃 */
+.invite-search-header {
+  padding: 24px 32px 16px;
+  background: rgb(var(--v-theme-surface));
 }
 
-/* 기능 목록 */
-.features-list {
+.invite-layout {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+  padding: 0 32px 24px;
+  min-height: 500px;
+  transition: grid-template-columns 0.3s ease;
+}
+
+.invite-layout.has-search {
+  grid-template-columns: 1fr 1fr 1fr;
+}
+
+.invite-panel {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-}
-
-.feature-card {
-  border: 1px solid rgba(var(--v-theme-on-surface), 0.12);
-  border-radius: 12px;
+  gap: 16px;
   background: rgb(var(--v-theme-surface));
-  overflow: hidden;
-  transition: all 0.2s ease;
+  border: 1px solid rgba(var(--v-theme-on-surface), 0.12);
+  border-radius: 16px;
+  padding: 20px;
+  min-width: 0;
 }
 
-.feature-card:hover {
-  border-color: rgba(var(--v-theme-primary), 0.3);
-  box-shadow: 0 4px 12px rgba(var(--v-theme-primary), 0.08);
+.invite-panel.search-panel {
+  border: 2px solid rgb(var(--v-theme-primary));
+  background: rgba(var(--v-theme-primary), 0.02);
+  animation: slideIn 0.3s ease;
 }
 
-.feature-header {
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.invite-members-area,
+.invite-list-area {
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
+}
+
+.invite-members-area::-webkit-scrollbar,
+.invite-list-area::-webkit-scrollbar {
+  width: 6px;
+}
+
+.invite-members-area::-webkit-scrollbar-track,
+.invite-list-area::-webkit-scrollbar-track {
+  background: rgba(var(--v-theme-on-surface), 0.05);
+  border-radius: 10px;
+}
+
+.invite-members-area::-webkit-scrollbar-thumb,
+.invite-list-area::-webkit-scrollbar-thumb {
+  background: rgba(var(--v-theme-on-surface), 0.2);
+  border-radius: 10px;
+}
+
+.invite-members-area::-webkit-scrollbar-thumb:hover,
+.invite-list-area::-webkit-scrollbar-thumb:hover {
+  background: rgba(var(--v-theme-on-surface), 0.3);
+}
+
+.area-header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 16px 20px;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.feature-header:hover {
-  background: rgba(var(--v-theme-primary), 0.04);
-}
-
-.feature-info {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.feature-icon {
-  color: rgb(var(--v-theme-primary));
-  font-size: 20px;
-}
-
-.feature-name {
-  font-size: 16px;
-  font-weight: 500;
-  color: rgb(var(--v-theme-on-surface));
-}
-
-.toggle-icon {
-  color: rgba(var(--v-theme-on-surface), 0.6);
-  transition: transform 0.2s ease;
-}
-
-.toggle-icon.expanded {
-  transform: rotate(180deg);
-}
-
-/* 팀원 섹션 */
-.members-section {
-  border-top: 1px solid rgba(var(--v-theme-on-surface), 0.08);
-  background: rgba(var(--v-theme-surface), 0.3);
-}
-
-.members-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 12px 20px;
-  background: rgba(var(--v-theme-surface), 0.5);
-  border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.08);
-}
-
-.members-title {
+  gap: 8px;
+  padding: 12px 16px;
+  background: rgba(var(--v-theme-primary), 0.08);
+  border-radius: 10px;
   font-size: 14px;
   font-weight: 600;
-  color: rgb(var(--v-theme-on-surface));
+  color: rgb(var(--v-theme-primary));
+  margin-bottom: 12px;
 }
 
-.permission-legend {
-  display: flex;
-  gap: 16px;
-}
-
-.legend-item {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 12px;
-  font-weight: 500;
-}
-
-.legend-item.super {
-  color: #dc2626;
-}
-
-.legend-item.manager {
-  color: #f59e0b;
-}
-
-.legend-item.participant {
-  color: #3b82f6;
-}
-
-.members-list {
-  padding: 16px 20px;
+/* 멤버 목록 스타일 */
+.invite-member-list,
+.invited-member-list {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 8px;
 }
 
-.member-item {
+.invite-member-item,
+.invited-member-item {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 12px 16px;
-  background: rgb(var(--v-theme-surface));
-  border-radius: 8px;
-  border: 1px solid rgba(var(--v-theme-on-surface), 0.12);
-  transition: all 0.2s ease;
+  gap: 12px;
+  padding: 12px;
+  background: rgba(var(--v-theme-surface), 0.5);
+  border: 1px solid rgba(var(--v-theme-on-surface), 0.1);
+  border-radius: 10px;
+  transition: all 0.3s ease;
+  cursor: pointer;
 }
 
-.member-item:hover {
+.invited-member-item {
+  cursor: default;
+}
+
+.invite-member-item:hover {
+  background: rgba(var(--v-theme-primary), 0.05);
   border-color: rgba(var(--v-theme-primary), 0.3);
-  box-shadow: 0 2px 8px rgba(var(--v-theme-primary), 0.08);
+  transform: translateX(4px);
+}
+
+.invite-member-item.selected {
+  background: rgba(var(--v-theme-primary), 0.12);
+  border-color: rgba(var(--v-theme-primary), 0.5);
+}
+
+.invite-member-item.selected:hover {
+  background: rgba(var(--v-theme-primary), 0.15);
+}
+
+.invite-member-item.disabled {
+  background: rgba(var(--v-theme-on-surface), 0.03);
+  border-color: rgba(var(--v-theme-on-surface), 0.08);
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.invite-member-item.disabled:hover {
+  background: rgba(var(--v-theme-on-surface), 0.03);
+  border-color: rgba(var(--v-theme-on-surface), 0.08);
+  transform: none;
+}
+
+.invited-member-item:hover {
+  background: rgba(var(--v-theme-surface), 0.8);
+}
+
+.invite-action {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid rgba(var(--v-theme-on-surface), 0.08);
+}
+
+.member-left {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex: 1;
 }
 
 .member-info {
   display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.member-details {
-  display: flex;
-  align-items: center;
-  gap: 8px;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
 }
 
 .member-name {
-  font-size: 14px;
-  font-weight: 500;
+  font-size: 15px;
+  font-weight: 600;
   color: rgb(var(--v-theme-on-surface));
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.member-email {
+  font-size: 13px;
+  color: rgba(var(--v-theme-on-surface), 0.6);
+  margin: 0;
+}
+
+.modern-search :deep(.v-field) {
+  border-radius: 12px;
+}
+
+.modern-loading,
+.modern-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 48px 24px;
+  text-align: center;
+}
+
+.modern-empty h4 {
+  font-size: 16px;
+  font-weight: 600;
+  color: rgb(var(--v-theme-on-surface));
+  margin: 0;
+}
+
+.modern-empty p {
+  font-size: 14px;
+  color: rgba(var(--v-theme-on-surface), 0.6);
+  margin: 0;
+}
+
+/* 권한 관리 스타일 */
+.info-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 16px 20px;
+  background: rgba(var(--v-theme-primary), 0.08);
+  border-left: 4px solid rgb(var(--v-theme-primary));
+  border-radius: 12px;
+}
+
+.info-text {
+  flex: 1;
+}
+
+.info-text strong {
+  display: block;
+  font-size: 14px;
+  margin-bottom: 4px;
+  color: rgb(var(--v-theme-on-surface));
+}
+
+.info-text p {
+  font-size: 13px;
+  color: rgba(var(--v-theme-on-surface), 0.7);
+  margin: 0;
+  line-height: 1.5;
+}
+
+.permission-legend-card {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 16px;
+  padding: 20px;
+  background: rgb(var(--v-theme-surface));
+  border: 1px solid rgba(var(--v-theme-on-surface), 0.12);
+  border-radius: 16px;
+}
+
+.legend-item-modern {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.legend-badge {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.legend-badge.super {
+  background: rgba(var(--v-theme-error), 0.15);
+  color: rgb(var(--v-theme-error));
+}
+
+.legend-badge.participant {
+  background: rgba(var(--v-theme-primary), 0.15);
+  color: rgb(var(--v-theme-primary));
+}
+
+.legend-info {
+  flex: 1;
+}
+
+.legend-info strong {
+  display: block;
+  font-size: 14px;
+  margin-bottom: 4px;
+  color: rgb(var(--v-theme-on-surface));
+}
+
+.legend-info p {
+  font-size: 12px;
+  color: rgba(var(--v-theme-on-surface), 0.6);
+  margin: 0;
+  line-height: 1.4;
+}
+
+.permission-member-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 8px 0;
+}
+
+.permission-member-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px;
+  background: #ffffff;
+  border: 1px solid rgba(var(--v-theme-on-surface), 0.08);
+  border-radius: 12px;
+  transition: all 0.3s ease;
+  gap: 16px;
+}
+
+.permission-member-item:hover {
+  background: rgba(var(--v-theme-primary), 0.02);
+  border-color: rgba(var(--v-theme-primary), 0.2);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+  transform: translateY(-1px);
+}
+
+.member-name-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.member-status {
   display: flex;
   align-items: center;
   gap: 6px;
+  margin-top: 2px;
 }
 
-.current-user-badge {
-  font-size: 11px;
-  font-weight: 600;
-  color: rgb(var(--v-theme-primary));
-  background: rgba(var(--v-theme-primary), 0.1);
-  padding: 2px 6px;
-  border-radius: 4px;
-}
-
-.status-dot {
+.status-indicator {
   width: 8px;
   height: 8px;
   border-radius: 50%;
 }
 
-.status-dot.green {
+.status-indicator.green {
   background: #10b981;
+  box-shadow: 0 0 8px rgba(16, 185, 129, 0.5);
 }
 
-.status-dot.orange {
+.status-indicator.orange {
   background: #f59e0b;
+  box-shadow: 0 0 8px rgba(245, 158, 11, 0.5);
 }
 
-.status-dot.grey {
+.status-indicator.grey {
   background: #6b7280;
 }
 
-.permission-toggle {
-  display: flex;
-  align-items: center;
+.status-text {
+  font-size: 12px;
+  color: rgba(var(--v-theme-on-surface), 0.6);
 }
 
-.permission-buttons {
-  border-radius: 8px !important;
+.permission-control {
+  flex-shrink: 0;
+}
+
+/* 통합 권한 그룹 */
+.unified-permission-group {
+  display: inline-flex;
+  border: 1.5px solid rgba(var(--v-theme-on-surface), 0.15);
+  border-radius: 8px;
   overflow: hidden;
+  height: 40px;
 }
 
-.permission-buttons.v-btn-toggle--disabled {
-  opacity: 0.6;
-  pointer-events: none;
-}
-
-.participant-btn {
-  color: #3b82f6 !important;
-  background: #eff6ff !important;
-  border: 1px solid #dbeafe !important;
-  font-size: 12px !important;
-  font-weight: 500 !important;
+.unified-btn {
+  height: 40px !important;
+  min-width: 100px !important;
+  padding: 0 16px !important;
+  font-size: 13px !important;
+  font-weight: 600 !important;
   text-transform: none !important;
-  min-width: 60px !important;
+  border-radius: 0 !important;
+  border: none !important;
+  transition: all 0.2s ease !important;
+  background: transparent !important;
+  box-shadow: none !important;
 }
 
-.participant-btn.v-btn--active {
-  background: #3b82f6 !important;
+.unified-btn .v-icon {
+  margin-right: 6px;
+}
+
+/* 왼쪽 버튼 (소유자) - 항상 오른쪽 border */
+.unified-btn-left {
+  border-right: 1.5px solid rgba(var(--v-theme-on-surface), 0.15) !important;
+}
+
+/* 가운데 버튼 (참여자) - 강제탈퇴 버튼이 있을 때만 오른쪽 border */
+.unified-btn-middle {
+  border-right: 1.5px solid rgba(var(--v-theme-on-surface), 0.15) !important;
+}
+
+/* 오른쪽 버튼 (마지막 버튼) - border 없음 */
+.unified-btn-right {
+  border-right: none !important;
+}
+
+/* 강제탈퇴 버튼 너비 */
+.unified-btn.kick-btn-unified {
+  min-width: 120px !important;
+}
+
+/* 소유자 버튼 */
+.unified-btn.super-btn {
+  color: rgb(var(--v-theme-error)) !important;
+}
+
+.unified-btn.super-btn.active {
+  background: rgb(var(--v-theme-error)) !important;
   color: white !important;
-  border-color: #3b82f6 !important;
 }
 
-.manager-btn {
-  color: #f59e0b !important;
-  background: #fffbeb !important;
-  border: 1px solid #fed7aa !important;
-  font-size: 12px !important;
-  font-weight: 500 !important;
-  text-transform: none !important;
-  min-width: 60px !important;
+.unified-btn.super-btn:hover:not(.active):not(:disabled) {
+  background: rgba(var(--v-theme-error), 0.1) !important;
 }
 
-.manager-btn.v-btn--active {
-  background: #f59e0b !important;
+/* 참여자 버튼 */
+.unified-btn.participant-btn {
+  color: rgb(var(--v-theme-primary)) !important;
+}
+
+.unified-btn.participant-btn.active {
+  background: rgb(var(--v-theme-primary)) !important;
   color: white !important;
-  border-color: #f59e0b !important;
 }
 
-.super-btn {
-  color: #dc2626 !important;
-  background: #fef2f2 !important;
-  border: 1px solid #fecaca !important;
-  font-size: 12px !important;
-  font-weight: 500 !important;
-  text-transform: none !important;
-  min-width: 60px !important;
+.unified-btn.participant-btn:hover:not(.active):not(:disabled) {
+  background: rgba(var(--v-theme-primary), 0.1) !important;
 }
 
-.super-btn.v-btn--active {
-  background: #dc2626 !important;
+/* 강제 탈퇴 버튼 */
+.unified-btn.kick-btn-unified {
+  color: rgb(var(--v-theme-error)) !important;
+  font-weight: 600 !important;
+}
+
+.unified-btn.kick-btn-unified:hover {
+  background: rgb(var(--v-theme-error)) !important;
   color: white !important;
-  border-color: #dc2626 !important;
 }
 
-.super-btn:disabled,
-.participant-btn:disabled,
-.manager-btn:disabled {
+.unified-btn.kick-btn-unified:active {
+  background: rgba(var(--v-theme-error), 0.9) !important;
+}
+
+/* 비활성화 상태 */
+.unified-btn:disabled {
   opacity: 0.4 !important;
   cursor: not-allowed !important;
 }
 
-.super-btn:disabled.v-btn--active {
-  opacity: 0.7 !important;
+.permission-display-chip {
+  font-weight: 600;
 }
 
-/* 다이얼로그 액션 */
-.dialog-actions {
-  padding: 20px 24px;
-  background: rgba(var(--v-theme-surface), 0.5);
-  border-top: 1px solid rgba(var(--v-theme-on-surface), 0.08);
+/* 하단 액션 */
+.modern-actions {
   display: flex;
+  align-items: center;
   justify-content: flex-end;
   gap: 12px;
+  padding: 20px 32px;
+  background: rgba(var(--v-theme-surface), 0.8);
+  backdrop-filter: blur(10px);
+  border-top: 1px solid rgba(var(--v-theme-on-surface), 0.08);
 }
 
 .cancel-btn {
+  font-weight: 600 !important;
   text-transform: none !important;
-  font-weight: 500 !important;
 }
 
 .save-btn {
-  text-transform: none !important;
   font-weight: 600 !important;
-  color: white !important;
+  text-transform: none !important;
+  box-shadow: 0 4px 12px rgba(var(--v-theme-primary), 0.3) !important;
 }
 
-/* 반응형 */
+.save-btn:hover {
+  box-shadow: 0 6px 20px rgba(var(--v-theme-primary), 0.4) !important;
+  transform: translateY(-2px);
+}
+
+/* 반응형 디자인 */
 @media (max-width: 768px) {
-  .team-settings-dialog {
-    margin: 16px;
-    max-width: calc(100vw - 32px) !important;
+  .modern-settings-dialog {
+    margin: 8px;
+    max-width: calc(100vw - 16px) !important;
   }
   
-  .dialog-header {
-    padding: 20px 20px 12px;
+  .modern-header {
+    padding: 24px 20px 20px;
   }
   
-  .team-name-section,
-  .permissions-section {
+  .main-title {
+    font-size: 24px;
+  }
+  
+  .icon-badge {
+    width: 50px;
+    height: 50px;
+  }
+  
+  .tabs-container {
+    padding: 16px 20px 0;
+  }
+  
+  .tab-pill {
+    padding: 10px 16px;
+    font-size: 14px;
+  }
+  
+  .content-section {
     padding: 20px;
   }
   
-  .feature-header {
-    padding: 14px 16px;
+  .profile-content {
+    padding: 24px 20px;
   }
   
-  .members-header {
-    padding: 10px 16px;
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 8px;
-  }
-  
-  .members-list {
-    padding: 12px 16px;
-  }
-  
-  .member-item {
-    padding: 10px 12px;
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 12px;
-  }
-  
-  .permission-toggle {
-    width: 100%;
-    justify-content: center;
-  }
-  
-  .dialog-actions {
+  .modern-actions {
     padding: 16px 20px;
     flex-direction: column;
   }
   
   .cancel-btn,
   .save-btn {
+    width: 100% !important;
+  }
+  
+  .permission-member-item {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
+  
+  .permission-control {
     width: 100%;
+  }
+  
+  .unified-permission-group {
+    width: 100%;
+  }
+  
+  .unified-btn {
+    min-width: 80px !important;
+    font-size: 12px !important;
+    padding: 0 12px !important;
+  }
+  
+  .unified-btn.kick-btn-unified {
+    min-width: 100px !important;
+  }
+
+  /* 초대 레이아웃 모바일 */
+  .invite-search-header {
+    padding: 20px;
+  }
+
+  .invite-layout {
+    grid-template-columns: 1fr;
+    padding: 0 20px 20px;
+    gap: 16px;
+  }
+
+  .invite-layout.has-search {
+    grid-template-columns: 1fr;
+  }
+
+  .invite-panel {
+    padding: 16px;
   }
 }
 
@@ -2405,45 +3497,166 @@ onMounted(() => {
   }
 }
 
-/* 팀 정보 컨테이너 스타일 */
-.team-info-container {
+/* 커스텀 토스트 스타일 */
+.custom-toast {
+  position: fixed;
+  bottom: 32px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 9999;
+  animation: slideUpToast 0.5s cubic-bezier(0.68, -0.55, 0.265, 1.55) both;
+}
+
+@keyframes slideUpToast {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(100px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+}
+
+.toast-content {
   display: flex;
   align-items: center;
   gap: 16px;
-  margin-top: 16px;
-}
-
-.thumbnail-preview-wrapper {
+  padding: 16px 20px;
+  border-radius: 16px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+  min-width: 400px;
+  max-width: 600px;
   position: relative;
-  display: inline-block;
+  overflow: hidden;
+  background-size: 200% 200%;
+  animation: toastGradient 3s ease infinite;
 }
 
-.thumbnail-preview {
-  border: 2px solid rgba(var(--v-theme-primary), 0.2);
-  transition: all 0.3s ease;
-}
-
-.thumbnail-preview:hover {
-  border-color: rgb(var(--v-theme-primary));
-  transform: scale(1.05);
-}
-
-.upload-icon-btn {
+.toast-content::before {
+  content: '';
   position: absolute;
-  bottom: -4px;
-  right: -4px;
-  width: 24px !important;
-  height: 24px !important;
-  min-width: 24px !important;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
-  border: 2px solid white;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg,
+    transparent,
+    rgba(255, 255, 255, 0.2),
+    transparent);
+  animation: toastShimmer 2s infinite;
 }
 
-.upload-icon-btn:hover {
-  transform: scale(1.1);
+@keyframes toastGradient {
+  0%, 100% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
 }
 
-.team-name-field {
-  margin-top: 8px; /* 썸네일과 팀명 입력 필드의 수직 정렬을 위해 조정 */
+@keyframes toastShimmer {
+  0% {
+    left: -100%;
+  }
+  100% {
+    left: 100%;
+  }
 }
+
+.toast-success .toast-content {
+  background: linear-gradient(135deg,
+    #10b981 0%,
+    #059669 50%,
+    #047857 100%);
+}
+
+.toast-error .toast-content {
+  background: linear-gradient(135deg,
+    #ef4444 0%,
+    #dc2626 50%,
+    #b91c1c 100%);
+}
+
+.toast-warning .toast-content {
+  background: linear-gradient(135deg,
+    #f59e0b 0%,
+    #d97706 50%,
+    #b45309 100%);
+}
+
+.toast-icon {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 50%;
+  position: relative;
+  z-index: 1;
+  animation: toastIconPulse 2s ease-in-out infinite;
+}
+
+@keyframes toastIconPulse {
+  0%, 100% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(255, 255, 255, 0.4);
+  }
+  50% {
+    transform: scale(1.05);
+    box-shadow: 0 0 0 10px rgba(255, 255, 255, 0);
+  }
+}
+
+.toast-message {
+  flex: 1;
+  position: relative;
+  z-index: 1;
+}
+
+.toast-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: white;
+  margin: 0 0 4px 0;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.toast-text {
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.95);
+  margin: 0;
+  line-height: 1.4;
+}
+
+.toast-close {
+  flex-shrink: 0;
+  position: relative;
+  z-index: 1;
+  opacity: 0.8;
+  transition: all 0.2s ease;
+}
+
+.toast-close:hover {
+  opacity: 1;
+  transform: rotate(90deg);
+  background: rgba(255, 255, 255, 0.1) !important;
+}
+
+/* 토스트 자동 닫기 효과 */
+.custom-toast {
+  animation: slideUpToast 0.5s cubic-bezier(0.68, -0.55, 0.265, 1.55) both,
+             fadeOutToast 0.3s ease 4.7s both;
+}
+
+@keyframes fadeOutToast {
+  to {
+    opacity: 0;
+    transform: translateX(-50%) translateY(20px);
+  }
+}
+
 </style>

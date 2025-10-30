@@ -25,7 +25,7 @@ const decodeJWT = (token) => {
 // ----------------------
 const apiClient = axios.create({
   baseURL: import.meta.env.VITE_API_URL || 'http://localhost:8080',
-  timeout: 10000,
+  timeout: 30000, // 30초로 증가 (화상회의 방 생성은 시간이 오래 걸릴 수 있음)
   headers: { 'Content-Type': 'application/json' },
   withCredentials: true, // ✅ 쿠키 전송 활성화
 })

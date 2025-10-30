@@ -213,7 +213,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useWorkspaceStore } from '../../store/workspaceStore.js'
 import { getMyTasks, getProjectBoards, moveTaskToBoard, updateBoardOrders, deleteBoard, getBoardDetail } from '../../api/schedule/scheduleApi.js'
 import BoardCreateModal from './BoardCreateModal.vue'
@@ -237,7 +237,7 @@ const taskListRef = ref(null)
 const canScrollLeft = ref(false)
 const canScrollRight = ref(false)
 
-// 현재 프로젝트 ID
+// 현재 프로젝트 ID (팀 프로젝트의 개인 일정 = 해당 프로젝트에서 내가 담당한 업무)
 const currentProjectId = computed(() => {
   return workspaceStore.currentWorkspaceInfo?.workSpaceSeq || null
 })
@@ -276,13 +276,10 @@ const loadMyTasks = async () => {
     
     const response = await getMyTasks(currentProjectId.value)
     
-    if (response.success) {
-      myTasks.value = response.data || []
-    } else {
-      error.value = '담당 업무를 불러오는데 실패했습니다.'
-    }
+    const taskData = response?.data || response
+    myTasks.value = Array.isArray(taskData) ? taskData : []
   } catch (err) {
-    console.error('담당 업무 로드 실패:', err)
+    console.error('❌ 담당 업무 로드 실패:', err)
     error.value = '담당 업무를 불러오는 중 오류가 발생했습니다.'
   } finally {
     isLoading.value = false
@@ -300,12 +297,10 @@ const loadBoards = async () => {
     
     const response = await getProjectBoards(currentProjectId.value)
     
-    if (response.success) {
-      boards.value = response.data || []
-      console.log('로드된 보드 목록:', boards.value)
-    }
+    const boardData = response?.data || response
+    boards.value = Array.isArray(boardData) ? boardData : []
   } catch (err) {
-    console.error('보드 목록 로드 실패:', err)
+    console.error('❌ 보드 목록 로드 실패:', err)
   } finally {
     isLoadingBoards.value = false
   }
@@ -432,18 +427,24 @@ const onBoardOrderDrop = async (event, targetBoard) => {
 // 보드 수정
 const editBoard = async (board) => {
   try {
+    console.log('📡 보드 상세 정보 조회 시작:', board.boardSeq)
     // 보드 상세 정보 조회
     const response = await getBoardDetail(board.boardSeq)
-    if (response.success) {
-      // 수정 모드로 설정하고 모달 열기
-      editBoardData.value = response.data
+    console.log('📦 받은 응답:', response)
+    
+    // 백엔드 응답 구조 처리: { success, data } 또는 직접 객체
+    const boardData = response?.data || response
+    
+    if (boardData) {
+      editBoardData.value = boardData
       isEditMode.value = true
       showBoardModal.value = true
+      console.log('✅ 보드 수정 모달 열기')
     } else {
       alert('보드 정보를 불러오는데 실패했습니다.')
     }
   } catch (error) {
-    console.error('보드 상세 조회 실패:', error)
+    console.error('❌ 보드 상세 조회 실패:', error)
     alert('보드 정보를 불러오는데 실패했습니다.')
   }
 }
@@ -545,6 +546,17 @@ onMounted(async () => {
     updateScrollButtons()
   }
 })
+
+// currentProjectId 변경 감지
+watch(
+  currentProjectId,
+  (newId, oldId) => {
+    if (newId && newId !== oldId) {
+      loadMyTasks()
+      loadBoards()
+    }
+  }
+)
 </script>
 
 <style scoped>

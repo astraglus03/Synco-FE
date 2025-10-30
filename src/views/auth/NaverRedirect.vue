@@ -67,7 +67,7 @@ const sendCodeToServer = async (code, state) => {
         window.location.href = '/oauth/member-id'
         return
     }
-    window.location.href = '/workspace/personal/dashboard'
+    window.location.href = '/workspaces/personal/dashboard'
 }
 
 onMounted(() => {

@@ -8,6 +8,7 @@ import GoogleRedirect from '@/views/auth/GoogleRedirect.vue'
 import KakaoRedirect from '@/views/auth/KakaoRedirect.vue'
 import NaverRedirect from '@/views/auth/NaverRedirect.vue'
 import SocialMemberId from '@/views/auth/SocialMemberId.vue'
+import MeetingView from '@/views/MeetingView.vue'
 
 const routes = [
   {
@@ -18,11 +19,24 @@ const routes = [
   },
   {
     path: '/workspace',
-    redirect: '/workspace/personal/dashboard',
+    redirect: '/workspaces/personal/dashboard',
+    meta: { requiresAuth: true }, // 인증 필요
+  },
+  {
+    path: '/workspaces',
+    redirect: '/workspaces/personal/dashboard',
     meta: { requiresAuth: true }, // 인증 필요
   },
   {
     path: '/workspace/:workspaceId/:channel/:subChannel?',
+    redirect: (to) => {
+      // 기존 /workspace URL을 /workspaces로 리다이렉트
+      return `/workspaces/${to.params.workspaceId}/${to.params.channel}${to.params.subChannel ? '/' + to.params.subChannel : ''}`
+    },
+    meta: { requiresAuth: true },
+  },
+  {
+    path: '/workspaces/:workspaceId/:channel/:subChannel?',
     name: 'Workspace',
     component: MainLayout,
     meta: { requiresAuth: true }, // 인증 필요
@@ -32,6 +46,13 @@ const routes = [
     name: 'DocumentEditor',
     component: () => import('@/components/workspace/SharedDocEditor.vue'),
     props: true,
+  },
+  {
+    path: '/meeting/:roomId',
+    name: 'MeetingView',
+    component: MeetingView,
+    props: true,
+    meta: { requiresAuth: true },
   },
   {
     path: "/oauth/google/redirect",
@@ -80,7 +101,7 @@ router.beforeEach((to, from, next) => {
     next({ name: 'Landing' })
   } else if (to.name === 'Landing' && isAuthenticated) {
     // 이미 로그인한 사용자가 랜딩 페이지 접근 시도 → 워크스페이스로 리다이렉트
-    next({ path: '/workspace/personal/dashboard' })
+    next({ path: '/workspaces/personal/dashboard' })
   } else {
     // 정상 접근
     next()

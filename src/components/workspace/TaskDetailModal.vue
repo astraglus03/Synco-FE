@@ -1,5 +1,5 @@
 <template>
-  <v-dialog v-model="isOpen" max-width="1200px" persistent>
+  <v-dialog v-model="isOpen" max-width="1200px">
     <v-card class="task-detail-modal">
       <!-- 본문 -->
       <div class="modal-body">
@@ -52,11 +52,11 @@
           </div>
         </div>
 
-        <!-- 구분선 -->
-        <div class="divider"></div>
+        <!-- 구분선 (프로젝트 업무일 때만) -->
+        <div v-if="!props.isPersonal" class="divider"></div>
 
-        <!-- 오른쪽: 댓글 -->
-        <div class="comments-section">
+        <!-- 오른쪽: 댓글 (프로젝트 업무일 때만) -->
+        <div v-if="!props.isPersonal" class="comments-section">
           <h3 class="section-title">댓글</h3>
           
           <!-- 댓글 목록 -->
@@ -311,6 +311,10 @@ const props = defineProps({
   taskData: {
     type: Object,
     default: () => ({})
+  },
+  isPersonal: {
+    type: Boolean,
+    default: false
   }
 })
 
