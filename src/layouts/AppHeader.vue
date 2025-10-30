@@ -587,16 +587,6 @@ const getNotificationColor = (type) => {
   return colors[type] || 'primary'
 }
 
-// 우선순위 색상 가져오기
-const getPriorityColor = (priority) => {
-  const colors = {
-    high: 'red',
-    medium: 'orange',
-    normal: 'blue',
-    low: 'grey'
-  }
-  return colors[priority] || 'grey'
-}
 
 // 우선순위 텍스트 가져오기
 const getPriorityText = (priority) => {
@@ -613,7 +603,7 @@ const getPriorityText = (priority) => {
 const workspaceSettingsOpen = ref(false)
 const settingsTab = ref('info') // 'info', 'invite', 'permissions'
 const isWorkspaceOwner = ref(true)
-const expandedChannels = ref(new Set())
+// 제거: expandedChannels (사용하지 않음)
 
 // 팀명 (실제 워크스페이스 이름 사용)
 const teamName = ref('')
@@ -716,39 +706,6 @@ const sidebarFeatures = ref([
 const memberPermissions = ref({
   project: {}
 })
-
-// 팀 채널 목록
-const teamChannels = ref([
-  { id: 1, name: '일반', type: 'text', memberCount: 12, unreadCount: 3 },
-  { id: 2, name: '개발팀', type: 'text', memberCount: 8, unreadCount: 0 },
-  { id: 3, name: '디자인팀', type: 'text', memberCount: 5, unreadCount: 1 },
-  { id: 4, name: '마케팅팀', type: 'text', memberCount: 6, unreadCount: 0 },
-  { id: 5, name: '회의실-1', type: 'voice', memberCount: 0, unreadCount: 0 },
-  { id: 6, name: '회의실-2', type: 'voice', memberCount: 0, unreadCount: 0 }
-])
-
-// 채널 멤버 권한 설정
-const channelMemberPermissions = ref({
-  sendMessages: true,
-  addReactions: true,
-  useExternalEmojis: true,
-  mentionEveryone: false,
-  manageMessages: false
-})
-
-// 채널 펼치기/접기
-const toggleChannel = (channelId) => {
-  if (expandedChannels.value.has(channelId)) {
-    expandedChannels.value.delete(channelId)
-  } else {
-    expandedChannels.value.add(channelId)
-  }
-}
-
-// 채널이 펼쳐져 있는지 확인
-const isChannelExpanded = (channelId) => {
-  return expandedChannels.value.has(channelId)
-}
 
 
 // 멤버 목록 로드
