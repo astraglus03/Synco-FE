@@ -161,9 +161,21 @@ const currentDriveChannelSeq = computed(() => {
   return null
 })
 
+// 문서 작성자 확인
+const isDocumentCreator = (item) => {
+  if (!item || !item.memberSeq) return false
+  return Number(item.memberSeq) === Number(authStore.memberSeq)
+}
+
 // 공유문서 더블클릭으로 문서 편집기 진입
 const openSharedDoc = async (doc) => {
   if (doc.type === 'shared-doc') {
+    // 잠금되어 있고 작성자가 아닌 경우 접근 차단
+    if (doc.isLocked && !isDocumentCreator(doc)) {
+      alert('이 문서는 잠겨 있어 편집할 수 없습니다.')
+      return
+    }
+    
     if (!currentDriveChannelSeq.value) {
       console.error('driveChannelSeq가 유효하지 않습니다')
       return
@@ -1349,9 +1361,9 @@ watch(() => workspaceStore.currentWorkspace, () => {
                 <v-icon size="16">mdi-pencil</v-icon>
               </v-btn>
               
-              <!-- 공유문서 잠금 해제 버튼 -->
+              <!-- 공유문서 잠금 해제 버튼 (작성자만 표시) -->
               <v-btn
-                v-if="item.type === 'shared-doc'"
+                v-if="item.type === 'shared-doc' && isDocumentCreator(item)"
                 :icon="item.isLocked ? 'mdi-lock-open' : 'mdi-lock'"
                 size="small"
                 variant="text"
@@ -1510,9 +1522,9 @@ watch(() => workspaceStore.currentWorkspace, () => {
                 <v-icon size="16">mdi-pencil</v-icon>
               </v-btn>
               
-              <!-- 공유문서 잠금 해제 버튼 -->
+              <!-- 공유문서 잠금 해제 버튼 (작성자만 표시) -->
               <v-btn
-                v-if="item.type === 'shared-doc'"
+                v-if="item.type === 'shared-doc' && isDocumentCreator(item)"
                 :icon="item.isLocked ? 'mdi-lock-open' : 'mdi-lock'"
                 size="small"
                 variant="text"

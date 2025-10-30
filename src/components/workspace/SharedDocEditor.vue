@@ -208,6 +208,7 @@ import { documentApi } from '@/api/document/documentApi';
 import { projectDriveApi } from '@/api/drive/driveApi';
 import { useAuthStore } from '@/store/authStore';
 import { useWorkspaceStore } from '@/store/workspaceStore';
+import { useProjectDriveStore } from '@/store/drive/projectDriveStore';
 
 // Props 정의
 const props = defineProps({
@@ -954,6 +955,12 @@ const remoteSelectionHighlights = computed(() => {
   return highlights;
 });
 
+// 문서 작성자 확인
+const isDocumentCreator = (docItem) => {
+  if (!docItem || !docItem.memberSeq) return false
+  return Number(docItem.memberSeq) === Number(authStore.memberSeq)
+}
+
 // 문서 로딩 함수
 const loadDocument = async () => {
   try {
@@ -963,6 +970,30 @@ const loadDocument = async () => {
     const documentSeq = Number(props.documentSeq);
     
     console.log('문서 로딩 시작:', { driveChannelSeq, documentSeq });
+
+    // 먼저 문서 정보 확인 (잠금 상태 및 작성자 확인)
+    const driveStore = useProjectDriveStore();
+    const docItem = driveStore.items.find(item => item.id === documentSeq && item.type === 'shared-doc');
+    
+    // 문서 정보를 찾을 수 없으면 items 목록 새로고침
+    if (!docItem) {
+      await driveStore.loadItems(driveChannelSeq, null);
+      const refreshedDocItem = driveStore.items.find(item => item.id === documentSeq && item.type === 'shared-doc');
+      
+      // 잠금되어 있고 작성자가 아닌 경우 접근 차단
+      if (refreshedDocItem && refreshedDocItem.isLocked && !isDocumentCreator(refreshedDocItem)) {
+        alert('이 문서는 잠겨 있어 편집할 수 없습니다.');
+        router.go(-1);
+        return;
+      }
+    } else {
+      // 잠금되어 있고 작성자가 아닌 경우 접근 차단
+      if (docItem.isLocked && !isDocumentCreator(docItem)) {
+        alert('이 문서는 잠겨 있어 편집할 수 없습니다.');
+        router.go(-1);
+        return;
+      }
+    }
 
     const result = await documentApi.getDocument(driveChannelSeq, documentSeq);
     
