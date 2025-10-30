@@ -1,16 +1,26 @@
 <template>
-  <v-dialog v-model="isOpen" max-width="1200px">
-    <v-card class="task-detail-modal">
-      <!-- 본문 -->
-      <div class="modal-body">
-        <!-- 닫기 버튼 -->
+  <v-dialog v-model="isOpen" :max-width="props.isPersonal ? '600px' : '1200px'" class="no-scroll-dialog">
+    <v-card class="task-detail-modal" :class="props.isPersonal ? 'fixed-modal-personal' : 'fixed-modal-detail'">
+      <!-- 모달 헤더 -->
+      <div class="modal-header">
+        <div class="modal-header-content">
+          <div class="modal-icon">
+            <v-icon>mdi-clipboard-text</v-icon>
+          </div>
+          <h3 class="modal-title">업무 상세</h3>
+        </div>
         <v-btn
-          icon="mdi-close"
+          icon
           variant="text"
-          size="small"
           class="close-btn"
           @click="closeModal"
-        />
+        >
+          <v-icon>mdi-close</v-icon>
+        </v-btn>
+      </div>
+      
+      <!-- 본문 -->
+      <div class="modal-body">
         <!-- 왼쪽: Task 정보 -->
         <div class="task-info-section">
           <h3 class="section-title">업무 정보</h3>
@@ -22,31 +32,34 @@
 
           <div class="info-item">
             <label class="info-label">설명</label>
-            <div class="info-value">{{ props.taskData.taskContent || props.taskData.description || '-' }}</div>
+            <div class="info-value task-content">{{ props.taskData.taskContent || props.taskData.description || '-' }}</div>
           </div>
 
-          <div class="info-row">
-            <div class="info-item half">
-              <label class="info-label">시작일</label>
-              <div class="info-value">{{ props.taskData.startDate || '-' }}</div>
+          <div class="info-compact-wrapper">
+            <div class="info-row-compact">
+              <div class="info-item-inline">
+                <label class="info-label">시작일</label>
+                <div class="info-value">{{ props.taskData.startDate || '-' }}</div>
+              </div>
+              <div class="info-item-inline">
+                <label class="info-label">종료일</label>
+                <div class="info-value">{{ props.taskData.endDate || '-' }}</div>
+              </div>
             </div>
-            <div class="info-item half">
-              <label class="info-label">종료일</label>
-              <div class="info-value">{{ props.taskData.endDate || '-' }}</div>
-            </div>
-          </div>
-
-          <div class="info-row">
-            <div class="info-item half">
-              <label class="info-label">담당자</label>
-              <div class="info-value">{{ assigneeName }}</div>
-            </div>
-            <div class="info-item half">
-              <label class="info-label">상태</label>
-              <div class="info-value status-badge">
-                <span :class="getStatusClass(props.taskData.taskStatus || props.taskData.status)">
-                  {{ getStatusText(props.taskData.taskStatus || props.taskData.status) || '-' }}
-                </span>
+            
+            <div class="info-row-compact">
+              <div v-if="!props.isPersonal" class="info-item-inline">
+                <label class="info-label">담당자</label>
+                <div class="info-value">{{ assigneeName }}</div>
+              </div>
+              <div class="info-item-inline">
+                <label class="info-label">상태</label>
+                <div class="info-value">
+                  <div :class="['status-chip', getStatusClass(props.taskData.taskStatus || props.taskData.status)]">
+                    <div class="status-dot"></div>
+                    <span class="status-text">{{ getStatusText(props.taskData.taskStatus || props.taskData.status) || '-' }}</span>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -541,141 +554,364 @@ const deleteCommentConfirm = async (commentSeq) => {
 </script>
 
 <style scoped>
+/* 모달 스타일 */
+/* 디스코드 스타일 모달 */
 .task-detail-modal {
-  border-radius: 12px;
+  border-radius: 8px;
   overflow: hidden;
-  position: relative;
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.24);
+  background: rgb(var(--v-theme-surface));
+}
+
+/* 고정 크기 모달 */
+.fixed-modal-detail {
+  width: 1200px !important;
+  max-height: 800px !important;
+}
+
+/* 개인 일정용 작은 모달 */
+.fixed-modal-personal {
+  width: 600px !important;
+  max-height: 600px !important;
+}
+
+/* v-dialog 스크롤바 숨김 */
+.no-scroll-dialog .v-overlay__content::-webkit-scrollbar {
+  display: none;
+}
+
+.no-scroll-dialog .v-overlay__content {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* 모달 헤더 */
+/* 디스코드 스타일 헤더 */
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px 24px;
+  background: linear-gradient(135deg, #1976d2 0%, rgba(25, 118, 210, 0.8) 100%);
+  color: white;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+.modal-header-content {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.modal-icon {
+  width: 32px;
+  height: 32px;
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+}
+
+.modal-icon:hover {
+  background: rgba(255, 255, 255, 0.25);
+}
+
+.modal-icon .v-icon {
+  font-size: 20px;
+  color: white;
+}
+
+.modal-title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 700;
+  color: white;
 }
 
 .close-btn {
-  position: absolute;
-  top: 16px;
-  right: 16px;
-  z-index: 10;
-  color: #666;
+  color: white !important;
 }
 
+.close-btn:hover {
+  background: rgba(255, 255, 255, 0.1) !important;
+}
 
 /* 본문 */
+/* 디스코드 스타일 본문 */
 .modal-body {
   display: flex;
-  background: #f8f9fa;
+  background: rgb(var(--v-theme-surface));
   min-height: 600px;
 }
 
-/* Task 정보 섹션 */
+/* 개인 일정용 본문 */
+.fixed-modal-personal .modal-body {
+  min-height: 400px;
+}
+
+/* Task 정보 섹션 - 디스코드 스타일 */
 .task-info-section {
   flex: 1;
   padding: 24px;
-  background: #fafafa;
+  background: rgb(var(--v-theme-schedule-header-bg));
   display: flex;
   flex-direction: column;
-  gap: 24px;
-  border-radius: 8px;
-  margin: 8px;
+  gap: 16px;
+  border-radius: 0;
 }
 
 .section-title {
-  font-size: 18px;
-  font-weight: 600;
-  color: #333;
+  font-size: 14px;
+  font-weight: 700;
+  color: rgb(var(--v-theme-schedule-text));
   margin: 0 0 16px 0;
+  padding-bottom: 8px;
+  border-bottom: 2px solid rgb(var(--v-theme-schedule-border));
 }
 
+/* 디스코드 스타일 정보 항목 */
 .info-item {
   display: flex;
   flex-direction: column;
   gap: 6px;
   padding: 12px 16px;
-  background: white;
-  border-radius: 6px;
-  border: 1px solid #e0e0e0;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  background: rgb(var(--v-theme-schedule-card-bg));
+  border-radius: 4px;
+  border: 1px solid rgb(var(--v-theme-schedule-border));
+  transition: all 0.15s ease;
+}
+
+.info-item:hover {
+  border-color: rgb(var(--v-theme-schedule-border));
+  background: rgb(var(--v-theme-schedule-hover-bg));
 }
 
 .info-row {
   display: flex;
-  gap: 24px;
+  gap: 16px;
 }
 
 .info-item.half {
   flex: 1;
 }
 
-.info-label {
+/* 컴팩트 가로 레이아웃 */
+.info-compact-wrapper {
+  margin-bottom: 24px;
+}
+
+.info-row-compact {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.info-row-compact:last-child {
+  margin-bottom: 0;
+}
+
+/* 디스코드 스타일 인라인 정보 항목 */
+.info-item-inline {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  background: rgb(var(--v-theme-schedule-card-bg));
+  border-radius: 4px;
+  border: 1px solid rgb(var(--v-theme-schedule-border));
+  transition: all 0.15s ease;
+  min-width: 0;
+}
+
+.info-item-inline:hover {
+  border-color: rgb(var(--v-theme-schedule-border));
+  background: rgb(var(--v-theme-schedule-hover-bg));
+}
+
+.info-item-inline .info-label {
   font-size: 11px;
-  font-weight: 600;
-  color: #757575;
+  font-weight: 700;
+  color: #1976d2;
   text-transform: uppercase;
   letter-spacing: 0.5px;
-  margin-bottom: 2px;
+  white-space: nowrap;
+  margin-bottom: 0;
+  flex-shrink: 0;
+}
+
+.info-item-inline .info-value {
+  font-size: 13px;
+  font-weight: 500;
+  color: rgb(var(--v-theme-schedule-text));
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.info-item-inline .status-chip {
+  padding: 4px 10px;
+  font-size: 11px;
+  gap: 6px;
+  margin: 0;
+}
+
+.info-item-inline .status-dot {
+  width: 6px;
+  height: 6px;
+}
+
+.info-label {
+  font-size: 12px;
+  font-weight: 700;
+  color: #1976d2;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  margin-bottom: 4px;
 }
 
 .info-value {
-  font-size: 14px;
-  color: #212121;
+  font-size: 15px;
+  color: rgb(var(--v-theme-schedule-text));
   font-weight: 500;
-  line-height: 1.3;
+  line-height: 1.5;
 }
 
-.status-badge {
-  display: inline-block;
-  padding: 4px 10px;
-  border-radius: 12px;
-  font-size: 11px;
+.task-content {
+  white-space: pre-wrap;
+  word-break: break-word;
+  line-height: 1.6;
+}
+
+/* 상태 칩 스타일 */
+.status-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  border-radius: 8px;
+  font-size: 13px;
   font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.3px;
+  transition: all 0.2s ease;
+  width: fit-content;
 }
 
-.status-progress {
-  background: #fff8e1;
-  color: #f57c00;
-  border: 1px solid #ffcc02;
+.status-chip:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
 }
 
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.status-text {
+  line-height: 1;
+}
+
+/* 할 일 상태 */
 .status-todo {
-  background: #e8f4fd;
-  color: #1976d2;
+  background: #e3f2fd;
+  color: #1565c0;
   border: 1px solid #90caf9;
 }
 
+.status-todo .status-dot {
+  background: #2196f3;
+  box-shadow: 0 0 0 2px rgba(33, 150, 243, 0.2);
+}
+
+/* 진행중 상태 */
+.status-progress {
+  background: #fff3e0;
+  color: #e65100;
+  border: 1px solid #ffb74d;
+}
+
+.status-progress .status-dot {
+  background: #ff9800;
+  box-shadow: 0 0 0 2px rgba(255, 152, 0, 0.2);
+}
+
+/* 완료 상태 */
 .status-completed {
-  background: #e8f5e8;
+  background: #e8f5e9;
   color: #2e7d32;
   border: 1px solid #81c784;
+}
+
+.status-completed .status-dot {
+  background: #4caf50;
+  box-shadow: 0 0 0 2px rgba(76, 175, 80, 0.2);
 }
 
 /* 구분선 */
 .divider {
   width: 1px;
-  background: #e0e0e0;
+  background: rgb(var(--v-theme-schedule-border));
   margin: 24px 0;
 }
 
 /* 댓글 섹션 */
+/* 디스코드 스타일 댓글 섹션 */
 .comments-section {
   flex: 1;
-  padding: 32px;
-  background: white;
+  padding: 24px;
+  background: rgb(var(--v-theme-schedule-card-bg));
   display: flex;
   flex-direction: column;
+  border-left: 1px solid rgb(var(--v-theme-schedule-border));
 }
 
 .comments-list {
   flex: 1;
   overflow-y: auto;
-  margin-bottom: 10px;
+  margin-bottom: 16px;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
+  padding-right: 8px;
 }
 
+/* 댓글 목록 스크롤바 */
+.comments-list::-webkit-scrollbar {
+  width: 6px;
+}
+
+.comments-list::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 3px;
+}
+
+.comments-list::-webkit-scrollbar-thumb {
+  background: #c1c1c1;
+  border-radius: 3px;
+}
+
+.comments-list::-webkit-scrollbar-thumb:hover {
+  background: #a8a8a8;
+}
+
+/* 디스코드 스타일 댓글 항목 */
 .comment-item {
-  background: #f5f5f5;
-  padding: 14px;
-  border-radius: 8px;
-  margin-bottom: 16px;
+  background: rgb(var(--v-theme-schedule-header-bg));
+  padding: 12px 16px;
+  border-radius: 4px;
+  margin-bottom: 8px;
+  border: 1px solid rgb(var(--v-theme-schedule-border));
+  transition: all 0.15s ease;
+}
+
+.comment-item:hover {
+  background: rgb(var(--v-theme-schedule-hover-bg));
+  border-color: rgb(var(--v-theme-schedule-border));
 }
 
 .comment-item:last-child {
@@ -740,17 +976,17 @@ const deleteCommentConfirm = async (commentSeq) => {
 .comment-name {
   font-size: 14px;
   font-weight: 600;
-  color: #333;
+  color: rgb(var(--v-theme-schedule-text));
 }
 
 .comment-time {
   font-size: 12px;
-  color: #999;
+  color: rgb(var(--v-theme-schedule-text-tertiary));
 }
 
 .comment-text {
   font-size: 14px;
-  color: #666;
+  color: rgb(var(--v-theme-schedule-text-secondary));
   line-height: 1.5;
   margin-bottom: 8px;
 }
@@ -771,14 +1007,20 @@ const deleteCommentConfirm = async (commentSeq) => {
 
 /* 댓글 작성 */
 .comment-input-section {
-  border-top: 1px solid #e0e0e0;
-  padding-top: 24px;
+  border-top: 2px solid rgb(var(--v-theme-schedule-border));
+  padding-top: 20px;
+  margin-top: auto;
 }
 
+/* 디스코드 스타일 댓글 입력 */
 .comment-input-wrapper {
   display: flex;
   align-items: flex-end;
-  gap: 8px;
+  gap: 10px;
+  background: rgb(var(--v-theme-schedule-header-bg));
+  padding: 10px;
+  border-radius: 4px;
+  border: 1px solid rgb(var(--v-theme-schedule-border));
 }
 
 .comment-input {
@@ -786,28 +1028,59 @@ const deleteCommentConfirm = async (commentSeq) => {
   margin-bottom: 0;
 }
 
+.comment-input :deep(.v-field) {
+  background: rgb(var(--v-theme-schedule-card-bg));
+  border-radius: 4px;
+  border: 1px solid rgb(var(--v-theme-schedule-border));
+  transition: all 0.15s ease;
+}
+
+.comment-input :deep(.v-field):hover {
+  border-color: rgb(var(--v-theme-schedule-border));
+}
+
+.comment-input :deep(.v-field--focused) {
+  border-color: #1976d2;
+}
+
 .post-btn {
   margin-bottom: 8px;
   color: #1976d2 !important;
+  transition: all 0.15s ease;
+  border-radius: 4px;
 }
 
 .post-btn:hover {
   color: #1565c0 !important;
+  background: rgba(25, 118, 210, 0.1) !important;
+  transform: scale(1.05);
+}
+
+.post-btn:active {
+  transform: scale(0.95);
 }
 
 /* 대댓글 스타일 */
 .replies-section {
   margin-left: 32px;
   margin-top: 12px;
-  padding-left: 16px;
-  border-left: 2px solid #e0e0e0;
+  padding-left: 20px;
+  border-left: 3px solid rgb(var(--v-theme-schedule-border));
 }
 
+/* 디스코드 스타일 답글 */
 .reply-item {
-  background: #f8f9fa;
-  padding: 12px;
-  border-radius: 6px;
-  margin-bottom: 8px;
+  background: rgb(var(--v-theme-schedule-card-bg));
+  padding: 10px 14px;
+  border-radius: 4px;
+  margin-bottom: 6px;
+  border: 1px solid rgb(var(--v-theme-schedule-border));
+  transition: all 0.15s ease;
+}
+
+.reply-item:hover {
+  background: rgb(var(--v-theme-schedule-hover-bg));
+  border-color: rgb(var(--v-theme-schedule-border));
 }
 
 .reply-item:last-child {
@@ -816,11 +1089,12 @@ const deleteCommentConfirm = async (commentSeq) => {
 
 .reply-input-section {
   margin-left: 32px;
-  margin-top: 12px;
+  margin-top: 10px;
   padding-left: 16px;
-  border-left: 2px solid #e0e0e0;
+  border-left: 2px solid rgb(var(--v-theme-schedule-border));
 }
 
+/* 로딩 상태 */
 .loading-state {
   display: flex;
   flex-direction: column;
@@ -828,7 +1102,7 @@ const deleteCommentConfirm = async (commentSeq) => {
   justify-content: center;
   padding: 40px 20px;
   text-align: center;
-  color: #666;
+  color: rgb(var(--v-theme-schedule-text-secondary));
 }
 
 .loading-state p {

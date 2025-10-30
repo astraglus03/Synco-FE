@@ -242,21 +242,23 @@ onMounted(() => {
     <!-- 구분선 -->
     <v-divider class="server-divider" />
 
-    <!-- 프로젝트 워크스페이스 목록 (개인 워크스페이스는 제외) -->
-    <div 
-      v-for="workspace in workspaces.filter(w => w.type === 'project')"
-      :key="workspace.id"
-      class="server-icon project"
-      :class="{ 'active': currentWorkspace === workspace.id }"
-      @click="emit('select-workspace', workspace.id)"
-    >
-      <img 
-        v-if="workspace.profile" 
-        :src="workspace.profile" 
-        :alt="workspace.name"
-        class="workspace-thumbnail"
-      />
-      <span v-else>{{ workspace.icon }}</span>
+    <!-- 프로젝트 워크스페이스 목록 (스크롤 영역) -->
+    <div class="workspaces-scroll-container">
+      <div 
+        v-for="workspace in workspaces.filter(w => w.type === 'project')"
+        :key="workspace.id"
+        class="server-icon project"
+        :class="{ 'active': currentWorkspace === workspace.id }"
+        @click="emit('select-workspace', workspace.id)"
+      >
+        <img 
+          v-if="workspace.profile" 
+          :src="workspace.profile" 
+          :alt="workspace.name"
+          class="workspace-thumbnail"
+        />
+        <span v-else>{{ workspace.icon }}</span>
+      </div>
     </div>
 
     <!-- 프로젝트 추가 버튼 -->
@@ -565,9 +567,29 @@ onMounted(() => {
   transition: width 0.3s ease;
 }
 
+/* 프로젝트 목록 스크롤 영역 */
+.workspaces-scroll-container {
+  flex: 1 1 auto;
+  width: 100%;
+  min-height: 0; /* 중요: flex child의 스크롤을 위해 필수 */
+  overflow-y: auto;
+  overflow-x: hidden;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 0;
+  /* 스크롤바 숨기기 */
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* IE and Edge */
+}
 
+.workspaces-scroll-container::-webkit-scrollbar {
+  display: none; /* Chrome, Safari, Opera */
+}
 
 .server-icon {
+  flex-shrink: 0; /* 고정 크기 유지 */
   width: 48px;
   height: 48px;
   background: rgba(255, 255, 255, 0.1);
@@ -584,6 +606,7 @@ onMounted(() => {
 }
 
 .server-icon.add-server {
+  flex-shrink: 0; /* 추가 버튼 고정 */
   width: 44px;
   height: 44px;
 }
@@ -594,6 +617,7 @@ onMounted(() => {
 }
 
 .server-icon.home {
+  flex-shrink: 0; /* 홈 버튼 고정 */
   background: rgb(var(--v-theme-primary));
 }
 
@@ -621,6 +645,7 @@ onMounted(() => {
 
 
 .server-divider {
+  flex-shrink: 0; /* 구분선 고정 */
   width: 32px;
   height: 2px;
   background: rgba(255, 255, 255, 0.1);

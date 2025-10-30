@@ -1384,6 +1384,25 @@ const getStatusColor = (status) => {
   transition: transform 0.3s ease;
 }
 
+/* 스크롤바 스타일 (칸반보드와 동일) */
+.workspace-sidebar::-webkit-scrollbar {
+  width: 6px;
+}
+
+.workspace-sidebar::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 3px;
+}
+
+.workspace-sidebar::-webkit-scrollbar-thumb {
+  background: #c1c1c1;
+  border-radius: 3px;
+}
+
+.workspace-sidebar::-webkit-scrollbar-thumb:hover {
+  background: #a8a8a8;
+}
+
 
 .workspace-sidebar.collapsed {
   width: 72px;
@@ -2049,6 +2068,25 @@ const getStatusColor = (status) => {
   gap: 12px;
   max-height: 400px;
   overflow-y: auto;
+}
+
+/* 멤버 리스트 스크롤바 스타일 */
+.members-list::-webkit-scrollbar {
+  width: 6px;
+}
+
+.members-list::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 3px;
+}
+
+.members-list::-webkit-scrollbar-thumb {
+  background: #c1c1c1;
+  border-radius: 3px;
+}
+
+.members-list::-webkit-scrollbar-thumb:hover {
+  background: #a8a8a8;
 }
 
 .member-item {

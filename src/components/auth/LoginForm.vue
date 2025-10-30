@@ -214,11 +214,11 @@ const handleLogin = async () => {
       data: response
     })
     
-    // 폼 초기화
-    if (!formData.value.rememberMe) {
-      formData.value.memberId = ''
-    }
-    formData.value.password = ''
+    // 폼 초기화는 화면 전환 후에 이루어지도록 주석 처리
+    // if (!formData.value.rememberMe) {
+    //   formData.value.memberId = ''
+    // }
+    // formData.value.password = ''
     
   } catch (error) {
     console.error('로그인 실패:', error)
