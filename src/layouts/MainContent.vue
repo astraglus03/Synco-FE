@@ -98,6 +98,7 @@ onMounted(() => {
     // chat 채널은 event bus 사용
     emitter.on("select-chat-channel", ({ parentId, subChannelId }) => {
     selectedChannel.value = subChannelId;
+  })
 })
 
 onUnmounted(() => {
