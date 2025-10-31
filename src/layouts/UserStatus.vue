@@ -118,7 +118,7 @@ onMounted(() => {
           v-bind="menuProps"
         >
           <div class="avatar-wrapper">
-            <v-avatar :size="40" color="primary">
+            <v-avatar :size="36" color="primary">
               <v-img 
                 v-if="displayProfileImage" 
                 :src="displayProfileImage"
