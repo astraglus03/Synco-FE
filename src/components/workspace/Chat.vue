@@ -46,6 +46,7 @@ const parseJwt = (token) => {
 const props = defineProps({
   currentChannel: String,
   selectedChannel: String, // 하위 채널 ID
+  workspaceType: String, // 'personal' 또는 'project'
 });
 
 const { hasPermission, isManager, isSuper } = usePermissions();
@@ -175,6 +176,14 @@ const highlightedMessage = computed(() => {
 let reconnectAttempts = 0;
 const MAX_RECONNECT_ATTEMPTS = 5;
 const RECONNECT_DELAY = 3000;
+
+// 1:1 채팅 상대방 정보 (개인 워크스페이스일 때만 사용)
+const chatUserInfo = ref(null);
+
+// 개인 워크스페이스에서 1:1 채팅인지 확인
+const isPersonalChat = computed(() => {
+  return props.workspaceType === 'personal';
+});
 
 // ✅ WebSocket 연결
 const connectWebsocket = () => {
@@ -1408,6 +1417,35 @@ const shouldShowDivider = (message, index) => {
   return false;
 };
 
+// 1:1 채팅 상대방 정보 가져오기 (필요시 API 호출)
+const loadChatUserInfo = async () => {
+  if (!isPersonalChat.value || !props.selectedChannel) return;
+  
+  try {
+    // TODO: 1:1 채팅 상대방 정보 API 호출
+    // const res = await getIndividualChatUserInfo(props.selectedChannel);
+    // chatUserInfo.value = res.data;
+    
+    // 임시 데이터 (실제로는 API에서 가져와야 함)
+    chatUserInfo.value = {
+      name: '사용자',
+      avatar: '?',
+      email: '-',
+      phone: '-',
+      status: '-',
+    };
+  } catch (e) {
+    console.error('1:1 채팅 사용자 정보 로드 실패:', e);
+  }
+};
+
+// selectedChannel 변경 시 사용자 정보 로드
+watch(() => props.selectedChannel, () => {
+  if (isPersonalChat.value) {
+    loadChatUserInfo();
+  }
+}, { immediate: true });
+
 // 이벤트 리스너 등록/해제
 onMounted(async () => {
   console.log("📥 listener mounted!");
@@ -1579,6 +1617,8 @@ onUnmounted(() => {
     typingTimeout = null;
   }
 });
+
+
 </script>
 
 <template>
@@ -2023,6 +2063,54 @@ onUnmounted(() => {
         <span>삭제</span>
       </div>
     </div>
+    <!-- 사용자 정보 사이드바 (개인 워크스페이스에서 1:1 채팅일 때만 표시) -->
+    <div v-if="isPersonalChat && chatUserInfo" class="user-info-sidebar">
+      <div class="user-header">
+        <h3>사용자 정보</h3>
+      </div>
+
+      <div class="user-profile">
+        <v-avatar size="80" color="primary" class="user-avatar">
+          {{ chatUserInfo.avatar || '?' }}
+        </v-avatar>
+        <div class="user-name">{{ chatUserInfo.name || '사용자' }}</div>
+        <div class="user-status">
+          <v-chip size="small" color="success">
+            <v-icon start>mdi-circle</v-icon>
+            온라인
+          </v-chip>
+        </div>
+      </div>
+
+      <div class="user-details">
+        <div class="detail-section">
+          <h4>연락처</h4>
+          <div class="detail-item">
+            <v-icon>mdi-email</v-icon>
+            <span>{{ chatUserInfo.email || '-' }}</span>
+          </div>
+          <div class="detail-item">
+            <v-icon>mdi-phone</v-icon>
+            <span>{{ chatUserInfo.phone || '-' }}</span>
+          </div>
+        </div>
+
+        <div class="detail-section">
+          <h4>상태 메시지</h4>
+          <p class="status-message">
+            {{ chatUserInfo.status || '-' }}
+          </p>
+        </div>
+
+        <div class="detail-section">
+          <h4>최근 활동</h4>
+          <div class="activity-item">
+            <v-icon>mdi-clock</v-icon>
+            <span>최근 활동</span>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -2030,10 +2118,12 @@ onUnmounted(() => {
 .team-chat {
   height: calc(100vh - 60px);
   background: rgb(var(--v-theme-background));
+  display: flex; /* 사이드바를 위한 flex 레이아웃 추가 */
 }
 
 .chat-area {
-  width: 100%;
+  flex: 1; /* width: 100% 대신 flex: 1 사용 */
+  min-width: 0; /* flex shrink 방지 */
   height: 100%;
   display: flex;
   flex-direction: column;
@@ -3412,5 +3502,99 @@ onUnmounted(() => {
   border-radius: 12px;
   border: 1px solid rgba(var(--v-theme-primary), 0.3);
   white-space: nowrap;
+}
+
+/* 사용자 정보 사이드바 (개인 워크스페이스 1:1 채팅일 때만) */
+.user-info-sidebar {
+  width: 280px;
+  background: rgb(var(--v-theme-surface));
+  border-left: 1px solid rgba(var(--v-theme-on-surface), 0.1);
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+}
+
+.user-header {
+  padding: 20px;
+  border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.1);
+}
+
+.user-header h3 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: rgb(var(--v-theme-on-surface));
+}
+
+.user-profile {
+  padding: 20px;
+  text-align: center;
+  border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.1);
+}
+
+.user-avatar {
+  margin: 0 auto 12px;
+}
+
+.user-name {
+  font-size: 18px;
+  font-weight: 600;
+  color: rgb(var(--v-theme-on-surface));
+  margin-bottom: 8px;
+}
+
+.user-status {
+  display: flex;
+  justify-content: center;
+}
+
+.user-details {
+  padding: 20px;
+  flex: 1;
+}
+
+.detail-section {
+  margin-bottom: 24px;
+}
+
+.detail-section h4 {
+  font-size: 14px;
+  font-weight: 600;
+  color: rgba(var(--v-theme-on-surface), 0.7);
+  margin-bottom: 12px;
+}
+
+.detail-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 0;
+  font-size: 14px;
+  color: rgb(var(--v-theme-on-surface));
+}
+
+.detail-item .v-icon {
+  color: rgba(var(--v-theme-on-surface), 0.6);
+}
+
+.status-message {
+  font-size: 14px;
+  color: rgba(var(--v-theme-on-surface), 0.8);
+  margin: 0;
+  padding: 8px;
+  background: rgba(var(--v-theme-primary), 0.05);
+  border-radius: 8px;
+}
+
+.activity-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  color: rgba(var(--v-theme-on-surface), 0.7);
+}
+
+.activity-item .v-icon {
+  color: rgba(var(--v-theme-on-surface), 0.5);
 }
 </style>

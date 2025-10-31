@@ -268,7 +268,7 @@ const loadDirectMessages = async () => {
 
     const res = await getIndividualChatChannels(workSpaceSeq);
     console.log("📦 1:1 채팅 목록 API 응답:", res);
-    directMessages.value = res.data.data; // ← 서버 응답 구조에 따라 조정
+    directMessages.value = res.data; // ← 서버 응답 구조에 따라 조정
   } catch (e) {
     console.error("❌ 1:1 채팅 목록 불러오기 실패:", e);
   }
@@ -818,9 +818,13 @@ const handleCollapsedChannelClick = (chatChannel) => {
 
 // 1:1 채팅 선택 함수
 const selectDirectMessage = (dmId) => {
-  emit("select-channel", "1-1-chat"); // 1:1 채팅 채널로 이동
-  // PersonalChat 컴포넌트에서 selectedChat을 업데이트하도록 전역 이벤트 발생
-  window.dispatchEvent(new CustomEvent("select-chat", { detail: dmId }));
+  // emit("select-channel", "1-1-chat"); // 1:1 채팅 채널로 이동
+  // // PersonalChat 컴포넌트에서 selectedChat을 업데이트하도록 전역 이벤트 발생
+  // window.dispatchEvent(new CustomEvent("select-chat", { detail: dmId }));
+
+  emit("select-channel", "chat"); // Chat.vue를 불러오기 위해 'chat' 채널로 변경
+  // Chat 컴포넌트에서 선택된 채널을 업데이트하도록 이벤트 발생
+  emitter.emit("select-chat-channel", { parentId: "chat", subChannelId: dmId.toString() });
 };
 
 // 사용자 상태 색상

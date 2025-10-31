@@ -107,7 +107,9 @@ const currentComponent = computed(() => {
       case 'drive': return PersonalDrive
       case 'calendar': return PersonalKanbanBoard
       case 'profile': return PersonalProfile
-      case '1-1-chat': return PersonalChat // 1:1 채팅
+      // case '1-1-chat': return PersonalChat // 1:1 채팅
+      case 'chat' : return Chat
+      // case '1-1-chat' : return Chat // 없어도 될듯
       default: return PersonalDashboard
     }
   } else {
@@ -155,6 +157,7 @@ const contentStyle = computed(() => {
       :current-channel="currentChannel"
       :selected-schedule="selectedSchedule"
       :selected-channel="selectedChannel"
+      :workspace-type="workspaceType"
       :navigate-to-personal-drive="navigateToPersonalDrive"
       @toggle-member-sidebar="toggleMemberSidebar"
     />
