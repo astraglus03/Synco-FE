@@ -98,7 +98,7 @@
 </template>
 
 <script setup>
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import { createBoard as createBoardApi, getProjectMemberList, updateBoard as updateBoardApi, getBoardDetail } from '../../api/schedule/scheduleApi.js'
 import { useWorkspaceStore } from '../../store/workspaceStore.js'
 import { useWorkspaceMemberStore } from '../../store/workspaceMemberStore.js'
@@ -239,6 +239,23 @@ const closeModal = () => {
   emit('update:isOpen', false)
 }
 
+// ESC 키로 닫기
+const handleKeydown = (event) => {
+  if (event.key === 'Escape' && props.isOpen && !isCreating.value) {
+    closeModal()
+  }
+}
+
+onMounted(() => {
+  if (props.isOpen) {
+    window.addEventListener('keydown', handleKeydown)
+  }
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('keydown', handleKeydown)
+})
+
 // 폼 초기화
 const resetForm = () => {
   boardData.value = {
@@ -271,6 +288,12 @@ watch(() => props.isOpen, async (newValue) => {
     }
     await findCurrentUserScheduleMemberSeq()
   }
+  // ESC 리스너 토글
+  if (newValue) {
+    window.addEventListener('keydown', handleKeydown)
+  } else {
+    window.removeEventListener('keydown', handleKeydown)
+  }
 })
 </script>
 
@@ -286,7 +309,8 @@ watch(() => props.isOpen, async (newValue) => {
   justify-content: space-between;
   align-items: flex-start;
   padding: 24px 24px 16px 24px;
-  background: rgb(var(--v-theme-schedule-header-bg));
+  background: rgb(var(--v-theme-surface));
+  border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.1);
 }
 
 .header-content {
@@ -308,17 +332,17 @@ watch(() => props.isOpen, async (newValue) => {
   font-size: 24px;
   font-weight: 600;
   margin: 0 0 4px 0;
-  color: rgb(var(--v-theme-schedule-text));
+  color: rgb(var(--v-theme-on-surface));
 }
 
 .modal-subtitle {
   font-size: 14px;
-  color: rgb(var(--v-theme-schedule-text-secondary));
+  color: rgba(var(--v-theme-on-surface), 0.7);
   margin: 0;
 }
 
 .close-btn {
-  color: rgb(var(--v-theme-schedule-text-secondary));
+  color: rgba(var(--v-theme-on-surface), 0.7);
 }
 
 /* 본문 스타일 */

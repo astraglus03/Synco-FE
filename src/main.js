@@ -87,7 +87,7 @@ const checkAndRefreshToken = async () => {
       
       // 이미 만료되었거나 5분 이내 만료 예정이면 갱신
       if (expiryTime <= currentTime || timeLeft < 300) {
-        const baseUrl = (import.meta.env.VITE_API_URL || 'http://localhost:8080').replace(/\/+$/, '')
+        const baseUrl = (import.meta.env.VITE_API_URL).replace(/\/+$/, '')
         const { data } = await axios.post(
           `${baseUrl}/workspace-service/member/refreshAt`,
           {},

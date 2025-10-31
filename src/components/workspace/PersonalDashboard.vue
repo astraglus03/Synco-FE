@@ -156,14 +156,79 @@
             <v-icon color="primary">mdi-format-list-checks</v-icon>
             <h2>내 업무</h2>
           </div>
-          <v-select
-            v-model="selectedProject"
-            :items="projectFilterOptions"
-            density="compact"
-            variant="outlined"
-            hide-details
-            style="max-width: 200px;"
-          />
+          <v-menu
+            v-model="showProjectMenu"
+            :close-on-content-click="false"
+            location="bottom end"
+            offset="8"
+          >
+            <template #activator="{ props }">
+              <button class="project-filter-btn" v-bind="props">
+                <v-icon size="18" class="mr-2">mdi-briefcase</v-icon>
+                <span class="label">{{ selectedProjectLabel }}</span>
+                <v-icon size="18" class="ml-3 chevron">mdi-chevron-down</v-icon>
+              </button>
+            </template>
+            <v-card class="project-filter-menu" min-width="280">
+              <div class="menu-header">
+                <v-icon size="18" color="primary">mdi-briefcase</v-icon>
+                <span>프로젝트 선택</span>
+              </div>
+              <div class="menu-search">
+                <v-text-field
+                  v-model="projectSearch"
+                  placeholder="프로젝트 검색"
+                  prepend-inner-icon="mdi-magnify"
+                  density="comfortable"
+                  variant="outlined"
+                  hide-details
+                />
+              </div>
+              <v-list density="comfortable" class="menu-list">
+                <v-list-item
+                  :active="selectedProject === 'all'"
+                  @click="selectProject('all')"
+                >
+                  <template #prepend>
+                    <v-icon>mdi-infinity</v-icon>
+                  </template>
+                  <v-list-item-title>전체 프로젝트</v-list-item-title>
+                  <template #append>
+                    <v-icon v-if="selectedProject === 'all'" color="primary">mdi-check</v-icon>
+                  </template>
+                </v-list-item>
+                <v-divider class="my-1" />
+                <v-list-item
+                  v-for="opt in filteredProjectOptions"
+                  :key="opt.value"
+                  :active="selectedProject === opt.value"
+                  @click="selectProject(opt.value)"
+                >
+                  <template #prepend>
+                    <v-avatar size="22" color="primary">
+                      <span class="text-white" style="font-weight:700">{{ opt.title?.charAt(0) }}</span>
+                    </v-avatar>
+                  </template>
+                  <v-list-item-title>{{ opt.title }}</v-list-item-title>
+                  <template #append>
+                    <v-icon v-if="selectedProject === opt.value" color="primary">mdi-check</v-icon>
+                  </template>
+                </v-list-item>
+                <div v-if="filteredProjectOptions.length === 0" class="menu-empty">
+                  <v-icon size="22" color="grey">mdi-folder-off</v-icon>
+                  <span>검색 결과가 없습니다</span>
+                </div>
+              </v-list>
+              <div class="menu-actions">
+                <v-btn variant="text" size="small" @click="showProjectDialog = true">
+                  <v-icon start size="16">mdi-folder-plus</v-icon>
+                  새 프로젝트 만들기
+                </v-btn>
+                <v-spacer />
+                <v-btn variant="text" size="small" @click="showProjectMenu = false">닫기</v-btn>
+              </div>
+            </v-card>
+          </v-menu>
         </div>
 
         <v-tabs v-model="taskTab" color="primary" density="compact">
@@ -784,6 +849,8 @@ const userName = computed(() => authStore.user?.name || '사용자')
 const currentDate = ref('')
 const currentTime = ref('')
 const selectedProject = ref('all')
+const showProjectMenu = ref(false)
+const projectSearch = ref('')
 const taskTab = ref('all')
 const showQuickTaskDialog = ref(false)
 const showFileUploadDialog = ref(false)
@@ -876,6 +943,25 @@ const projectFilterOptions = computed(() => {
     ...projects.value.map(p => ({ title: p.name, value: p.id }))
   ]
 })
+
+const filteredProjectOptions = computed(() => {
+  const q = (projectSearch.value || '').toLowerCase().trim()
+  if (!q) return projects.value.map(p => ({ title: p.name, value: p.id }))
+  return projects.value
+    .filter(p => (p.name || '').toLowerCase().includes(q))
+    .map(p => ({ title: p.name, value: p.id }))
+})
+
+const selectedProjectLabel = computed(() => {
+  if (selectedProject.value === 'all') return '전체 프로젝트'
+  const found = projects.value.find(p => p.id === selectedProject.value)
+  return found?.name || '전체 프로젝트'
+})
+
+const selectProject = (value) => {
+  selectedProject.value = value
+  showProjectMenu.value = false
+}
 
 const filteredTasks = computed(() => {
   if (selectedProject.value === 'all') {
@@ -1843,7 +1929,7 @@ const closeErrorModal = () => {
 <style scoped>
 .personal-dashboard {
   padding: 24px;
-  background: #f8f9fa;
+  background: rgb(var(--v-theme-background));
   min-height: 100vh;
 }
 
@@ -1858,13 +1944,13 @@ const closeErrorModal = () => {
 .greeting h1 {
   font-size: 32px;
   font-weight: 700;
-  color: #1e293b;
+  color: rgb(var(--v-theme-on-surface));
   margin-bottom: 4px;
 }
 
 .date-time {
   font-size: 14px;
-  color: #64748b;
+  color: rgba(var(--v-theme-on-surface), 0.7);
 }
 
 /* 통계 카드 */
@@ -1876,13 +1962,13 @@ const closeErrorModal = () => {
 }
 
 .stat-card {
-  background: white;
+  background: rgb(var(--v-theme-surface));
   border-radius: 16px;
   padding: 24px;
   display: flex;
   align-items: center;
   gap: 16px;
-  border: 1px solid #e2e8f0;
+  border: 1px solid rgba(var(--v-theme-on-surface), 0.12);
   transition: all 0.3s;
 }
 
@@ -1896,8 +1982,8 @@ const closeErrorModal = () => {
 }
 
 .stat-card.clickable:hover {
-  border-color: #4f46e5;
-  box-shadow: 0 8px 24px rgba(79, 70, 229, 0.15);
+  border-color: rgb(var(--v-theme-primary));
+  box-shadow: 0 8px 24px rgba(var(--v-theme-primary), 0.15);
 }
 
 /* 프로젝트 드롭다운 관련 */
@@ -1915,7 +2001,7 @@ const closeErrorModal = () => {
   top: calc(100% - 8px);
   left: 0;
   right: 0;
-  background: white;
+  background: rgb(var(--v-theme-surface));
   border-radius: 12px;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
   z-index: 10000;
@@ -1930,19 +2016,19 @@ const closeErrorModal = () => {
   align-items: center;
   justify-content: space-between;
   padding: 12px 16px;
-  border-bottom: 1px solid #e2e8f0;
+  border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.12);
   margin-bottom: 8px;
 }
 
 .projects-dropdown .dropdown-header strong {
   font-size: 14px;
-  color: #1e293b;
+  color: rgb(var(--v-theme-on-surface));
 }
 
 .projects-dropdown .project-count {
   font-size: 12px;
-  color: #64748b;
-  background: #f1f5f9;
+  color: rgba(var(--v-theme-on-surface), 0.7);
+  background: rgba(var(--v-theme-on-surface), 0.05);
   padding: 2px 8px;
   border-radius: 12px;
 }
@@ -1963,7 +2049,7 @@ const closeErrorModal = () => {
 }
 
 .project-item:hover {
-  background: #f8fafc;
+  background: rgba(var(--v-theme-on-surface), 0.03);
 }
 
 .project-info {
@@ -1974,13 +2060,13 @@ const closeErrorModal = () => {
 .project-name {
   font-size: 14px;
   font-weight: 600;
-  color: #1e293b;
+  color: rgb(var(--v-theme-on-surface));
   margin-bottom: 4px;
 }
 
 .project-description {
   font-size: 12px;
-  color: #64748b;
+  color: rgba(var(--v-theme-on-surface), 0.7);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1996,7 +2082,7 @@ const closeErrorModal = () => {
 }
 
 .projects-dropdown .empty-text {
-  color: #94a3b8;
+  color: rgba(var(--v-theme-on-surface), 0.6);
   font-size: 13px;
 }
 
@@ -2006,17 +2092,17 @@ const closeErrorModal = () => {
 }
 
 .projects-dropdown::-webkit-scrollbar-track {
-  background: #f1f5f9;
+  background: rgba(var(--v-theme-on-surface), 0.05);
   border-radius: 3px;
 }
 
 .projects-dropdown::-webkit-scrollbar-thumb {
-  background: #cbd5e1;
+  background: rgba(var(--v-theme-on-surface), 0.2);
   border-radius: 3px;
 }
 
 .projects-dropdown::-webkit-scrollbar-thumb:hover {
-  background: #94a3b8;
+  background: rgba(var(--v-theme-on-surface), 0.3);
 }
 
 /* 일정 드롭다운 메타 정보 */
@@ -2033,7 +2119,7 @@ const closeErrorModal = () => {
   align-items: center;
   gap: 4px;
   font-size: 12px;
-  color: #64748b;
+  color: rgba(var(--v-theme-on-surface), 0.7);
 }
 
 .stat-icon {
@@ -2065,14 +2151,14 @@ const closeErrorModal = () => {
 .stat-value {
   font-size: 32px;
   font-weight: 700;
-  color: #1e293b;
+  color: rgb(var(--v-theme-on-surface));
   line-height: 1;
   margin-bottom: 4px;
 }
 
 .stat-label {
   font-size: 14px;
-  color: #64748b;
+  color: rgba(var(--v-theme-on-surface), 0.7);
 }
 
 /* 빠른 작업 */
@@ -2089,19 +2175,19 @@ const closeErrorModal = () => {
   align-items: center;
   gap: 12px;
   padding: 12px 20px;
-  background: white;
-  border: 1px solid #e2e8f0;
+  background: rgb(var(--v-theme-surface));
+  border: 1px solid rgba(var(--v-theme-on-surface), 0.12);
   border-radius: 12px;
   cursor: pointer;
   transition: all 0.2s;
   white-space: nowrap;
   font-size: 14px;
   font-weight: 500;
-  color: #1e293b;
+  color: rgb(var(--v-theme-on-surface));
 }
 
 .action-btn:hover {
-  border-color: #cbd5e1;
+  border-color: rgba(var(--v-theme-on-surface), 0.2);
   transform: translateY(-2px);
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
 }
@@ -2123,9 +2209,9 @@ const closeErrorModal = () => {
 }
 
 .content-section {
-  background: white;
+  background: rgb(var(--v-theme-surface));
   border-radius: 16px;
-  border: 1px solid #e2e8f0;
+  border: 1px solid rgba(var(--v-theme-on-surface), 0.12);
   padding: 24px;
   display: flex;
   flex-direction: column;
@@ -2148,8 +2234,76 @@ const closeErrorModal = () => {
 .header-left h2 {
   font-size: 20px;
   font-weight: 600;
-  color: #1e293b;
+  color: rgb(var(--v-theme-on-surface));
   margin: 0;
+}
+
+/* 프로젝트 필터 버튼 */
+.project-filter-btn {
+  display: inline-flex;
+  align-items: center;
+  padding: 10px 14px;
+  border: 1px solid rgba(var(--v-theme-on-surface), 0.2);
+  background: rgb(var(--v-theme-surface));
+  color: rgb(var(--v-theme-on-surface));
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.project-filter-btn:hover {
+  border-color: rgba(var(--v-theme-on-surface), 0.3);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.06);
+}
+
+.project-filter-btn .label {
+  font-weight: 600;
+}
+
+.project-filter-btn .chevron {
+  color: rgba(var(--v-theme-on-surface), 0.7);
+}
+
+/* 프로젝트 필터 메뉴 */
+.project-filter-menu {
+  border-radius: 12px !important;
+  overflow: hidden;
+}
+
+.project-filter-menu .menu-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 14px;
+  border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.12);
+  font-weight: 600;
+  color: rgb(var(--v-theme-on-surface));
+}
+
+.project-filter-menu .menu-search {
+  padding: 10px 12px 0 12px;
+}
+
+.project-filter-menu .menu-list {
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.project-filter-menu .menu-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: rgba(var(--v-theme-on-surface), 0.6);
+  padding: 16px 0;
+}
+
+.project-filter-menu .menu-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px 10px 12px;
+  border-top: 1px solid rgba(var(--v-theme-on-surface), 0.12);
 }
 
 /* 업무 목록 */
@@ -2187,17 +2341,17 @@ const closeErrorModal = () => {
   gap: 12px;
   padding: 16px;
   border-radius: 12px;
-  border: 1px solid #e2e8f0;
+  border: 1px solid rgba(var(--v-theme-on-surface), 0.12);
   margin-bottom: 12px;
   cursor: pointer;
   transition: all 0.2s;
-  background: #fafafa;
+  background: rgba(var(--v-theme-on-surface), 0.02);
 }
 
 .task-card:hover {
-  border-color: #cbd5e1;
+  border-color: rgba(var(--v-theme-on-surface), 0.2);
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
-  background: white;
+  background: rgba(var(--v-theme-on-surface), 0.04);
 }
 
 .task-content {
@@ -2208,13 +2362,13 @@ const closeErrorModal = () => {
 .task-title {
   font-size: 15px;
   font-weight: 600;
-  color: #1e293b;
+  color: rgb(var(--v-theme-on-surface));
   margin-bottom: 8px;
 }
 
 .task-title.completed {
   text-decoration: line-through;
-  color: #94a3b8;
+  color: rgba(var(--v-theme-on-surface), 0.6);
 }
 
 .task-meta {
@@ -2229,7 +2383,7 @@ const closeErrorModal = () => {
   align-items: center;
   gap: 4px;
   font-size: 13px;
-  color: #64748b;
+  color: rgba(var(--v-theme-on-surface), 0.7);
 }
 
 /* 일정 목록 */
@@ -2265,29 +2419,29 @@ const closeErrorModal = () => {
   gap: 12px;
   padding: 16px;
   border-radius: 12px;
-  border: 1px solid #e2e8f0;
+  border: 1px solid rgba(var(--v-theme-on-surface), 0.12);
   margin-bottom: 12px;
   cursor: pointer;
   transition: all 0.2s;
-  background: #fafafa;
+  background: rgba(var(--v-theme-on-surface), 0.02);
 }
 
 .schedule-card:hover {
-  border-color: #cbd5e1;
+  border-color: rgba(var(--v-theme-on-surface), 0.2);
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
-  background: white;
+  background: rgba(var(--v-theme-on-surface), 0.04);
 }
 
 .schedule-card.today {
-  background: linear-gradient(135deg, #f0f9ff, #e0f2fe);
-  border-color: #0ea5e9;
+  background: rgba(var(--v-theme-primary), 0.08);
+  border-color: rgb(var(--v-theme-primary));
 }
 
 .schedule-date {
   width: 48px;
   height: 48px;
   border-radius: 10px;
-  background: #f1f5f9;
+  background: rgba(var(--v-theme-on-surface), 0.05);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -2296,18 +2450,20 @@ const closeErrorModal = () => {
 }
 
 .schedule-date.today {
-  background: linear-gradient(135deg, #0ea5e9, #38bdf8);
+  background: rgb(var(--v-theme-primary));
   color: white;
 }
 
 .date-day {
   font-size: 11px;
   font-weight: 500;
+  color: rgba(var(--v-theme-on-surface), 0.7);
 }
 
 .date-num {
   font-size: 18px;
   font-weight: 700;
+  color: rgb(var(--v-theme-on-surface));
 }
 
 .schedule-content {
@@ -2318,7 +2474,7 @@ const closeErrorModal = () => {
 .schedule-title {
   font-size: 15px;
   font-weight: 600;
-  color: #1e293b;
+  color: rgb(var(--v-theme-on-surface));
   margin-bottom: 8px;
 }
 
@@ -2336,7 +2492,7 @@ const closeErrorModal = () => {
   align-items: center;
   justify-content: center;
   padding: 64px 24px;
-  color: #94a3b8;
+  color: rgba(var(--v-theme-on-surface), 0.6);
 }
 
 .empty-state p {
@@ -2387,7 +2543,7 @@ const closeErrorModal = () => {
   align-items: center;
   justify-content: space-between;
   padding: 20px 24px;
-  background: linear-gradient(135deg, rgba(var(--v-theme-primary), 0.1), rgba(var(--v-theme-primary), 0.05));
+  background: rgb(var(--v-theme-surface));
   border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.1);
 }
 
@@ -2676,7 +2832,7 @@ const closeErrorModal = () => {
   align-items: center;
   justify-content: space-between;
   padding: 20px 24px;
-  background: linear-gradient(135deg, rgba(76, 175, 80, 0.1), rgba(76, 175, 80, 0.05));
+  background: rgb(var(--v-theme-surface));
   border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.1);
 }
 
@@ -2725,7 +2881,7 @@ const closeErrorModal = () => {
 .files-count {
   font-size: 14px;
   font-weight: 500;
-  color: #4caf50;
+  color: rgb(var(--v-theme-success));
 }
 
 .files-list {
@@ -2745,7 +2901,7 @@ const closeErrorModal = () => {
 }
 
 .file-icon {
-  color: #4caf50;
+  color: rgb(var(--v-theme-success));
   flex-shrink: 0;
 }
 
@@ -2802,7 +2958,7 @@ const closeErrorModal = () => {
 }
 
 .folder-selector:hover {
-  border-color: #4caf50;
+  border-color: rgb(var(--v-theme-success));
   background: rgba(var(--v-theme-surface), 1);
 }
 
@@ -2813,7 +2969,7 @@ const closeErrorModal = () => {
 }
 
 .folder-icon {
-  color: #4caf50;
+  color: rgb(var(--v-theme-success));
 }
 
 .folder-name {
@@ -2856,12 +3012,12 @@ const closeErrorModal = () => {
 }
 
 .folder-item:hover {
-  background: rgba(76, 175, 80, 0.1);
+  background: rgba(var(--v-theme-success), 0.1);
 }
 
 .folder-item.selected {
-  background: rgba(76, 175, 80, 0.15);
-  border-left: 3px solid #4caf50;
+  background: rgba(var(--v-theme-success), 0.15);
+  border-left: 3px solid rgb(var(--v-theme-success));
 }
 
 .expand-placeholder {
@@ -2871,7 +3027,7 @@ const closeErrorModal = () => {
 }
 
 .folder-item .folder-icon {
-  color: #4caf50;
+  color: rgb(var(--v-theme-success));
   width: 20px;
   height: 20px;
 }
@@ -2903,9 +3059,10 @@ const closeErrorModal = () => {
 }
 
 .error-header {
-  background: linear-gradient(135deg, #ffebee 0%, #ffcdd2 100%);
+  background: rgb(var(--v-theme-surface));
   border-radius: 12px 12px 0 0;
   padding: 20px 24px;
+  border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.1);
 }
 
 .error-title-content {

@@ -29,7 +29,8 @@ export const connectStomp = (documentId, onMessageCallback, onConnectCallback) =
   
   client = new Client({
     webSocketFactory: () => {
-      return new SockJS('http://localhost:8080/drive-service/connect');
+      
+      return new SockJS(import.meta.env.VITE_API_URL+'/drive-service/connect');
     },
     reconnectDelay: 5000,
     heartbeatIncoming: 4000,

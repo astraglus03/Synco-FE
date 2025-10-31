@@ -323,9 +323,38 @@
               {{ meetingStore.currentRoomDetail.summaryContent }}
             </div>
           </div>
+
+          <!-- 회의 음성 다운로드 -->
+          <div class="download-section-new" v-if="meetingStore.currentRoomDetail.downloadUrl">
+            <div class="section-header-new">
+              <div class="blue-bar"></div>
+              <h4 class="section-title-new">회의 음성</h4>
+            </div>
+            <div class="download-content-new">
+              <v-btn
+                color="primary"
+                prepend-icon="mdi-download"
+                @click="downloadMeetingRecording"
+                variant="outlined"
+                class="download-btn"
+              >
+                회의 음성 다운로드
+              </v-btn>
+            </div>
+          </div>
         </div>
         
         <div class="modal-actions-new">
+          <v-btn
+            v-if="meetingStore.currentRoomDetail?.downloadUrl"
+            color="primary"
+            prepend-icon="mdi-download"
+            @click="downloadMeetingRecording"
+            class="download-action-btn"
+          >
+            음성 다운로드
+          </v-btn>
+          <v-spacer></v-spacer>
           <v-btn
             variant="text"
             class="close-btn"
@@ -466,6 +495,7 @@ import { usePermissions } from '@/composables/usePermissions'
 import { useWorkspaceStore } from '@/store/workspaceStore'
 import { useWorkspaceMemberStore } from '@/store/workspaceMemberStore'
 import { useAuthStore } from '@/store/authStore'
+import meetingApi from '@/api/meeting/meetingApi'
 
 // Props
 const props = defineProps({
@@ -579,6 +609,31 @@ const openRoomDetail = async (room) => {
 
 const closeRoomDetailModal = () => {
   showRoomDetailModal.value = false
+}
+
+// 회의 음성 다운로드 (백엔드 API 통해 Blob 다운로드)
+const downloadMeetingRecording = async () => {
+  const roomId = meetingStore.currentRoomDetail?.roomId
+  if (!roomId) {
+    alert('다운로드할 회의 음성이 없습니다.')
+    return
+  }
+
+  try {
+    const res = await meetingApi.downloadRecording(authStore.memberSeq, roomId)
+    const blob = new Blob([res.data], { type: res.headers['content-type'] || 'application/octet-stream' })
+    const url = window.URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `${meetingStore.currentRoomDetail?.roomName || 'meeting'}_recording.mp4`
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    window.URL.revokeObjectURL(url)
+  } catch (error) {
+    console.error('회의 음성 다운로드 실패:', error)
+    alert('회의 음성 다운로드 중 오류가 발생했습니다.')
+  }
 }
 
 // 참여자 색상 가져오기
@@ -833,11 +888,12 @@ onUnmounted(() => {
 /* 회의 목록 섹션 */
 .meeting-list-section {
   flex: 1;
-  padding: 40px 24px 80px 24px;
+  padding: 24px 24px 80px 24px; /* 상단 패딩 축소로 헤더와 자연스러운 연결 */
   overflow-y: auto;
-  background: rgba(var(--v-theme-on-surface), 0.02);
-  margin-top: 24px;
-  border-radius: 16px 16px 0 0;
+  background: rgb(var(--v-theme-background)); /* 헤더와 구분되는 메인 배경 */
+  margin-top: 0; /* 헤더와의 간격 제거 */
+  border-radius: 0; /* 경계 라운딩 제거로 일체감 */
+  border-top: 1px solid rgba(var(--v-theme-on-surface), 0.1); /* 기존 헤더 경계 연속성 유지 */
 }
 
 .section-header {
@@ -1279,7 +1335,8 @@ onUnmounted(() => {
 
 .meeting-info-section-new,
 .participants-section-new,
-.summary-section-new {
+.summary-section-new,
+.download-section-new {
   margin-bottom: 32px;
 }
 
@@ -1391,11 +1448,27 @@ onUnmounted(() => {
   min-height: 100px;
 }
 
+.download-content-new {
+  padding: 16px;
+  background: rgba(var(--v-theme-on-surface), 0.03);
+  border-radius: 12px;
+  border: 1px solid rgba(var(--v-theme-on-surface), 0.08);
+}
+
+.download-btn {
+  width: 100%;
+}
+
 .modal-actions-new {
   display: flex;
   justify-content: flex-end;
+  align-items: center;
   padding: 16px 24px;
   border-top: 1px solid rgba(var(--v-theme-on-surface), 0.1);
+}
+
+.download-action-btn {
+  margin-right: 8px;
 }
 
 /* 반응형 디자인 */

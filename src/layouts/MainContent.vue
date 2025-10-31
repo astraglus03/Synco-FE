@@ -138,7 +138,7 @@ const contentStyle = computed(() => {
   // windowWidth.value를 사용하여 반응형 계산 (화면 크기 변경 감지)
   const screenWidth = windowWidth.value
   let serverSidebarWidth = 72
-  let workspaceSidebarWidth = (props.workspaceType === 'personal' || !props.workspaceSidebarCollapsed) ? 260 : 72
+  let workspaceSidebarWidth = (props.workspaceType === 'personal' || !props.workspaceSidebarCollapsed) ? 220 : 72
   
   // 태블릿 이하에서는 아이콘만 표시
   if (screenWidth <= 1024) {
