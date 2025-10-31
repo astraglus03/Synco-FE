@@ -454,9 +454,8 @@ onMounted(() => {
   justify-content: space-between;
   align-items: center;
   padding: 20px 24px;
-  background: linear-gradient(135deg, #1976d2 0%, rgba(25, 118, 210, 0.8) 100%);
-  color: white;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+  background: rgb(var(--v-theme-surface));
+  border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.1);
 }
 
 .modal-header-content {
@@ -468,36 +467,37 @@ onMounted(() => {
 .modal-icon {
   width: 32px;
   height: 32px;
-  background: rgba(255, 255, 255, 0.15);
+  background: rgba(var(--v-theme-primary), 0.1);
   border-radius: 6px;
   display: flex;
   align-items: center;
   justify-content: center;
   transition: all 0.2s ease;
+  color: rgb(var(--v-theme-primary));
 }
 
 .modal-icon:hover {
-  background: rgba(255, 255, 255, 0.25);
+  background: rgba(var(--v-theme-primary), 0.15);
 }
 
 .modal-icon .v-icon {
   font-size: 20px;
-  color: white;
+  color: rgb(var(--v-theme-primary));
 }
 
 .modal-title {
   margin: 0;
   font-size: 18px;
   font-weight: 700;
-  color: white;
+  color: rgb(var(--v-theme-on-surface));
 }
 
 .close-btn {
-  color: white !important;
+  color: rgb(var(--v-theme-on-surface)) !important;
 }
 
 .close-btn:hover {
-  background: rgba(255, 255, 255, 0.1) !important;
+  background: rgba(var(--v-theme-on-surface), 0.05) !important;
 }
 
 /* 모달 콘텐츠 */

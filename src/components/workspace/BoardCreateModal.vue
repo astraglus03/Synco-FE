@@ -309,7 +309,8 @@ watch(() => props.isOpen, async (newValue) => {
   justify-content: space-between;
   align-items: flex-start;
   padding: 24px 24px 16px 24px;
-  background: rgb(var(--v-theme-schedule-header-bg));
+  background: rgb(var(--v-theme-surface));
+  border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.1);
 }
 
 .header-content {
@@ -331,17 +332,17 @@ watch(() => props.isOpen, async (newValue) => {
   font-size: 24px;
   font-weight: 600;
   margin: 0 0 4px 0;
-  color: rgb(var(--v-theme-schedule-text));
+  color: rgb(var(--v-theme-on-surface));
 }
 
 .modal-subtitle {
   font-size: 14px;
-  color: rgb(var(--v-theme-schedule-text-secondary));
+  color: rgba(var(--v-theme-on-surface), 0.7);
   margin: 0;
 }
 
 .close-btn {
-  color: rgb(var(--v-theme-schedule-text-secondary));
+  color: rgba(var(--v-theme-on-surface), 0.7);
 }
 
 /* 본문 스타일 */

@@ -2543,7 +2543,7 @@ const closeErrorModal = () => {
   align-items: center;
   justify-content: space-between;
   padding: 20px 24px;
-  background: linear-gradient(135deg, rgba(var(--v-theme-primary), 0.1), rgba(var(--v-theme-primary), 0.05));
+  background: rgb(var(--v-theme-surface));
   border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.1);
 }
 
@@ -2832,7 +2832,7 @@ const closeErrorModal = () => {
   align-items: center;
   justify-content: space-between;
   padding: 20px 24px;
-  background: linear-gradient(135deg, rgba(76, 175, 80, 0.1), rgba(76, 175, 80, 0.05));
+  background: rgb(var(--v-theme-surface));
   border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.1);
 }
 
@@ -3059,9 +3059,10 @@ const closeErrorModal = () => {
 }
 
 .error-header {
-  background: linear-gradient(135deg, #ffebee 0%, #ffcdd2 100%);
+  background: rgb(var(--v-theme-surface));
   border-radius: 12px 12px 0 0;
   padding: 20px 24px;
+  border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.1);
 }
 
 .error-title-content {

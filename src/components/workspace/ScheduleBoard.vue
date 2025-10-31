@@ -758,7 +758,8 @@ watch(
 /* 검색 바 (헤더 내부) - GlobalSearch 스타일 */
 .header-actions .search-bar-wrapper {
   position: relative;
-  max-width: 300px;
+  max-width: 500px;
+  min-width: 350px;
   margin-right: 16px;
 }
 

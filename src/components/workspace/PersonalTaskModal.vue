@@ -311,9 +311,8 @@ watch([isOpen, () => props.editTaskData], ([newValue]) => {
 /* 모달 헤더 */
 .modal-header {
   padding: 20px 24px;
-  background: linear-gradient(135deg, #1976d2, rgba(25, 118, 210, 0.8));
-  color: white;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+  background: rgb(var(--v-theme-surface));
+  border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.1);
 }
 
 .modal-header-content {
@@ -329,11 +328,11 @@ watch([isOpen, () => props.editTaskData], ([newValue]) => {
   width: 32px;
   height: 32px;
   border-radius: 6px;
-  background: rgba(255, 255, 255, 0.2);
+  background: rgba(var(--v-theme-primary), 0.1);
 }
 
 .modal-icon .v-icon {
-  color: white;
+  color: rgb(var(--v-theme-primary));
   font-size: 20px;
 }
 
@@ -341,7 +340,7 @@ watch([isOpen, () => props.editTaskData], ([newValue]) => {
   margin: 0;
   font-size: 18px;
   font-weight: 600;
-  color: white;
+  color: rgb(var(--v-theme-on-surface));
   letter-spacing: -0.3px;
 }
 
