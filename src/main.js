@@ -11,7 +11,57 @@ import axios from 'axios'
 // 전역 컴포넌트 import
 import GlobalSearch from '@/components/common/GlobalSearch.vue'
 
+// ===== 콘솔 로그 필터링 설정 =====
+// SSE 및 알림 관련 로그만 표시하고 나머지는 비활성화
+const originalConsoleLog = console.log
+console.log = function(...args) {
+  // 첫 번째 인자를 문자열로 변환하여 체크
+  const firstArg = String(args[0] || '')
+  
+  // SSE 또는 알림 관련 키워드가 있으면 로그 표시
+  const allowedKeywords = [
+    '[SSE]',
+    '[알림',
+    'SSE 연결',
+    'SSE 메시지',
+    '알림 수신',
+    '알림 Store',
+    '[App] 로그인',
+    '[App] 로그아웃'
+  ]
+  
+  const shouldLog = allowedKeywords.some(keyword => firstArg.includes(keyword))
+  
+  if (shouldLog) {
+    originalConsoleLog.apply(console, args)
+  }
+}
+
+// console.warn 비활성화 (임시)
+const originalConsoleWarn = console.warn
+console.warn = function(...args) {
+  const firstArg = String(args[0] || '')
+  
+  // SSE 관련 경고만 표시
+  if (firstArg.includes('[SSE]')) {
+    originalConsoleWarn.apply(console, args)
+  }
+  // 나머지 경고는 무시
+}
+
 const app = createApp(App)
+
+// Vue 경고 메시지 비활성화 (임시)
+app.config.warnHandler = () => {}
+
+// Vue 에러 핸들러 (SSE 관련만 표시)
+app.config.errorHandler = (err, instance, info) => {
+  const errorMsg = String(err?.message || err || '')
+  if (errorMsg.includes('SSE') || errorMsg.includes('알림')) {
+    console.error('[Vue Error]', err, info)
+  }
+  // 나머지 에러는 조용히 무시
+}
 
 const pinia = createPinia()
 app.use(pinia)

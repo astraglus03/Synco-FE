@@ -34,3 +34,39 @@ body {
   margin: 0;
   padding: 0;
 }
+
+/* 모바일 반응형 폰트 크기 최적화 */
+@media (max-width: 768px) {
+  html {
+    font-size: 14px;
+  }
+  
+  body {
+    font-size: 14px;
+  }
+  
+  * {
+    word-break: keep-all;
+    overflow-wrap: break-word;
+  }
+}
+
+@media (max-width: 480px) {
+  html {
+    font-size: 13px;
+  }
+  
+  body {
+    font-size: 13px;
+  }
+}
+
+@media (max-width: 360px) {
+  html {
+    font-size: 12px;
+  }
+  
+  body {
+    font-size: 12px;
+  }
+}

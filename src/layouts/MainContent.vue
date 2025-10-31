@@ -82,16 +82,25 @@ const navigateToPersonalDrive = () => {
   emit('navigate-to-channel', 'drive')
 }
 
+// 화면 크기 변경 감지
+const windowWidth = ref(window.innerWidth)
+
+const handleResize = () => {
+  windowWidth.value = window.innerWidth
+}
+
 onMounted(() => {
   window.addEventListener('select-schedule-channel', handleScheduleSelect)
   window.addEventListener('select-meeting-channel', handleChannelSelect)
   window.addEventListener('select-chat-channel', handleChannelSelect)
+  window.addEventListener('resize', handleResize)
 })
 
 onUnmounted(() => {
   window.removeEventListener('select-schedule-channel', handleScheduleSelect)
   window.removeEventListener('select-meeting-channel', handleChannelSelect)
   window.removeEventListener('select-chat-channel', handleChannelSelect)
+  window.removeEventListener('resize', handleResize)
 })
 
 // 현재 표시할 컴포넌트 결정
@@ -126,9 +135,25 @@ const currentComponent = computed(() => {
 
 // 컨텐츠 영역 스타일
 const contentStyle = computed(() => {
-  const serverSidebarWidth = 72
-  // 개인 워크스페이스일 때는 항상 확장된 상태로 계산
-  const workspaceSidebarWidth = (props.workspaceType === 'personal' || !props.workspaceSidebarCollapsed) ? 220 : 72
+  // windowWidth.value를 사용하여 반응형 계산 (화면 크기 변경 감지)
+  const screenWidth = windowWidth.value
+  let serverSidebarWidth = 72
+  let workspaceSidebarWidth = (props.workspaceType === 'personal' || !props.workspaceSidebarCollapsed) ? 220 : 72
+  
+  // 태블릿 이하에서는 아이콘만 표시
+  if (screenWidth <= 1024) {
+    serverSidebarWidth = 60
+    workspaceSidebarWidth = props.workspaceSidebarCollapsed ? 0 : 60
+  }
+  if (screenWidth <= 768) {
+    serverSidebarWidth = 56
+    workspaceSidebarWidth = props.workspaceSidebarCollapsed ? 0 : 56
+  }
+  if (screenWidth <= 480) {
+    serverSidebarWidth = 52
+    workspaceSidebarWidth = props.workspaceSidebarCollapsed ? 0 : 52
+  }
+  
   const memberSidebarWidth = props.memberSidebarVisible ? 280 : 0
   
   return {
@@ -136,7 +161,7 @@ const contentStyle = computed(() => {
     marginRight: `${memberSidebarWidth}px`,
     transition: 'margin-left 0.3s ease, margin-right 0.3s ease',
     width: `calc(100vw - ${serverSidebarWidth + workspaceSidebarWidth + memberSidebarWidth}px)`,
-    minWidth: '400px'
+    minWidth: screenWidth <= 768 ? '200px' : '400px'
   }
 })
 </script>
@@ -173,18 +198,24 @@ const contentStyle = computed(() => {
 }
 
 /* 반응형 디자인 */
-@media (max-width: 1200px) {
+@media (max-width: 1024px) {
   .main-content {
-    margin-left: 72px !important;
-    margin-right: 0 !important;
-    width: calc(100vw - 72px) !important;
+    min-height: calc(100vh - 56px);
+    min-width: 200px !important;
   }
 }
 
 @media (max-width: 768px) {
   .main-content {
-    margin-left: 60px !important;
-    width: calc(100vw - 60px) !important;
+    min-height: calc(100vh - 56px);
+    min-width: 150px !important;
+  }
+}
+
+@media (max-width: 480px) {
+  .main-content {
+    min-height: calc(100vh - 56px);
+    min-width: 100px !important;
   }
 }
 </style>

@@ -4,8 +4,10 @@ import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/store/authStore'
 import { useWorkspaceStore } from '@/store/workspaceStore'
 import { useWorkspaceMemberStore } from '@/store/workspaceMemberStore'
+import { useNotificationStore } from '@/store/notificationStore'
 import { Authority } from '@/models/workspace/WorkspaceModels'
 import { getWorkspaceMembers, updateWorkspace, delegateSuperAuthority, deleteWorkspace, inviteWorkspaceMembers, kickWorkspaceMember, getFriendList, searchMembers } from '@/api/workspace/workSpaceApi'
+import { acceptFriendRequest, rejectFriendRequest } from '@/api/friend/friend'
 import * as authApi from '@/api/member/auth'
 
 const props = defineProps({
@@ -17,21 +19,34 @@ const props = defineProps({
 const authStore = useAuthStore()
 const workspaceStore = useWorkspaceStore()
 const workspaceMemberStore = useWorkspaceMemberStore()
+const notificationStore = useNotificationStore()
 const router = useRouter()
 
 const emit = defineEmits(['toggle-theme', 'toggle-member-sidebar', 'toggle-notification-sidebar'])
 
-// 알림 사이드바 상태
-const notificationSidebarVisible = ref(false)
-const activeFilter = ref('all')
+// 알림 스토어에서 알림 데이터 가져오기
+const notifications = computed(() => notificationStore.notifications)
+const filteredNotifications = computed(() => notificationStore.filteredNotifications)
+const notificationCount = computed(() => notificationStore.notificationCount)
+const activeFilter = computed({
+  get: () => notificationStore.activeFilter,
+  set: (value) => notificationStore.setActiveFilter(value)
+})
+const notificationSidebarVisible = computed({
+  get: () => notificationStore.notificationSidebarVisible,
+  set: (value) => notificationStore.notificationSidebarVisible = value
+})
 
 // 프로필 메뉴 상태
 const profileMenuOpen = ref(false)
+// 친구 요청 액션 로딩 상태 (알림별)
+const friendActionLoading = ref({})
 
 // 사용자 프로필 정보 (authStore에서 가져옴)
 const profileImageUrl = ref('')
 const userName = ref('')
 
+// ===== 더미 알림 데이터 제거 (실제 SSE를 통해 수신) =====
 // 개인 스페이스용 알림 데이터
 const personalNotifications = ref([
     { 
@@ -400,35 +415,24 @@ const projectNotifications = ref([
   }
 ])
 
-// 현재 워크스페이스에 따른 알림 데이터
-const notifications = computed(() => {
-  if (props.currentWorkspace?.type === 'project') {
-    return projectNotifications.value
-  } else {
-    return personalNotifications.value
-  }
-})
+// NotificationStore를 사용하므로 더 이상 필요 없음
+// 현재 워크스페이스에 따른 알림 데이터는 상단에서 computed로 정의됨
 
 // 개인 스페이스용 필터 옵션
 const personalFilters = ref([
-  { key: 'all', label: '전체', icon: 'mdi-bell', count: 0 },
-  { key: 'unread', label: '읽지 않음', icon: 'mdi-bell-ring', count: 0 },
-  { key: 'friend_request', label: '친구 요청', icon: 'mdi-account-plus', count: 0 },
-  { key: 'personal_task', label: '개인 업무', icon: 'mdi-clipboard-list', count: 0 },
-  { key: 'personal_message', label: '개인 메시지', icon: 'mdi-message', count: 0 },
-  { key: 'personal_achievement', label: '성과', icon: 'mdi-trophy', count: 0 }
+  { key: 'all', label: '전체', icon: 'mdi-bell', alarmType: null },
+  { key: 'friend', label: '친구 요청', icon: 'mdi-account-plus', alarmType: 'alarm-friend' },
+  { key: 'task', label: '개인 업무', icon: 'mdi-clipboard-list', alarmType: 'alarm-task' },
+  { key: 'project', label: '프로젝트', icon: 'mdi-folder-account', alarmType: 'alarm-project' }
 ])
 
 // 프로젝트 스페이스용 필터 옵션
 const projectFilters = ref([
-  { key: 'all', label: '전체', icon: 'mdi-bell', count: 0 },
-  { key: 'unread', label: '읽지 않음', icon: 'mdi-bell-ring', count: 0 },
-  { key: 'project_task', label: '프로젝트 업무', icon: 'mdi-clipboard-list', count: 0 },
-  { key: 'project_meeting', label: '회의', icon: 'mdi-calendar-clock', count: 0 },
-  { key: 'project_message', label: '프로젝트 메시지', icon: 'mdi-message', count: 0 },
-  { key: 'project_file', label: '파일 공유', icon: 'mdi-file-share', count: 0 },
-  { key: 'project_member', label: '프로젝트 멤버', icon: 'mdi-account-group', count: 0 },
-  { key: 'project_update', label: '프로젝트 업데이트', icon: 'mdi-chart-line', count: 0 }
+  { key: 'all', label: '모든 알림', icon: 'mdi-bell', alarmType: null }, // 모든 프로젝트 포함
+  { key: 'workspace', label: '프로젝트', icon: 'mdi-folder', alarmType: null }, // 현재 프로젝트 전체 알림
+  { key: 'task', label: '프로젝트 업무', icon: 'mdi-clipboard-list', alarmType: 'alarm-task' },
+  { key: 'meeting', label: '회의', icon: 'mdi-calendar-clock', alarmType: 'alarm-meeting' },
+  { key: 'drive', label: '파일 공유', icon: 'mdi-file-upload', alarmType: 'alarm-drive' }
 ])
 
 // 현재 워크스페이스에 따른 필터 옵션
@@ -440,103 +444,151 @@ const notificationFilters = computed(() => {
   }
 })
 
-// 알림 개수 계산
-const notificationCount = computed(() => {
-  return notifications.value.filter(n => !n.read).length
-})
+// NotificationStore에서 이미 정의되어 있으므로 제거
 
-// 필터링된 알림 목록
-const filteredNotifications = computed(() => {
-  let filtered = notifications.value
-  
-  if (activeFilter.value === 'unread') {
-    filtered = filtered.filter(n => !n.read)
-  } else if (activeFilter.value === 'personal_task') {
-    filtered = filtered.filter(n => n.type.includes('personal_task'))
-  } else if (activeFilter.value === 'project_task') {
-    filtered = filtered.filter(n => n.type.includes('project_task'))
-  } else if (activeFilter.value === 'project_meeting') {
-    filtered = filtered.filter(n => n.type.includes('project_meeting'))
-  } else if (activeFilter.value === 'project_file') {
-    filtered = filtered.filter(n => n.type.includes('project_file'))
-  } else if (activeFilter.value === 'project_member') {
-    filtered = filtered.filter(n => n.type.includes('project_member'))
-  } else if (activeFilter.value === 'project_project') {
-    filtered = filtered.filter(n => n.type.includes('project_project'))
-  } else if (activeFilter.value !== 'all') {
-    filtered = filtered.filter(n => n.type === activeFilter.value)
-  }
-  
-  return filtered
-})
+// 필터 개수는 notificationStore에서 자동으로 계산되므로 별도 함수 불필요
 
-// 필터별 개수 업데이트
-const updateFilterCounts = () => {
-  const currentFilters = notificationFilters.value
-  const currentNotifications = notifications.value
-  
-  currentFilters.forEach(filter => {
-    if (filter.key === 'unread') {
-      filter.count = currentNotifications.filter(n => !n.read).length
-    } else if (filter.key === 'all') {
-      filter.count = currentNotifications.length
-    } else if (filter.key === 'personal_task') {
-      filter.count = currentNotifications.filter(n => n.type.includes('personal_task')).length
-    } else if (filter.key === 'project_task') {
-      filter.count = currentNotifications.filter(n => n.type.includes('project_task')).length
-    } else if (filter.key === 'project_meeting') {
-      filter.count = currentNotifications.filter(n => n.type.includes('project_meeting')).length
-    } else if (filter.key === 'project_file') {
-      filter.count = currentNotifications.filter(n => n.type.includes('project_file')).length
-    } else if (filter.key === 'project_member') {
-      filter.count = currentNotifications.filter(n => n.type.includes('project_member')).length
-    } else if (filter.key === 'project_project') {
-      filter.count = currentNotifications.filter(n => n.type.includes('project_project')).length
-    } else {
-      filter.count = currentNotifications.filter(n => n.type === filter.key).length
-    }
-  })
-}
-
-// 초기 필터 개수 업데이트
-updateFilterCounts()
-
-// 필터 변경
+// 필터 변경 (프론트엔드 필터링)
 const setActiveFilter = (filterKey) => {
-  activeFilter.value = filterKey
+  notificationStore.setActiveFilter(filterKey)
+  // console.log('[AppHeader] 필터 변경:', filterKey)
 }
 
 // 알림 클릭 처리
-const handleNotificationClick = (notification) => {
-  if (!notification.read) {
-    markAsRead(notification.id)
+const handleNotificationClick = async (notification) => {
+  try {
+    // 1) 공통: 읽음 처리
+    if (!notification.read) {
+      await notificationStore.markAsRead(notification.id)
+    }
+
+    const data = notification.data || {}
+    const type = notification.type
+
+    // 2) 라우팅 분기
+    if (type === 'alarm-friend') {
+      // 친구 요청은 카드 내 버튼으로 처리. 클릭 시 친구 페이지로 이동만 수행
+      router.push('/workspaces/personal/friends')
+      return
+    }
+
+    if (type === 'alarm-project') {
+      // 워크스페이스 초대 → 해당 워크스페이스 대시보드로 이동
+      const workSpaceSeq = data.workSpaceSeq || notification.workSpaceSeq
+      if (workSpaceSeq) {
+        const workspaceId = `workspace_${workSpaceSeq}`
+        router.push(`/workspaces/${workspaceId}/dashboard`)
+      }
+      return
+    }
+
+    if (type === 'alarm-task') {
+      // 업무 등록/댓글 → 팀 일정으로 이동 후 상세 모달 오픈
+      const workSpaceSeq = data.workSpaceSeq || data.workspaceSeq || data.projectSeq || notification.workSpaceSeq
+      const channelSeq = data.channelSeq || data.scheduleChannelSeq || data.channel?.channelSeq
+      const taskSeq = data.taskSeq || data.targetSeq || data.taskId || data.id || data.task?.taskSeq || channelSeq
+      console.log('[알림 네비] alarm-task payload:', { workSpaceSeq, taskSeq, channelSeq, raw: data })
+      if (workSpaceSeq) {
+        // 요구사항: /workspaces/{seq}/schedules/team-schedule 로 이동
+        const path = `/workspaces/${workSpaceSeq}/schedules/team-schedule`
+        router.push(path).then(() => {
+          if (taskSeq) {
+            try {
+              sessionStorage.setItem('openTaskDetailTaskSeq', String(taskSeq))
+            } catch {}
+            // 일정 시간 동안 재시도 (뷰 마운트 타이밍 보정)
+            let attempts = 0
+            const maxAttempts = 10
+            const timer = setInterval(() => {
+              console.log('[알림 네비] dispatch open-task-detail attempt', attempts + 1, 'taskSeq=', taskSeq)
+              attempts++
+              window.dispatchEvent(new CustomEvent('open-task-detail', { detail: { taskSeq } }))
+              if (attempts >= maxAttempts) {
+                clearInterval(timer)
+              }
+            }, 150)
+          }
+        })
+      }
+      return
+    }
+
+    // 워크스페이스 강제 탈퇴(추정): 읽음 처리만
+    const isKick = data?.subType === 'KICK' || /강제\s*탈퇴/.test(notification.message || '')
+    if (isKick) {
+      return
+    }
+  } catch (e) {
+    console.error('[알림 클릭 처리 실패]:', e)
   }
-  // 알림 타입에 따른 추가 처리
-  console.log('알림 클릭:', notification)
 }
 
-// 알림 읽음 처리
-const markAsRead = (notificationId) => {
-  const notification = notifications.value.find(n => n.id === notificationId)
-  if (notification) {
-  notification.read = true
-    updateFilterCounts()
+// 친구 요청 수락/거절
+const handleAcceptFriend = async (notification) => {
+  try {
+    friendActionLoading.value[notification.id] = true
+    const friendSeq = notification.data?.friendSeq || notification.data?.targetSeq
+    if (friendSeq) {
+      await acceptFriendRequest(friendSeq)
+    }
+  } catch (e) {
+    console.error('친구 요청 수락 실패:', e)
+  } finally {
+    await notificationStore.markAsRead(notification.id)
+    router.push('/workspaces/personal/friends')
+    friendActionLoading.value[notification.id] = false
   }
 }
 
-// 모든 알림 읽음 처리
-const markAllAsRead = () => {
-  notifications.value.forEach(n => n.read = true)
-  updateFilterCounts()
+const handleRejectFriend = async (notification) => {
+  try {
+    friendActionLoading.value[notification.id] = true
+    const friendSeq = notification.data?.friendSeq || notification.data?.targetSeq
+    if (friendSeq) {
+      await rejectFriendRequest(friendSeq)
+    }
+  } catch (e) {
+    console.error('친구 요청 거절 실패:', e)
+  } finally {
+    await notificationStore.markAsRead(notification.id)
+    router.push('/workspaces/personal/friends')
+    friendActionLoading.value[notification.id] = false
+  }
 }
 
-// 알림 삭제
-const deleteNotification = (notificationId) => {
-  const index = notifications.value.findIndex(n => n.id === notificationId)
-  if (index > -1) {
-    notifications.value.splice(index, 1)
-    updateFilterCounts()
-  }
+// 알림 읽음 처리 (notificationStore로 위임)
+const markAsRead = async (notificationId) => {
+  // console.log('[AppHeader] 🔄 단건 읽음 처리 호출:', notificationId)
+  await notificationStore.markAsRead(notificationId)
+  // console.log('[AppHeader] ✅ 단건 읽음 처리 완료')
+}
+
+// 모든 알림 읽음 처리 (notificationStore로 위임)
+const markAllAsRead = async () => {
+  // console.log('[AppHeader] 🔄 전체 읽음 처리 호출')
+  await notificationStore.markAllAsRead()
+  // console.log('[AppHeader] ✅ 전체 읽음 처리 완료')
+}
+
+// 알림 삭제 (notificationStore로 위임)
+const deleteNotification = async (notificationId) => {
+  // console.log('[AppHeader] 🗑️ 단건 삭제 호출:', notificationId)
+  await notificationStore.deleteNotification(notificationId)
+  // console.log('[AppHeader] ✅ 단건 삭제 완료')
+}
+
+// 전체 알림 삭제 (notificationStore로 위임)
+const clearAllNotifications = async () => {
+  // console.log('[AppHeader] 🗑️ 전체 삭제 호출')
+  await notificationStore.clearAllNotifications()
+  // console.log('[AppHeader] ✅ 전체 삭제 완료')
+}
+
+// 타입별 알림 삭제 (notificationStore로 위임)
+const deleteFilterNotifications = async (alarmType) => {
+  // console.log('[AppHeader] 🗑️ 타입별 삭제 호출:', alarmType)
+  await notificationStore.deleteFilterNotifications(alarmType)
+  // console.log('[AppHeader] ✅ 타입별 삭제 완료')
 }
 
 // 모든 알림 보기
@@ -548,14 +600,19 @@ const viewAllNotifications = () => {
 // 알림 아이콘 가져오기
 const getNotificationIcon = (type) => {
   const icons = {
-    // 개인 스페이스 아이콘
+    // 신규 알림 타입 (백엔드 기준)
+    'alarm-friend': 'mdi-account-plus',
+    'alarm-task': 'mdi-clipboard-text',
+    'alarm-project': 'mdi-folder-account',
+    'alarm-meeting': 'mdi-video',
+    'alarm-drive': 'mdi-file-upload',
+
+    // 레거시/더미 타입 호환
     friend_request: 'mdi-account-plus',
     personal_task_assigned: 'mdi-clipboard-plus',
     personal_task_due_soon: 'mdi-clock-alert',
     personal_message: 'mdi-message',
     personal_achievement: 'mdi-trophy',
-    
-    // 팀 스페이스 아이콘
     team_task_assigned: 'mdi-clipboard-multiple',
     team_meeting_reminder: 'mdi-calendar-clock',
     team_message: 'mdi-message-text',
@@ -569,14 +626,19 @@ const getNotificationIcon = (type) => {
 // 알림 색상 가져오기
 const getNotificationColor = (type) => {
   const colors = {
-    // 개인 스페이스 색상
+    // 신규 알림 타입 (백엔드 기준)
+    'alarm-friend': 'blue',
+    'alarm-task': 'orange',
+    'alarm-project': 'purple',
+    'alarm-meeting': 'indigo',
+    'alarm-drive': 'cyan',
+
+    // 레거시/더미 타입 호환
     friend_request: 'blue',
     personal_task_assigned: 'orange',
     personal_task_due_soon: 'red',
     personal_message: 'green',
     personal_achievement: 'amber',
-    
-    // 팀 스페이스 색상
     team_task_assigned: 'purple',
     team_meeting_reminder: 'indigo',
     team_message: 'teal',
@@ -587,6 +649,28 @@ const getNotificationColor = (type) => {
   return colors[type] || 'primary'
 }
 
+// 알림 타입 텍스트
+const getNotificationTypeText = (type) => {
+  const map = {
+    'alarm-friend': '친구',
+    'alarm-task': '업무',
+    'alarm-project': '프로젝트',
+    'alarm-meeting': '회의',
+    'alarm-drive': '파일'
+  }
+  return map[type] || '알림'
+}
+
+// 우선순위 색상 가져오기
+const getPriorityColor = (priority) => {
+  const colors = {
+    high: 'red',
+    medium: 'orange',
+    normal: 'blue',
+    low: 'grey'
+  }
+  return colors[priority] || 'grey'
+}
 
 // 우선순위 텍스트 가져오기
 const getPriorityText = (priority) => {
@@ -607,6 +691,8 @@ const isWorkspaceOwner = ref(true)
 
 // 팀명 (실제 워크스페이스 이름 사용)
 const teamName = ref('')
+const projectStartDate = ref('') // yyyy-MM-dd
+const projectEndDate = ref('')   // yyyy-MM-dd
 
 // 썸네일 이미지
 const thumbnailImage = ref(null)
@@ -631,6 +717,11 @@ watch(() => workspaceStore.currentWorkspaceInfo, (newWorkspace) => {
   if (newWorkspace) {
     teamName.value = newWorkspace.name || '워크스페이스'
     thumbnailPreview.value = newWorkspace.profile || ''
+    // 날짜 초기화 (백엔드 LocalDateTime → yyyy-MM-dd)
+    const start = newWorkspace.startDate || newWorkspace.projectStartDate
+    const end = newWorkspace.endDate || newWorkspace.projectEndDate
+    projectStartDate.value = start ? new Date(start).toISOString().split('T')[0] : ''
+    projectEndDate.value = end ? new Date(end).toISOString().split('T')[0] : ''
   }
 }, { immediate: true })
 
@@ -877,6 +968,11 @@ const handleBeforeUnload = () => {
   workspaceSettingsOpen.value = false
 }
 
+// 창 크기 변경 시 알림 사이드바 강제 닫기 (해상도와 무관하게 항상 닫힘 보장)
+const handleWindowResize = () => {
+  notificationSidebarVisible.value = false
+}
+
 // 초기 로드
 onMounted(async () => {
   // 워크스페이스 목록 로드
@@ -886,11 +982,15 @@ onMounted(async () => {
   
   // 새로고침 시 모달창 닫기
   window.addEventListener('beforeunload', handleBeforeUnload)
+
+  // 해상도 변경 시 알림 사이드바 항상 닫기
+  window.addEventListener('resize', handleWindowResize)
 })
 
 // 컴포넌트 언마운트 시 이벤트 리스너 정리
 onUnmounted(() => {
   window.removeEventListener('beforeunload', handleBeforeUnload)
+  window.removeEventListener('resize', handleWindowResize)
 })
 
 // 썸네일 이미지 선택
@@ -917,11 +1017,16 @@ const updateWorkspaceInfo = async () => {
   try {
     // 썸네일 이미지를 변경하지 않았으면 null 대신 undefined 전달
     const thumbnailToSend = thumbnailImage.value instanceof File ? thumbnailImage.value : undefined
+    // LocalDateTime 문자열로 변환 (00:00:00 고정)
+    const startDateToSend = projectStartDate.value ? `${projectStartDate.value}T00:00:00` : undefined
+    const endDateToSend = projectEndDate.value ? `${projectEndDate.value}T23:59:59` : undefined
     
     const updatedWorkspace = await updateWorkspace(
-      currentWorkspace.workSpaceSeq, 
-      teamName.value, 
-      thumbnailToSend
+      currentWorkspace.workSpaceSeq,
+      teamName.value,
+      thumbnailToSend,
+      startDateToSend,
+      endDateToSend
     )
     
     // 워크스페이스 목록 새로고침
@@ -1159,15 +1264,28 @@ const handleDeleteWorkspace = async () => {
 }
 
 // 알림 사이드바 토글
-const toggleNotificationSidebar = () => {
+const toggleNotificationSidebar = async () => {
+  // 모든 화면에서 알림 사이드바 토글 가능
   notificationSidebarVisible.value = !notificationSidebarVisible.value
   emit('toggle-notification-sidebar', notificationSidebarVisible.value)
+  
+  // 사이드바가 열릴 때 알림 목록 불러오기 (1회만)
+  if (notificationSidebarVisible.value && notifications.value.length === 0) {
+    // console.log('[AppHeader] 알림 사이드바 열림, 알림 불러오기')
+    await notificationStore.fetchNotifications()
+  }
 }
 
-// 워크스페이스 변경 시 필터 초기화 및 개수 업데이트
+// 워크스페이스 변경 시 필터 초기화 및 워크스페이스 정보 설정
 const resetFiltersOnWorkspaceChange = () => {
-  activeFilter.value = 'all'
-  updateFilterCounts()
+  notificationStore.setActiveFilter('all')
+  
+  // 워크스페이스 타입과 번호 설정 (프론트엔드 필터링용)
+  const type = props.currentWorkspace?.type || 'personal'
+  const workspaceSeq = type === 'project' ? props.currentWorkspace?.workSpaceSeq : null
+  notificationStore.setWorkspace(type, workspaceSeq)
+  
+  // console.log('[AppHeader] 워크스페이스 변경:', { type, workspaceSeq })
 }
 
 // 워크스페이스 변경 감지
@@ -1468,6 +1586,35 @@ onMounted(() => {
                       hide-details
                       class="modern-input"
           />
+                  </div>
+
+                  <div class="date-section">
+                    <label class="field-label">프로젝트 기간</label>
+                    <div class="date-row">
+                      <v-text-field
+                        v-model="projectStartDate"
+                        type="date"
+                        label="시작일"
+                        variant="solo-filled"
+                        flat
+                        density="comfortable"
+                        hide-details
+                        class="modern-input"
+                        :max="projectEndDate || undefined"
+                        required
+                      />
+                      <v-text-field
+                        v-model="projectEndDate"
+                        type="date"
+                        label="종료일"
+                        variant="solo-filled"
+                        flat
+                        density="comfortable"
+                        hide-details
+                        class="modern-input"
+                        :min="projectStartDate || undefined"
+                      />
+                    </div>
                   </div>
           
           <input
@@ -1970,10 +2117,13 @@ onMounted(() => {
 
   <!-- 알림 사이드바 -->
   <v-navigation-drawer
+    v-if="notificationSidebarVisible"
     v-model="notificationSidebarVisible"
     location="right"
     width="400"
     temporary
+    :permanent="false"
+    :rail="false"
     class="notification-sidebar"
   >
     <!-- 사이드바 헤더 -->
@@ -1993,6 +2143,17 @@ onMounted(() => {
           >
             <v-icon left size="16">mdi-check-all</v-icon>
             모두 읽음
+          </v-btn>
+          <v-btn 
+            variant="outlined"
+            size="small" 
+            color="error"
+            @click="clearAllNotifications"
+            :disabled="filteredNotifications.length === 0"
+            class="clear-all-button"
+          >
+            <v-icon left size="16">mdi-delete-sweep</v-icon>
+            모두 삭제
           </v-btn>
           <v-btn 
             icon
@@ -2017,7 +2178,6 @@ onMounted(() => {
         >
             <v-icon size="16">{{ filter.icon }}</v-icon>
             <span>{{ filter.label }}</span>
-            <span v-if="filter.count > 0" class="filter-count">{{ filter.count }}</span>
           </button>
         </div>
       </div>
@@ -2032,21 +2192,58 @@ onMounted(() => {
         @click="handleNotificationClick(notification)"
       >
         <div class="notification-icon">
-          <div :class="['icon-wrapper', getNotificationColor(notification.type)]">
-            <v-icon size="18">{{ getNotificationIcon(notification.type) }}</v-icon>
-          </div>
+          <v-avatar size="28" :color="getNotificationColor(notification.type)" class="type-avatar">
+            <v-icon size="18" color="white">{{ getNotificationIcon(notification.type) }}</v-icon>
+          </v-avatar>
+          <span v-if="!notification.read" class="unread-dot"></span>
         </div>
-        
+
         <div class="notification-body">
+          <div class="notification-header-row">
+            <v-chip
+              size="x-small"
+              :color="getNotificationColor(notification.type)"
+              variant="tonal"
+              class="type-chip"
+            >
+              {{ getNotificationTypeText(notification.type) }}
+            </v-chip>
+            <span class="notification-time">{{ notification.time }}</span>
+          </div>
           <p class="notification-text">{{ notification.message }}</p>
           <div class="notification-footer">
-            <span class="notification-time">{{ notification.time }}</span>
             <div v-if="notification.priority" class="priority-badge">
               {{ getPriorityText(notification.priority) }}
             </div>
+            <div v-if="notification.type === 'alarm-friend'" class="friend-actions">
+              <v-btn
+                size="small"
+                color="primary"
+                variant="elevated"
+                prepend-icon="mdi-check"
+                :loading="friendActionLoading[notification.id] === true"
+                :disabled="friendActionLoading[notification.id] === true"
+                class="friend-action-btn accept"
+                @click.stop="handleAcceptFriend(notification)"
+              >
+                수락
+              </v-btn>
+              <v-btn
+                size="small"
+                color="error"
+                variant="tonal"
+                prepend-icon="mdi-close"
+                :loading="friendActionLoading[notification.id] === true"
+                :disabled="friendActionLoading[notification.id] === true"
+                class="friend-action-btn reject"
+                @click.stop="handleRejectFriend(notification)"
+              >
+                거절
+              </v-btn>
+            </div>
           </div>
         </div>
-        
+
         <div class="notification-actions">
           <button
             v-if="!notification.read"
@@ -2121,7 +2318,8 @@ onMounted(() => {
   display: flex;
   align-items: center;
   gap: 16px;
-  min-width: 200px;
+  min-width: auto;
+  flex-shrink: 0;
 }
 
 .header-center {
@@ -2129,15 +2327,18 @@ onMounted(() => {
   display: flex;
   align-items: center;
   justify-content: center;
+  min-width: 0;
 }
 
 .header-right {
   display: flex;
   align-items: center;
   gap: 6px;
-  min-width: 300px;
+  min-width: auto;
   justify-content: flex-end;
   padding-right: 16px;
+  flex-shrink: 0;
+  flex-wrap: nowrap;
 }
 
 .logo-btn {
@@ -2153,7 +2354,10 @@ onMounted(() => {
 .search-container {
   position: relative;
   width: 300px;
+  max-width: 300px;
+  min-width: 150px;
   z-index: 1008;
+  flex-shrink: 1;
 }
 
 /* =====================================================
@@ -3081,7 +3285,8 @@ onMounted(() => {
   gap: 8px;
 }
 
-.mark-all-button {
+.mark-all-button,
+.clear-all-button {
   text-transform: none !important;
   font-weight: 500 !important;
   font-size: 13px !important;
@@ -3197,30 +3402,18 @@ onMounted(() => {
 .notification-icon {
   margin-right: 12px;
   flex-shrink: 0;
+  position: relative;
 }
 
-.icon-wrapper {
-  width: 36px;
-  height: 36px;
-  border-radius: 8px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: white;
-  font-weight: 600;
+.unread-dot {
+  position: absolute;
+  right: -2px;
+  top: -2px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #ef4444;
 }
-
-.icon-wrapper.blue { background: #3b82f6; }
-.icon-wrapper.orange { background: #f59e0b; }
-.icon-wrapper.red { background: #ef4444; }
-.icon-wrapper.green { background: #10b981; }
-.icon-wrapper.amber { background: #f59e0b; }
-.icon-wrapper.purple { background: #8b5cf6; }
-.icon-wrapper.indigo { background: #6366f1; }
-.icon-wrapper.teal { background: #14b8a6; }
-.icon-wrapper.cyan { background: #06b6d4; }
-.icon-wrapper.lime { background: #84cc16; }
-.icon-wrapper.pink { background: #ec4899; }
 
 .notification-body {
   flex: 1;
@@ -3228,13 +3421,9 @@ onMounted(() => {
   padding-right: 8px;
 }
 
-.notification-text {
-  font-size: 14px;
-  font-weight: 500;
-  color: #111827;
-  line-height: 1.5;
-  margin: 0 0 8px 0;
-}
+.notification-header-row { display: flex; align-items: center; justify-content: space-between; }
+.type-chip { text-transform: none; }
+.notification-text { font-size: 14px; font-weight: 500; color: #111827; line-height: 1.5; margin: 2px 0 6px 0; }
 
 .notification-footer {
   display: flex;
@@ -3273,6 +3462,21 @@ onMounted(() => {
 
 .notification-card:hover .notification-actions {
   opacity: 1;
+}
+
+/* 친구 요청 액션 버튼 */
+.friend-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.friend-action-btn.accept {
+  border-radius: 8px;
+}
+
+.friend-action-btn.reject {
+  border-radius: 8px;
 }
 
 .action-button {
@@ -3405,41 +3609,134 @@ onMounted(() => {
   border-top-color: #374151;
 }
 
-/* 반응형 */
-@media (max-width: 768px) {
+/* 반응형 - 개선된 버전 */
+/* 큰 태블릿 */
+@media (max-width: 1024px) {
   .search-container {
-    width: 200px;
+    width: 220px;
+    max-width: 220px;
+  }
+  
+  .header-left {
+    gap: 12px;
   }
   
   .header-right {
-    min-width: 250px;
+    gap: 4px;
+    padding-right: 12px;
   }
   
+  .logo-btn {
+    font-size: 18px;
+  }
+  
+  /* 다이얼로그 최적화 */
+  .modern-settings-dialog {
+    max-width: 90vw !important;
+  }
+  
+  .invite-layout {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+  
+  .invite-layout.has-search {
+    grid-template-columns: 1fr;
+  }
+  
+  .content-section {
+    padding: 20px 24px;
+  }
+  
+  .modern-header {
+    padding: 24px 24px 20px;
+  }
+  
+  .tabs-container {
+    padding: 16px 24px 0;
+  }
+  
+  /* 알림 사이드바 - 태블릿에서는 왼쪽 사이드바 제외한 전체 너비 */
   .notification-sidebar {
-    width: 100vw !important;
+    width: calc(100vw - 120px) !important;
+    margin-left: 120px !important;
+  }
+}
+
+/* 태블릿 */
+@media (max-width: 768px) {
+  .app-header {
+    height: 56px !important;
+  }
+  
+  .search-container {
+    width: 180px;
+    max-width: 180px;
+    min-width: 120px;
+  }
+  
+  .header-left {
+    gap: 8px;
+    min-width: auto;
+  }
+  
+  .header-right {
+    gap: 2px;
+    padding-right: 8px;
+    min-width: auto;
+  }
+  
+  .logo-btn {
+    font-size: 16px;
+    padding: 4px 8px !important;
+    min-width: auto !important;
+  }
+  
+  .notification-btn,
+  .project-settings-btn,
+  .profile-btn {
+    width: 36px !important;
+    height: 36px !important;
+    min-width: 36px !important;
+  }
+  
+  /* 알림 사이드바 - 모바일에서는 왼쪽 사이드바 제외한 전체 너비 */
+  .notification-sidebar {
+    width: calc(100vw - 112px) !important;
+    margin-left: 112px !important;
   }
   
   .notification-header {
-    padding: 20px 16px 12px;
+    padding: 16px 12px 10px;
   }
   
   .header-title {
-    font-size: 18px;
+    font-size: 16px;
+  }
+  
+  .notification-count {
+    font-size: 10px;
+    padding: 2px 6px;
   }
   
   .filter-tabs {
     gap: 6px;
+    flex-wrap: wrap;
   }
   
   .filter-tab {
-    font-size: 12px;
-    padding: 6px 10px;
-    min-height: 32px;
+    font-size: 11px;
+    padding: 4px 8px;
+    min-height: 28px;
+  }
+  
+  .filter-tab span {
+    font-size: 11px !important;
   }
   
   .notification-card {
-    margin: 0 8px 6px;
-    padding: 14px 16px;
+    margin: 0 6px 4px;
+    padding: 10px 12px;
   }
   
   .icon-wrapper {
@@ -3470,52 +3767,647 @@ onMounted(() => {
   .notification-actions-footer {
     padding: 12px 16px;
   }
+  
+  /* 다이얼로그 */
+  .modern-settings-dialog {
+    max-width: 95vw !important;
+    margin: 12px;
+  }
+  
+  .modern-header {
+    padding: 20px 16px 16px;
+  }
+  
+  .icon-badge {
+    width: 48px;
+    height: 48px;
+  }
+  
+  .main-title {
+    font-size: 22px;
+  }
+  
+  .subtitle {
+    font-size: 13px;
+  }
+  
+  .tabs-container {
+    padding: 12px 16px 0;
+  }
+  
+  .tab-pill {
+    padding: 10px 16px;
+    font-size: 14px;
+  }
+  
+  .content-section {
+    padding: 16px 20px;
+  }
+  
+  .profile-content {
+    padding: 24px 20px;
+  }
+  
+  .project-avatar {
+    width: 100px !important;
+    height: 100px !important;
+  }
+  
+  .avatar-text {
+    font-size: 40px;
+  }
 }
 
+/* 모바일 */
 @media (max-width: 480px) {
+  .app-header {
+    height: 56px !important;
+  }
+  
   .search-container {
-    width: 150px;
+    width: 100px;
+    max-width: 100px;
+    min-width: 70px;
+  }
+  
+  .header-left {
+    gap: 2px;
+    min-width: auto;
   }
   
   .header-right {
-    min-width: 200px;
-    gap: 4px;
+    gap: 1px;
+    padding-right: 2px;
+    min-width: auto;
+  }
+  
+  .logo-btn {
+    font-size: 12px !important;
+    padding: 2px 4px !important;
+    min-width: auto !important;
+  }
+  
+  .logo-text {
+    display: inline-block;
+    font-size: 12px !important;
+  }
+  
+  .notification-btn,
+  .project-settings-btn,
+  .profile-btn {
+    width: 32px !important;
+    height: 32px !important;
+    min-width: 32px !important;
+  }
+  
+  .profile-btn .v-avatar {
+    width: 28px !important;
+    height: 28px !important;
+  }
+  
+  /* 알림 사이드바 - 모바일에서는 왼쪽 사이드바 제외한 전체 너비 */
+  .notification-sidebar {
+    width: calc(100vw - 104px) !important;
+    margin-left: 104px !important;
+  }
+  
+  .notification-header {
+    padding: 12px 8px 8px;
+  }
+  
+  .header-title {
+    font-size: 14px;
+  }
+  
+  .notification-count {
+    font-size: 9px;
+    padding: 2px 5px;
+  }
+  
+  .mark-all-button,
+  .clear-all-button {
+    font-size: 10px !important;
+    padding: 0 8px !important;
+    height: 26px !important;
+  }
+  
+  .mark-all-button .v-icon,
+  .clear-all-button .v-icon {
+    font-size: 12px !important;
+  }
+  
+  .close-button {
+    width: 26px !important;
+    height: 26px !important;
+    min-width: 26px !important;
+  }
+  
+  .filter-tab {
+    font-size: 10px;
+    padding: 3px 6px;
+    min-height: 24px;
+    gap: 3px;
+  }
+  
+  .filter-tab .v-icon {
+    font-size: 12px !important;
+  }
+  
+  .filter-tab span {
+    font-size: 10px !important;
+    white-space: nowrap;
+  }
+  
+  .filter-count {
+    font-size: 8px;
+    padding: 1px 4px;
   }
   
   .notification-card {
-    margin: 0 4px 4px;
-    padding: 12px 14px;
+    margin: 0 4px 3px;
+    padding: 8px 10px;
   }
   
   .icon-wrapper {
-    width: 28px;
-    height: 28px;
-  }
-  
-  .notification-text {
-    font-size: 12px;
-    margin-bottom: 6px;
-  }
-  
-  .notification-time {
-    font-size: 10px;
-  }
-  
-  .action-button {
     width: 24px;
     height: 24px;
   }
   
+  .icon-wrapper .v-icon {
+    font-size: 14px !important;
+  }
+  
+  .notification-text {
+    font-size: 11px;
+    margin-bottom: 4px;
+    line-height: 1.3;
+  }
+  
+  .notification-time {
+    font-size: 9px;
+  }
+  
+  .priority-badge {
+    font-size: 8px;
+    padding: 1px 4px;
+  }
+  
+  .action-button {
+    width: 22px;
+    height: 22px;
+  }
+  
+  .action-button .v-icon {
+    font-size: 12px !important;
+  }
+  
   .empty-state {
-    padding: 30px 12px;
+    padding: 20px 8px;
+  }
+  
+  .empty-icon .v-icon {
+    font-size: 36px !important;
   }
   
   .empty-title {
-    font-size: 14px;
+    font-size: 13px;
   }
   
   .empty-description {
+    font-size: 11px;
+  }
+  
+  /* 다이얼로그 */
+  .modern-settings-dialog {
+    max-width: 100vw !important;
+    margin: 0;
+    border-radius: 0 !important;
+  }
+  
+  .modern-header {
+    padding: 12px 10px 10px;
+  }
+  
+  .header-left-section {
+    gap: 8px;
+  }
+  
+  .icon-badge {
+    width: 36px;
+    height: 36px;
+  }
+  
+  .icon-badge .v-icon {
+    font-size: 18px !important;
+  }
+  
+  .main-title {
+    font-size: 15px;
+  }
+  
+  .subtitle {
+    font-size: 11px;
+  }
+  
+  .modern-close-btn {
+    width: 32px !important;
+    height: 32px !important;
+  }
+  
+  .tabs-container {
+    padding: 6px 10px 0;
+  }
+  
+  .tab-pills {
+    gap: 3px;
+    overflow-x: auto;
+    flex-wrap: nowrap;
+    -webkit-overflow-scrolling: touch;
+  }
+  
+  .tab-pill {
+    padding: 6px 10px;
+    font-size: 11px;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+  
+  .tab-pill .v-icon {
+    font-size: 14px !important;
+  }
+  
+  .content-section {
+    padding: 10px 12px;
+  }
+  
+  .profile-content {
+    padding: 16px 12px;
+    gap: 16px;
+  }
+  
+  .project-avatar {
+    width: 70px !important;
+    height: 70px !important;
+  }
+  
+  .avatar-text {
+    font-size: 28px;
+  }
+  
+  .card-label {
+    padding: 10px 12px;
     font-size: 12px;
+  }
+  
+  .modern-input :deep(.v-field) {
+    font-size: 13px;
+  }
+  
+  .warning-box {
+    padding: 16px 12px;
+  }
+  
+  .warning-title {
+    font-size: 14px;
+  }
+  
+  .warning-text {
+    font-size: 12px;
+    line-height: 1.4;
+  }
+  
+  .invite-search-header {
+    padding: 12px 10px 10px;
+  }
+  
+  .invite-layout {
+    padding: 0 10px 12px;
+    min-height: auto;
+  }
+  
+  .invite-panel {
+    padding: 12px;
+    gap: 10px;
+  }
+  
+  .panel-title {
+    font-size: 13px;
+  }
+  
+  .member-name {
+    font-size: 12px;
+  }
+  
+  .member-role {
+    font-size: 10px;
+  }
+}
+
+/* 아주 작은 화면 (초소형 모바일) */
+@media (max-width: 360px) {
+  .app-header {
+    height: 52px !important;
+  }
+  
+  .search-container {
+    width: 80px;
+    max-width: 80px;
+    min-width: 60px;
+  }
+  
+  .header-left {
+    gap: 1px;
+  }
+  
+  .header-right {
+    gap: 0px;
+    padding-right: 1px;
+  }
+  
+  .logo-btn {
+    font-size: 11px !important;
+    padding: 1px 3px !important;
+  }
+  
+  .logo-text {
+    font-size: 11px !important;
+  }
+  
+  .notification-btn,
+  .project-settings-btn,
+  .profile-btn {
+    width: 28px !important;
+    height: 28px !important;
+    min-width: 28px !important;
+  }
+  
+  .notification-btn .v-icon,
+  .project-settings-btn .v-icon {
+    font-size: 18px !important;
+  }
+  
+  .profile-btn .v-avatar {
+    width: 24px !important;
+    height: 24px !important;
+  }
+  
+  /* 알림 사이드바 - 초소형 모바일에서는 왼쪽 사이드바 제외한 전체 너비 */
+  .notification-sidebar {
+    width: calc(100vw - 100px) !important;
+    margin-left: 100px !important;
+  }
+  
+  .notification-header {
+    padding: 10px 6px 6px;
+  }
+  
+  .header-title {
+    font-size: 13px;
+  }
+  
+  .notification-count {
+    font-size: 8px;
+    padding: 1px 4px;
+  }
+  
+  .mark-all-button,
+  .clear-all-button {
+    font-size: 9px !important;
+    padding: 0 6px !important;
+    height: 24px !important;
+  }
+  
+  .mark-all-button .v-icon,
+  .clear-all-button .v-icon {
+    font-size: 10px !important;
+  }
+  
+  .close-button {
+    width: 24px !important;
+    height: 24px !important;
+    min-width: 24px !important;
+  }
+  
+  .filter-tabs {
+    gap: 2px;
+  }
+  
+  .filter-tab {
+    font-size: 9px;
+    padding: 2px 5px;
+    min-height: 22px;
+    gap: 2px;
+  }
+  
+  .filter-tab .v-icon {
+    font-size: 10px !important;
+  }
+  
+  .filter-tab span {
+    font-size: 9px !important;
+  }
+  
+  .filter-count {
+    font-size: 7px;
+    padding: 1px 3px;
+  }
+  
+  .notification-card {
+    margin: 0 3px 2px;
+    padding: 6px 8px;
+  }
+  
+  .icon-wrapper {
+    width: 20px;
+    height: 20px;
+  }
+  
+  .icon-wrapper .v-icon {
+    font-size: 12px !important;
+  }
+  
+  .notification-text {
+    font-size: 10px;
+    line-height: 1.2;
+  }
+  
+  .notification-time {
+    font-size: 8px;
+  }
+  
+  .priority-badge {
+    font-size: 7px;
+    padding: 1px 3px;
+  }
+  
+  .action-button {
+    width: 20px;
+    height: 20px;
+  }
+  
+  .action-button .v-icon {
+    font-size: 10px !important;
+  }
+  
+  .empty-state {
+    padding: 16px 6px;
+  }
+  
+  .empty-icon .v-icon {
+    font-size: 32px !important;
+  }
+  
+  .empty-title {
+    font-size: 12px;
+  }
+  
+  .empty-description {
+    font-size: 10px;
+  }
+  
+  .tab-pill {
+    padding: 5px 8px;
+    font-size: 10px;
+    gap: 3px;
+  }
+  
+  .tab-pill .v-icon {
+    font-size: 12px !important;
+  }
+  
+  .main-title {
+    font-size: 14px;
+  }
+  
+  .subtitle {
+    font-size: 10px;
+  }
+  
+  /* 다이얼로그 최적화 */
+  .modern-settings-dialog {
+    max-width: 100vw !important;
+  }
+  
+  .modern-header {
+    padding: 10px 8px 8px;
+  }
+  
+  .icon-badge {
+    width: 32px;
+    height: 32px;
+  }
+  
+  .icon-badge .v-icon {
+    font-size: 16px !important;
+  }
+  
+  .modern-close-btn {
+    width: 28px !important;
+    height: 28px !important;
+  }
+  
+  .content-section {
+    padding: 8px 10px;
+  }
+  
+  .profile-content {
+    padding: 12px 10px;
+  }
+  
+  .project-avatar {
+    width: 60px !important;
+    height: 60px !important;
+  }
+  
+  .avatar-text {
+    font-size: 24px;
+  }
+  
+  .card-label {
+    padding: 8px 10px;
+    font-size: 11px;
+  }
+  
+  .modern-input :deep(.v-field) {
+    font-size: 12px;
+  }
+  
+  .panel-title {
+    font-size: 12px;
+  }
+  
+  .member-name {
+    font-size: 11px;
+  }
+  
+  .member-role {
+    font-size: 9px;
+  }
+  
+  .warning-title {
+    font-size: 13px;
+  }
+  
+  .warning-text {
+    font-size: 11px;
+    line-height: 1.3;
+  }
+  
+  .toast-content {
+    min-width: 260px;
+    gap: 10px;
+    padding: 10px 14px;
+  }
+  
+  .toast-icon {
+    width: 36px;
+    height: 36px;
+  }
+  
+  .toast-title {
+    font-size: 13px;
+  }
+  
+  .toast-text {
+    font-size: 11px;
+  }
+}
+
+/* 토스트 반응형 추가 */
+@media (max-width: 768px) {
+  .custom-toast {
+    bottom: 24px;
+  }
+  
+  .toast-content {
+    min-width: 320px;
+    max-width: 85vw;
+  }
+}
+
+@media (max-width: 480px) {
+  .custom-toast {
+    bottom: 20px;
+  }
+  
+  .toast-content {
+    min-width: 280px;
+    max-width: 90vw;
+    gap: 12px;
+    padding: 14px 16px;
+  }
+  
+  .toast-icon {
+    width: 42px;
+    height: 42px;
+  }
+  
+  .toast-title {
+    font-size: 15px;
+  }
+  
+  .toast-text {
+    font-size: 13px;
   }
 }
 
@@ -3547,8 +4439,9 @@ onMounted(() => {
   padding: 16px 20px;
   border-radius: 16px;
   box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
-  min-width: 400px;
-  max-width: 600px;
+  min-width: 300px;
+  max-width: 90vw;
+  width: auto;
   position: relative;
   overflow: hidden;
   background-size: 200% 200%;

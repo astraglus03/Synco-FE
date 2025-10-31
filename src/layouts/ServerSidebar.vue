@@ -19,6 +19,8 @@ const newWorkspaceName = ref('')
 const newWorkspaceProfile = ref('')
 const newWorkspaceProfileFile = ref(null)
 const profileInput = ref(null)
+const newWorkspaceStartDate = ref('') // yyyy-MM-dd
+const newWorkspaceEndDate = ref('')   // yyyy-MM-dd
 
 // 친구 관련 상태
 const friendSearchQuery = ref('')
@@ -164,6 +166,18 @@ const handleCreateWorkspace = async () => {
     alert('프로젝트 이름을 입력해주세요.')
     return
   }
+  if (!newWorkspaceStartDate.value) {
+    alert('프로젝트 시작일을 선택하세요.')
+    return
+  }
+  if (!newWorkspaceEndDate.value) {
+    alert('프로젝트 종료일을 선택하세요.')
+    return
+  }
+  if (new Date(newWorkspaceStartDate.value) > new Date(newWorkspaceEndDate.value)) {
+    alert('종료일은 시작일 이후여야 합니다.')
+    return
+  }
 
   try {
     // memberList 생성 (memberSeq 배열)
@@ -173,7 +187,9 @@ const handleCreateWorkspace = async () => {
     const createdWorkspace = await createWorkspace(
       newWorkspaceName.value,
       newWorkspaceProfileFile.value,
-      memberList
+      memberList,
+      `${newWorkspaceStartDate.value}T00:00:00`,
+      `${newWorkspaceEndDate.value}T23:59:59`
     )
     
     // 성공 메시지
@@ -200,6 +216,8 @@ const closeCreateWorkspaceDialog = () => {
   newWorkspaceName.value = ''
   newWorkspaceProfile.value = ''
   newWorkspaceProfileFile.value = null
+  newWorkspaceStartDate.value = ''
+  newWorkspaceEndDate.value = ''
   selectedFriends.value = []
   invitedMembers.value = []
   friendSearchQuery.value = ''
@@ -509,6 +527,37 @@ onMounted(() => {
                     <v-icon size="48" color="grey">mdi-account-plus</v-icon>
                     <p>초대할 멤버를 선택하세요</p>
                   </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          
+          <!-- 프로젝트 기간 -->
+          <div class="workspace-info-section">
+            <div class="workspace-basic-row" style="align-items: center;">
+              <div class="workspace-name-group">
+                <label class="input-label">프로젝트 기간</label>
+                <div style="display:flex; gap:12px;">
+                  <v-text-field
+                    v-model="newWorkspaceStartDate"
+                    type="date"
+                    label="시작일"
+                    variant="outlined"
+                    density="compact"
+                    hide-details
+                    :max="newWorkspaceEndDate || undefined"
+                    required
+                  />
+                  <v-text-field
+                    v-model="newWorkspaceEndDate"
+                    type="date"
+                    label="종료일"
+                    variant="outlined"
+                    density="compact"
+                    hide-details
+                    :min="newWorkspaceStartDate || undefined"
+                    required
+                  />
                 </div>
               </div>
             </div>
@@ -1151,6 +1200,62 @@ onMounted(() => {
 .loading-state p {
   margin: 0;
   font-size: 14px;
+}
+
+/* 반응형 디자인 - 태블릿 이하에서는 항상 아이콘만 표시 */
+@media (max-width: 1024px) {
+  .server-sidebar {
+    width: 60px !important;
+  }
+  
+  .server-icon {
+    width: 44px;
+    height: 44px;
+  }
+  
+  .server-icon .v-icon {
+    font-size: 22px;
+  }
+}
+
+@media (max-width: 768px) {
+  .server-sidebar {
+    width: 56px !important;
+  }
+  
+  .server-icon {
+    width: 40px;
+    height: 40px;
+  }
+  
+  .server-icon .v-icon {
+    font-size: 20px;
+  }
+  
+  .workspace-thumbnail {
+    width: 40px;
+    height: 40px;
+  }
+}
+
+@media (max-width: 480px) {
+  .server-sidebar {
+    width: 52px !important;
+  }
+  
+  .server-icon {
+    width: 36px;
+    height: 36px;
+  }
+  
+  .server-icon .v-icon {
+    font-size: 18px;
+  }
+  
+  .workspace-thumbnail {
+    width: 36px;
+    height: 36px;
+  }
 }
 
 </style>
