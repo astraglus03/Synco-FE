@@ -56,7 +56,7 @@
                 :style="{ backgroundColor: color.value }"
                 @click="selectColor(color.value)"
               >
-                <v-icon v-if="boardData.colors === color.value" color="white" size="20">
+                <v-icon v-if="boardData.colors === color.value" size="20" style="color: rgba(0, 0, 0, 0.7);">
                   mdi-check
                 </v-icon>
               </div>
@@ -98,7 +98,7 @@
 </template>
 
 <script setup>
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import { createBoard as createBoardApi, getProjectMemberList, updateBoard as updateBoardApi, getBoardDetail } from '../../api/schedule/scheduleApi.js'
 import { useWorkspaceStore } from '../../store/workspaceStore.js'
 import { useWorkspaceMemberStore } from '../../store/workspaceMemberStore.js'
@@ -137,16 +137,16 @@ const boardData = ref({
   colors: '' // 색상 미선택 상태
 })
 
-// 색상 옵션들 (더 진한 색상)
+// 색상 옵션들 (Schedule.vue 칸반보드와 동일한 투명도 방식)
 const colorOptions = ref([
-  { value: '#bbdefb', name: '파란색' },
-  { value: '#ffe0b2', name: '주황색' },
-  { value: '#c8e6c9', name: '초록색' },
-  { value: '#e1bee7', name: '보라색' },
-  { value: '#b2dfdb', name: '청록색' },
-  { value: '#f8bbd9', name: '분홍색' },
-  { value: '#dcedc8', name: '연두색' },
-  { value: '#c5cae9', name: '연보라색' }
+  { value: 'rgba(33, 150, 243, 0.2)', name: '파란색' },
+  { value: 'rgba(255, 152, 0, 0.2)', name: '주황색' },
+  { value: 'rgba(76, 175, 80, 0.2)', name: '초록색' },
+  { value: 'rgba(156, 39, 176, 0.2)', name: '보라색' },
+  { value: 'rgba(0, 188, 212, 0.2)', name: '청록색' },
+  { value: 'rgba(233, 30, 99, 0.2)', name: '분홍색' },
+  { value: 'rgba(139, 195, 74, 0.2)', name: '연두색' },
+  { value: 'rgba(103, 58, 183, 0.2)', name: '연보라색' }
 ])
 
 // 폼 검증 규칙
@@ -239,6 +239,23 @@ const closeModal = () => {
   emit('update:isOpen', false)
 }
 
+// ESC 키로 닫기
+const handleKeydown = (event) => {
+  if (event.key === 'Escape' && props.isOpen && !isCreating.value) {
+    closeModal()
+  }
+}
+
+onMounted(() => {
+  if (props.isOpen) {
+    window.addEventListener('keydown', handleKeydown)
+  }
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('keydown', handleKeydown)
+})
+
 // 폼 초기화
 const resetForm = () => {
   boardData.value = {
@@ -271,6 +288,12 @@ watch(() => props.isOpen, async (newValue) => {
     }
     await findCurrentUserScheduleMemberSeq()
   }
+  // ESC 리스너 토글
+  if (newValue) {
+    window.addEventListener('keydown', handleKeydown)
+  } else {
+    window.removeEventListener('keydown', handleKeydown)
+  }
 })
 </script>
 
@@ -286,7 +309,8 @@ watch(() => props.isOpen, async (newValue) => {
   justify-content: space-between;
   align-items: flex-start;
   padding: 24px 24px 16px 24px;
-  background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+  background: rgb(var(--v-theme-surface));
+  border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.1);
 }
 
 .header-content {
@@ -308,17 +332,17 @@ watch(() => props.isOpen, async (newValue) => {
   font-size: 24px;
   font-weight: 600;
   margin: 0 0 4px 0;
-  color: #2c3e50;
+  color: rgb(var(--v-theme-on-surface));
 }
 
 .modal-subtitle {
   font-size: 14px;
-  color: #6c757d;
+  color: rgba(var(--v-theme-on-surface), 0.7);
   margin: 0;
 }
 
 .close-btn {
-  color: #6c757d;
+  color: rgba(var(--v-theme-on-surface), 0.7);
 }
 
 /* 본문 스타일 */
@@ -339,7 +363,7 @@ watch(() => props.isOpen, async (newValue) => {
 .section-bar {
   width: 4px;
   height: 20px;
-  background-color: #3498db;
+  background-color: #1976d2;
   margin-right: 12px;
   border-radius: 2px;
 }
@@ -347,7 +371,7 @@ watch(() => props.isOpen, async (newValue) => {
 .section-title {
   font-size: 18px;
   font-weight: 600;
-  color: #2c3e50;
+  color: rgb(var(--v-theme-schedule-text));
   margin: 0;
 }
 
@@ -359,7 +383,7 @@ watch(() => props.isOpen, async (newValue) => {
   display: block;
   font-size: 14px;
   font-weight: 500;
-  color: #495057;
+  color: #555;
   margin-bottom: 8px;
 }
 
@@ -380,7 +404,7 @@ watch(() => props.isOpen, async (newValue) => {
   align-items: center;
   justify-content: center;
   transition: all 0.2s ease;
-  border: 3px solid transparent;
+  border: 2px solid rgb(var(--v-theme-schedule-border));
 }
 
 .color-option:hover {
@@ -389,9 +413,10 @@ watch(() => props.isOpen, async (newValue) => {
 }
 
 .color-option.selected {
-  border-color: #2c3e50;
+  border-color: #1976d2;
+  border-width: 3px;
   transform: scale(1.1);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+  box-shadow: 0 4px 12px rgba(25, 118, 210, 0.4);
 }
 
 .selected-color-info {
@@ -402,21 +427,21 @@ watch(() => props.isOpen, async (newValue) => {
 
 .selected-color-label {
   font-size: 14px;
-  color: #495057;
+  color: #555;
 }
 
 .selected-color-preview {
   width: 24px;
   height: 24px;
   border-radius: 4px;
-  border: 1px solid #dee2e6;
+  border: 1px solid rgb(var(--v-theme-schedule-border));
 }
 
 /* 푸터 스타일 */
 .modal-actions {
   padding: 16px 24px 24px 24px;
   justify-content: space-between;
-  background-color: #f8f9fa;
+  background-color: rgb(var(--v-theme-schedule-header-bg));
 }
 
 .modal-actions .v-btn {

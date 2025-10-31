@@ -14,7 +14,87 @@
         <h2 class="document-title">문서 편집</h2>
       </div>
       
-      <!-- 참여자 토글 버튼 -->
+      <!-- 다운로드 메뉴 -->
+      <div class="download-menu">
+        <v-menu location="bottom end" :close-on-content-click="true">
+          <template v-slot:activator="{ props: menuProps }">
+            <v-btn
+              v-bind="menuProps"
+              variant="outlined"
+              color="primary"
+              size="default"
+              prepend-icon="mdi-download"
+              class="download-btn"
+            >
+              다운로드
+            </v-btn>
+          </template>
+          <v-card class="download-menu-card" min-width="240">
+            <v-card-title class="download-menu-header">
+              <v-icon color="primary" class="mr-2">mdi-download</v-icon>
+              <span>다운로드 형식 선택</span>
+            </v-card-title>
+            <v-divider></v-divider>
+            <v-list class="download-list">
+              <v-list-item 
+                @click="downloadAsDocx"
+                class="download-item docx-item"
+              >
+                <template v-slot:prepend>
+                  <div class="file-icon docx-icon">
+                    <v-icon color="primary" size="28">mdi-file-word</v-icon>
+                  </div>
+                </template>
+                <v-list-item-title class="download-item-title">Word 문서</v-list-item-title>
+                <v-list-item-subtitle>.docx</v-list-item-subtitle>
+                <template v-slot:append>
+                  <v-icon size="small" color="grey-lighten-1">mdi-chevron-right</v-icon>
+                </template>
+              </v-list-item>
+              
+              <v-divider class="my-1"></v-divider>
+              
+              <v-list-item 
+                @click="downloadAsPdf"
+                class="download-item pdf-item"
+              >
+                <template v-slot:prepend>
+                  <div class="file-icon pdf-icon">
+                    <v-icon color="error" size="28">mdi-file-pdf-box</v-icon>
+                  </div>
+                </template>
+                <v-list-item-title class="download-item-title">PDF 문서</v-list-item-title>
+                <v-list-item-subtitle>.pdf</v-list-item-subtitle>
+                <template v-slot:append>
+                  <v-icon size="small" color="grey-lighten-1">mdi-chevron-right</v-icon>
+                </template>
+              </v-list-item>
+              
+              <v-divider class="my-1"></v-divider>
+              
+              <v-list-item 
+                disabled
+                class="download-item hwp-item"
+              >
+                <template v-slot:prepend>
+                  <div class="file-icon hwp-icon">
+                    <v-icon color="grey-lighten-1" size="28">mdi-file-document-outline</v-icon>
+                  </div>
+                </template>
+                <v-list-item-title class="download-item-title">한글 문서</v-list-item-title>
+                <v-list-item-subtitle>.hwp (추후 지원 예정)</v-list-item-subtitle>
+                <template v-slot:append>
+                  <v-chip size="x-small" color="grey-lighten-2" variant="flat" class="coming-soon-chip">
+                    예정
+                  </v-chip>
+                </template>
+              </v-list-item>
+            </v-list>
+          </v-card>
+        </v-menu>
+      </div>
+      
+       <!-- 참여자 토글 버튼 -->
       <div class="participants-toggle">
         <v-btn
           variant="text"
@@ -138,20 +218,60 @@
 
       <v-divider vertical class="mx-2"></v-divider>
 
-      <v-btn-toggle v-model="selectedList" mandatory>
+      <!-- 이모티콘 버튼 -->
+      <v-menu location="bottom">
+        <template v-slot:activator="{ props: menuProps }">
+          <v-btn
+            v-bind="menuProps"
+            size="small"
+            variant="text"
+          >
+            <v-icon>mdi-emoticon-happy-outline</v-icon>
+          </v-btn>
+        </template>
+        <v-card class="emoji-picker" max-width="300">
+          <v-card-text style="max-height: 200px; overflow-y: auto;">
+            <div class="emoji-grid">
+              <span
+                v-for="emoji in commonEmojis"
+                :key="emoji"
+                class="emoji-item"
+                @click="insertEmoji(emoji)"
+              >
+                {{ emoji }}
+              </span>
+            </div>
+          </v-card-text>
+        </v-card>
+      </v-menu>
+
+      <v-divider vertical class="mx-2"></v-divider>
+
+      <!-- 정렬 -->
+      <v-btn-toggle v-model="selectedAlign" mandatory>
         <v-btn 
-          @click="editor.chain().focus().toggleBulletList().run()" 
-          :class="{ 'is-active': editor.isActive('bulletList') }"
+          @click="setTextAlign('left')" 
+          :class="{ 'is-active': editor.isActive({ textAlign: 'left' }) }"
           size="small"
+          title="왼쪽 정렬"
         >
-          <v-icon>mdi-format-list-bulleted</v-icon>
+          <v-icon>mdi-format-align-left</v-icon>
         </v-btn>
         <v-btn 
-          @click="editor.chain().focus().toggleOrderedList().run()" 
-          :class="{ 'is-active': editor.isActive('orderedList') }"
+          @click="setTextAlign('center')" 
+          :class="{ 'is-active': editor.isActive({ textAlign: 'center' }) }"
           size="small"
+          title="가운데 정렬"
         >
-          <v-icon>mdi-format-list-numbered</v-icon>
+          <v-icon>mdi-format-align-center</v-icon>
+        </v-btn>
+        <v-btn 
+          @click="setTextAlign('right')" 
+          :class="{ 'is-active': editor.isActive({ textAlign: 'right' }) }"
+          size="small"
+          title="오른쪽 정렬"
+        >
+          <v-icon>mdi-format-align-right</v-icon>
         </v-btn>
       </v-btn-toggle>
     </div>
@@ -208,6 +328,10 @@ import { documentApi } from '@/api/document/documentApi';
 import { projectDriveApi } from '@/api/drive/driveApi';
 import { useAuthStore } from '@/store/authStore';
 import { useWorkspaceStore } from '@/store/workspaceStore';
+import { useProjectDriveStore } from '@/store/drive/projectDriveStore';
+import { Document, Paragraph, TextRun, HeadingLevel, AlignmentType } from 'docx';
+import * as docx from 'docx';
+import html2pdf from 'html2pdf.js';
 
 // Props 정의
 const props = defineProps({
@@ -364,6 +488,42 @@ const UniqueIdExtension = Extension.create({
         },
       }),
     ];
+  },
+});
+
+// 텍스트 정렬 확장
+const TextAlignExtension = Extension.create({
+  name: 'textAlign',
+  
+  addGlobalAttributes() {
+    return [
+      {
+        types: ['heading', 'paragraph'],
+        attributes: {
+          textAlign: {
+            default: 'left',
+            parseHTML: element => element.style.textAlign || 'left',
+            renderHTML: attributes => {
+              if (!attributes.textAlign || attributes.textAlign === 'left') {
+                return {};
+              }
+              return {
+                style: `text-align: ${attributes.textAlign}`,
+              };
+            },
+          },
+        },
+      },
+    ];
+  },
+  
+  addCommands() {
+    return {
+      setTextAlign: (alignment) => ({ commands }) => {
+        return commands.updateAttributes('paragraph', { textAlign: alignment }) ||
+               commands.updateAttributes('heading', { textAlign: alignment });
+      },
+    };
   },
 });
 
@@ -768,11 +928,60 @@ const showParticipants = ref(false);
 // 툴바 상태
 const selectedFormat = ref(null);
 const selectedHeading = ref(null);
-const selectedList = ref(null);
+const selectedAlign = ref(null);
+
+// 이모티콘 목록
+const commonEmojis = ref([
+  '😀', '😃', '😄', '😁', '😆', '😅', '🤣', '😂', '🙂', '🙃',
+  '😉', '😊', '😇', '🥰', '😍', '🤩', '😘', '😗', '😚', '😙',
+  '😋', '😛', '😜', '🤪', '😝', '🤑', '🤗', '🤭', '🤫', '🤔',
+  '🤐', '🤨', '😐', '😑', '😶', '😏', '😒', '🙄', '😬', '🤥',
+  '😌', '😔', '😪', '🤤', '😴', '😷', '🤒', '🤕', '🤢', '🤮',
+  '👍', '👎', '👌', '✌️', '🤞', '🤟', '🤘', '🤙', '👈', '👉',
+  '👆', '👇', '☝️', '👋', '🤚', '🖐', '✋', '🖖', '👏', '🙌',
+  '👐', '🤲', '🤝', '🙏', '✍️', '💪', '🦵', '🦶', '👂', '👃',
+  '❤️', '🧡', '💛', '💚', '💙', '💜', '🖤', '🤍', '🤎', '💔',
+  '❣️', '💕', '💞', '💓', '💗', '💖', '💘', '💝', '💟', '☮️',
+  '✝️', '☪️', '🕉', '☸️', '✡️', '🔯', '🕎', '☯️', '☦️', '🛐',
+  '⛎', '♈', '♉', '♊', '♋', '♌', '♍', '♎', '♏', '♐',
+  '♑', '♒', '♓', '🆔', '⚛️', '🉑', '☢️', '☣️', '📴', '📳',
+  '🈶', '🈚', '🈸', '🈺', '🈷️', '✴️', '🆚', '💮', '🉐', '㊙️',
+  '㊗️', '🈴', '🈵', '🈹', '🈲', '🅰️', '🅱️', '🆎', '🆑', '🅾️',
+  '🆘', '❌', '⭕', '🛑', '⛔', '📛', '🚫', '💯', '💢', '♨️',
+  '🚷', '🚯', '🚳', '🚱', '🔞', '📵', '🚭', '❗', '❕', '❓',
+  '❔', '‼️', '⁉️', '🔅', '🔆', '〽️', '⚠️', '🚸', '🔱', '⚜️',
+  '🔰', '♻️', '✅', '🈯', '💹', '❇️', '✳️', '❎', '🌐', '💠',
+  'Ⓜ️', '🌀', '💤', '🏧', '🚾', '♿', '🅿️', '🈳', '🈂️', '🛂',
+  '🛃', '🛄', '🛅', '🚹', '🚺', '🚼', '🚻', '🚮', '🎦', '📶',
+  '🈁', '🔣', 'ℹ️', '🔤', '🔡', '🔠', '🆖', '🆗', '🆙', '🆒',
+  '🆕', '🆓', '0️⃣', '1️⃣', '2️⃣', '3️⃣', '4️⃣', '5️⃣', '6️⃣', '7️⃣',
+  '8️⃣', '9️⃣', '🔟', '🔢', '#️⃣', '*️⃣', '▶️', '⏸', '⏯', '⏹',
+  '⏺', '⏭', '⏮', '⏩', '⏪', '⏫', '⏬', '◀️', '🔼', '🔽',
+  '➡️', '⬅️', '⬆️', '⬇️', '↗️', '↘️', '↙️', '↖️', '↕️', '↔️',
+  '↪️', '↩️', '⤴️', '⤵️', '🔀', '🔁', '🔂', '🔄', '🔃', '🎵',
+  '🎶', '➕', '➖', '➗', '✖️', '💲', '💱', '™️', '©️', '®️',
+  '〰️', '➰', '➿', '🔚', '🔙', '🔛', '🔜', '🔝', '🛐', '⚛️',
+  '🕉️', '☸️', '☯️', '✡️', '☪️', '☮️', '🕎', '🔯', '♈', '♉',
+  '♊', '♋', '♌', '♍', '♎', '♏', '♐', '♑', '♒', '♓',
+  '⛎', '🔀', '🔁', '🔂', '▶️', '⏸', '⏯', '⏹', '⏺', '⏭',
+  '⏮', '⏩', '⏪', '⏫', '⏬', '◀️', '🔼', '🔽', '➡️', '⬅️',
+  '⬆️', '⬇️', '↗️', '↘️', '↙️', '↖️', '↕️', '↔️', '↪️', '↩️',
+  '⤴️', '⤵️', '🔀', '🔁', '🔂', '🔄', '🔃', '🎵', '🎶', '➕',
+  '➖', '➗', '✖️', '💲', '💱', '™️', '©️', '®️', '〰️', '➰',
+  '➿', '🔚', '🔙', '🔛', '🔜', '🔝', '🛐', '⚛️', '🕉️', '☸️',
+  '☯️', '✡️', '☪️', '☮️', '🕎', '🔯', '♈', '♉', '♊', '♋',
+  '♌', '♍', '♎', '♏', '♐', '♑', '♒', '♓', '⛎', '🔀',
+  '🔁', '🔂', '▶️', '⏸', '⏯', '⏹', '⏺', '⏭', '⏮', '⏩',
+  '⏪', '⏫', '⏬', '◀️', '🔼', '🔽', '➡️', '⬅️', '⬆️', '⬇️',
+  '↗️', '↘️', '↙️', '↖️', '↕️', '↔️', '↪️', '↩️', '⤴️', '⤵️'
+]);
 
 // 문서 로딩 상태
 const isLoading = ref(true);
 const documentContent = ref('');
+
+// 인쇄 핸들러 참조
+let handlePrint = null;
 
 // 현재 사용자 정보
 const user = computed(() => {
@@ -954,6 +1163,12 @@ const remoteSelectionHighlights = computed(() => {
   return highlights;
 });
 
+// 문서 작성자 확인
+const isDocumentCreator = (docItem) => {
+  if (!docItem || !docItem.memberSeq) return false
+  return Number(docItem.memberSeq) === Number(authStore.memberSeq)
+}
+
 // 문서 로딩 함수
 const loadDocument = async () => {
   try {
@@ -963,6 +1178,30 @@ const loadDocument = async () => {
     const documentSeq = Number(props.documentSeq);
     
     console.log('문서 로딩 시작:', { driveChannelSeq, documentSeq });
+
+    // 먼저 문서 정보 확인 (잠금 상태 및 작성자 확인)
+    const driveStore = useProjectDriveStore();
+    const docItem = driveStore.items.find(item => item.id === documentSeq && item.type === 'shared-doc');
+    
+    // 문서 정보를 찾을 수 없으면 items 목록 새로고침
+    if (!docItem) {
+      await driveStore.loadItems(driveChannelSeq, null);
+      const refreshedDocItem = driveStore.items.find(item => item.id === documentSeq && item.type === 'shared-doc');
+      
+      // 잠금되어 있고 작성자가 아닌 경우 접근 차단
+      if (refreshedDocItem && refreshedDocItem.isLocked && !isDocumentCreator(refreshedDocItem)) {
+        alert('이 문서는 잠겨 있어 편집할 수 없습니다.');
+        router.go(-1);
+        return;
+      }
+    } else {
+      // 잠금되어 있고 작성자가 아닌 경우 접근 차단
+      if (docItem.isLocked && !isDocumentCreator(docItem)) {
+        alert('이 문서는 잠겨 있어 편집할 수 없습니다.');
+        router.go(-1);
+        return;
+      }
+    }
 
     const result = await documentApi.getDocument(driveChannelSeq, documentSeq);
     
@@ -1146,6 +1385,177 @@ const leaveDocument = () => {
   }
 };
 
+// 이모티콘 삽입
+const insertEmoji = (emoji) => {
+  if (editor.value) {
+    editor.value.chain().focus().insertContent(emoji).run();
+  }
+};
+
+// 텍스트 정렬 설정
+const setTextAlign = (alignment) => {
+  if (editor.value) {
+    editor.value.chain().focus().setTextAlign(alignment).run();
+  }
+};
+
+// HTML을 Paragraph 배열로 변환하는 헬퍼 함수
+const htmlToDocxParagraphs = (html) => {
+  const tempDiv = document.createElement('div');
+  tempDiv.innerHTML = html;
+  
+  const paragraphs = [];
+  
+  const processNode = (node) => {
+    if (node.nodeType === Node.TEXT_NODE) {
+      const text = node.textContent;
+      if (text.trim()) {
+        return [new TextRun(text)];
+      }
+      return [];
+    }
+    
+    if (node.nodeType === Node.ELEMENT_NODE) {
+      const tagName = node.tagName.toLowerCase();
+      const children = [];
+      
+      Array.from(node.childNodes).forEach(child => {
+        const childRuns = processNode(child);
+        children.push(...childRuns);
+      });
+      
+      if (tagName === 'p' || tagName === 'div') {
+        if (children.length > 0) {
+          return [new Paragraph({ children })];
+        }
+        return [new Paragraph({ children: [new TextRun('')] })];
+      } else if (tagName === 'h1') {
+        return [new Paragraph({
+          heading: HeadingLevel.HEADING_1,
+          children: children.length > 0 ? children : [new TextRun('')]
+        })];
+      } else if (tagName === 'h2') {
+        return [new Paragraph({
+          heading: HeadingLevel.HEADING_2,
+          children: children.length > 0 ? children : [new TextRun('')]
+        })];
+      } else if (tagName === 'h3') {
+        return [new Paragraph({
+          heading: HeadingLevel.HEADING_3,
+          children: children.length > 0 ? children : [new TextRun('')]
+        })];
+      } else if (tagName === 'strong' || tagName === 'b') {
+        return children.map(run => {
+          if (run instanceof TextRun) {
+            return new TextRun({ text: run.text, bold: true });
+          }
+          return run;
+        });
+      } else if (tagName === 'em' || tagName === 'i') {
+        return children.map(run => {
+          if (run instanceof TextRun) {
+            return new TextRun({ text: run.text, italics: true });
+          }
+          return run;
+        });
+      } else if (tagName === 'br') {
+        return [new TextRun({ text: '\n', break: 1 })];
+      }
+      
+      return children;
+    }
+    
+    return [];
+  };
+  
+  Array.from(tempDiv.childNodes).forEach(node => {
+    const result = processNode(node);
+    paragraphs.push(...result);
+  });
+  
+  if (paragraphs.length === 0) {
+    paragraphs.push(new Paragraph({ children: [new TextRun('')] }));
+  }
+  
+  return paragraphs;
+};
+
+// DOCX로 다운로드
+const downloadAsDocx = async () => {
+  if (!editor.value) return;
+  
+  try {
+    // 에디터 내용을 HTML로 가져오기
+    const html = editor.value.getHTML();
+    
+    // 문서 이름 가져오기
+    const driveStore = useProjectDriveStore();
+    const docItem = driveStore.items.find(item => item.id === Number(props.documentSeq) && item.type === 'shared-doc');
+    const documentName = docItem ? docItem.name : 'document';
+    
+    // HTML을 Paragraph로 변환
+    const paragraphs = htmlToDocxParagraphs(html);
+    
+    // Docx 문서 생성
+    const doc = new Document({
+      sections: [{
+        properties: {},
+        children: paragraphs
+      }]
+    });
+    
+    // 파일로 저장
+    const buffer = await docx.Packer.toBlob(doc);
+    const url = window.URL.createObjectURL(buffer);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `${documentName}.docx`);
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(url);
+  } catch (error) {
+    console.error('DOCX 다운로드 실패:', error);
+    alert('DOCX 다운로드에 실패했습니다.');
+  }
+};
+
+// PDF로 다운로드
+const downloadAsPdf = async () => {
+  if (!editor.value) return;
+  
+  try {
+    // 문서 이름 가져오기
+    const driveStore = useProjectDriveStore();
+    const docItem = driveStore.items.find(item => item.id === Number(props.documentSeq) && item.type === 'shared-doc');
+    const documentName = docItem ? docItem.name : 'document';
+    
+    // 에디터 내용을 HTML로 가져오기
+    const html = editor.value.getHTML();
+    
+    // 임시 div 생성하여 HTML 삽입
+    const tempDiv = document.createElement('div');
+    tempDiv.innerHTML = html;
+    tempDiv.style.padding = '20px';
+    tempDiv.style.fontFamily = 'Arial, sans-serif';
+    
+    // PDF 옵션 설정
+    const options = {
+      margin: 1,
+      filename: `${documentName}.pdf`,
+      image: { type: 'jpeg', quality: 0.98 },
+      html2canvas: { scale: 2 },
+      jsPDF: { unit: 'in', format: 'a4', orientation: 'portrait' }
+    };
+    
+    // PDF 생성 및 다운로드
+    await html2pdf().set(options).from(tempDiv).save();
+  } catch (error) {
+    console.error('PDF 다운로드 실패:', error);
+    alert('PDF 다운로드에 실패했습니다.');
+  }
+};
+
 // 배치 변경사항 전송 함수
 const sendBatchChanges = () => {
   if (changesQueue.value.length === 0) {
@@ -1270,6 +1680,16 @@ onMounted(async () => {
     currentUser: props.currentUser
   });
 
+  // Ctrl+P 인쇄 핸들러
+  handlePrint = (event) => {
+    if ((event.ctrlKey || event.metaKey) && event.key === 'p') {
+      event.preventDefault();
+      window.print();
+    }
+  };
+  
+  window.addEventListener('keydown', handlePrint);
+
   await loadDocument();
   await loadParticipants();
   await loadLineLocks();
@@ -1279,6 +1699,7 @@ onMounted(async () => {
       StarterKit,
       UniqueIdExtension,
       LineLockingExtension,
+      TextAlignExtension,
     ],
     content: documentContent.value || '<p></p>',
     editorProps: {
@@ -1675,6 +2096,11 @@ onMounted(async () => {
 });
 
 onBeforeUnmount(() => {
+  // 인쇄 핸들러 제거
+  if (handlePrint) {
+    window.removeEventListener('keydown', handlePrint);
+  }
+  
   if (typingTimer.value) {
     clearTimeout(typingTimer.value);
   }
@@ -1940,23 +2366,121 @@ const handleIncomingMessage = (message) => {
   display: flex;
   flex-direction: column;
   height: 100vh;
-  background-color: #fafafa;
+  background-color: #fafafa !important;
 }
 
 .editor-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 12px 16px;
-  background-color: white;
-  border-bottom: 1px solid #e0e0e0;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  padding: 12px 20px;
+  background: #ffffff !important;
+  border-bottom: 1px solid #e0e0e0 !important;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+  gap: 16px;
 }
 
 .header-left {
   display: flex;
   align-items: center;
   gap: 12px;
+  flex: 1;
+}
+
+.download-menu {
+  display: flex;
+  align-items: center;
+}
+
+.download-btn {
+  text-transform: none;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+  transition: all 0.2s ease;
+}
+
+.download-btn:hover {
+  box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+  transform: translateY(-1px);
+}
+
+.download-menu-card {
+  border-radius: 12px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+  overflow: hidden;
+}
+
+.download-menu-header {
+  padding: 16px 20px;
+  font-size: 16px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  color: #1e293b !important;
+  background: rgba(59, 130, 246, 0.04) !important;
+}
+
+.download-list {
+  padding: 8px 0;
+}
+
+.download-item {
+  padding: 12px 20px !important;
+  margin: 2px 8px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  min-height: 64px;
+}
+
+.download-item:hover:not(.v-list-item--disabled) {
+  background: rgba(59, 130, 246, 0.06) !important;
+  transform: translateX(2px);
+}
+
+.download-item.v-list-item--disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.file-icon {
+  width: 48px;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+  margin-right: 12px;
+  background: rgba(0, 0, 0, 0.04) !important;
+  transition: all 0.2s ease;
+}
+
+.docx-item:hover .file-icon {
+  background: rgba(59, 130, 246, 0.1) !important;
+}
+
+.pdf-item:hover .file-icon {
+  background: rgba(239, 68, 68, 0.1) !important;
+}
+
+.download-item-title {
+  font-weight: 600;
+  font-size: 15px;
+  color: #1e293b !important;
+  margin-bottom: 2px;
+}
+
+.download-item .v-list-item-subtitle {
+  font-size: 13px;
+  color: #64748b !important;
+  margin-top: 2px;
+}
+
+.coming-soon-chip {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
 }
 
 .back-btn {
@@ -1967,6 +2491,7 @@ const handleIncomingMessage = (message) => {
   margin: 0;
   font-size: 1.2em;
   font-weight: 500;
+  color: #1e293b !important;
 }
 
 .connection-status {
@@ -2104,7 +2629,7 @@ const handleIncomingMessage = (message) => {
 .editor-container {
   flex: 1;
   position: relative;
-  background-color: white;
+  background-color: white !important;
   margin: 16px;
   border-radius: 8px;
   box-shadow: 0 2px 4px rgba(0,0,0,0.1);
@@ -2133,6 +2658,8 @@ const handleIncomingMessage = (message) => {
   padding: 24px;
   font-size: 16px;
   line-height: 1.6;
+  color: #1e293b !important;
+  background-color: white !important;
 }
 
 :deep(.ProseMirror p) {
@@ -2215,5 +2742,67 @@ const handleIncomingMessage = (message) => {
   background-color: #ff9800;
   border-radius: 4px;
   vertical-align: middle;
+}
+
+/* 이모티콘 피커 스타일 */
+.emoji-picker {
+  border-radius: 8px;
+}
+
+.emoji-grid {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  gap: 4px;
+}
+
+.emoji-item {
+  font-size: 24px;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+  text-align: center;
+  transition: background-color 0.2s;
+}
+
+.emoji-item:hover {
+  background-color: #f0f0f0;
+}
+
+/* 인쇄 스타일 - 에디터 영역만 인쇄 */
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  
+  .editor-container,
+  .editor-container * {
+    visibility: visible;
+  }
+  
+  .editor-container {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    margin: 0;
+    padding: 0;
+    box-shadow: none;
+    border: none;
+    background: white;
+  }
+  
+  .editor-header,
+  .editor-toolbar,
+  .remote-cursor,
+  .remote-selection-highlight,
+  .locked-line::after {
+    display: none !important;
+  }
+  
+  :deep(.ProseMirror) {
+    padding: 20px;
+    font-size: 12pt;
+    line-height: 1.5;
+  }
 }
 </style>

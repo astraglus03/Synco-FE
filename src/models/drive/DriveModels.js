@@ -28,36 +28,118 @@ export class DriveItem {
     this.children = data.children || []
   }
 
+  getFileExtension() {
+    if (!this.name || this.type === 'folder' || this.type === 'shared-doc') return null
+    const parts = this.name.split('.')
+    return parts.length > 1 ? parts[parts.length - 1].toLowerCase() : null
+  }
+
   getDefaultIcon() {
-    switch (this.type) {
-      case 'folder': return 'mdi-folder'
-      case 'image': return 'mdi-image'
-      case 'video': return 'mdi-video'
-      case 'audio': return 'mdi-music'
-      case 'pdf': return 'mdi-file-pdf-box'
-      case 'word': return 'mdi-file-word-box'
-      case 'excel': return 'mdi-file-excel-box'
-      case 'powerpoint': return 'mdi-file-powerpoint-box'
-      case 'text': return 'mdi-file-document'
-      case 'shared-doc': return 'mdi-file-document-edit'
-      default: return 'mdi-file'
+    // 폴더와 공유문서는 타입으로 처리
+    if (this.type === 'folder') return 'mdi-folder'
+    if (this.type === 'shared-doc') return 'mdi-file-document-edit'
+    
+    // 파일 확장자 기반으로 아이콘 결정
+    const ext = this.getFileExtension()
+    if (!ext) return 'mdi-file'
+    
+    // 프로그래밍 언어 파일
+    if (ext === 'vue') return 'mdi-vuejs'
+    if (['js', 'jsx', 'ts', 'tsx'].includes(ext)) return 'mdi-language-javascript'
+    if (['java', 'kt'].includes(ext)) return 'mdi-language-java'
+    if (['py', 'pyc'].includes(ext)) return 'mdi-language-python'
+    if (['rb', 'erb'].includes(ext)) return 'mdi-language-ruby'
+    if (['go'].includes(ext)) return 'mdi-language-go'
+    if (['php'].includes(ext)) return 'mdi-language-php'
+    if (['swift'].includes(ext)) return 'mdi-language-swift'
+    if (['c', 'cpp', 'cxx', 'h', 'hpp'].includes(ext)) return 'mdi-language-cpp'
+    if (['cs'].includes(ext)) return 'mdi-language-csharp'
+    if (['rs'].includes(ext)) return 'mdi-language-rust'
+    if (['html', 'htm', 'xhtml'].includes(ext)) return 'mdi-language-html5'
+    if (['css', 'scss', 'sass', 'less'].includes(ext)) return 'mdi-language-css3'
+    if (['xml', 'yml', 'yaml', 'json'].includes(ext)) return 'mdi-code-json'
+    
+    // 이미지 파일
+    if (['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp', 'svg', 'ico', 'tiff'].includes(ext)) {
+      return 'mdi-file-image'
     }
+    
+    // 비디오 파일
+    if (['mp4', 'avi', 'mov', 'wmv', 'flv', 'mkv', 'webm', 'm4v', '3gp'].includes(ext)) {
+      return 'mdi-file-video'
+    }
+    
+    // 오디오 파일
+    if (['mp3', 'wav', 'ogg', 'flac', 'aac', 'm4a', 'wma'].includes(ext)) {
+      return 'mdi-file-music'
+    }
+    
+    // 문서 파일
+    if (ext === 'pdf') return 'mdi-file-pdf-box'
+    if (['doc', 'docx'].includes(ext)) return 'mdi-file-word-box'
+    if (['xls', 'xlsx', 'csv'].includes(ext)) return 'mdi-file-excel-box'
+    if (['ppt', 'pptx'].includes(ext)) return 'mdi-file-powerpoint-box'
+    if (['txt', 'md', 'markdown'].includes(ext)) return 'mdi-file-document'
+    
+    // 아카이브 파일
+    if (['zip', 'rar', '7z', 'tar', 'gz', 'bz2'].includes(ext)) return 'mdi-folder-zip'
+    
+    // 기타
+    return 'mdi-file'
   }
 
   getDefaultColor() {
-    switch (this.type) {
-      case 'folder': return '#FFA726'
-      case 'image': return '#4CAF50'
-      case 'video': return '#F44336'
-      case 'audio': return '#9C27B0'
-      case 'pdf': return '#E91E63'
-      case 'word': return '#2196F3'
-      case 'excel': return '#4CAF50'
-      case 'powerpoint': return '#FF5722'
-      case 'text': return '#607D8B'
-      case 'shared-doc': return '#3F51B5'
-      default: return '#9E9E9E'
+    // 폴더와 공유문서는 타입으로 처리
+    if (this.type === 'folder') return '#FFA726'
+    if (this.type === 'shared-doc') return '#3F51B5'
+    
+    // 파일 확장자 기반으로 색상 결정
+    const ext = this.getFileExtension()
+    if (!ext) return '#9E9E9E'
+    
+    // 프로그래밍 언어 파일
+    if (ext === 'vue') return '#42B883' // Vue 공식 색상
+    if (['js', 'jsx', 'ts', 'tsx'].includes(ext)) return '#F7DF1E' // JavaScript 노란색
+    if (['java', 'kt'].includes(ext)) return '#ED8B00' // Java 오렌지
+    if (['py', 'pyc'].includes(ext)) return '#3776AB' // Python 파란색
+    if (['rb', 'erb'].includes(ext)) return '#CC342D' // Ruby 빨간색
+    if (['go'].includes(ext)) return '#00ADD8' // Go 청록색
+    if (['php'].includes(ext)) return '#777BB4' // PHP 보라색
+    if (['swift'].includes(ext)) return '#FA7343' // Swift 오렌지
+    if (['c', 'cpp', 'cxx', 'h', 'hpp'].includes(ext)) return '#00599C' // C++ 파란색
+    if (['cs'].includes(ext)) return '#239120' // C# 초록색
+    if (['rs'].includes(ext)) return '#000000' // Rust 검정
+    if (['html', 'htm', 'xhtml'].includes(ext)) return '#E34F26' // HTML 주황색
+    if (['css', 'scss', 'sass', 'less'].includes(ext)) return '#1572B6' // CSS 파란색
+    if (['xml', 'yml', 'yaml', 'json'].includes(ext)) return '#2C3E50' // JSON 어두운 파란색
+    
+    // 이미지 파일
+    if (['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp', 'svg', 'ico', 'tiff'].includes(ext)) {
+      return '#4CAF50'
     }
+    
+    // 비디오 파일
+    if (['mp4', 'avi', 'mov', 'wmv', 'flv', 'mkv', 'webm', 'm4v', '3gp'].includes(ext)) {
+      return '#F44336'
+    }
+    
+    // 오디오 파일
+    if (['mp3', 'wav', 'ogg', 'flac', 'aac', 'm4a', 'wma'].includes(ext)) {
+      return '#9C27B0'
+    }
+    
+    // 문서 파일
+    if (ext === 'pdf') return '#E91E63'
+    if (['doc', 'docx'].includes(ext)) return '#2196F3'
+    if (['xls', 'xlsx', 'csv'].includes(ext)) return '#4CAF50'
+    if (['ppt', 'pptx'].includes(ext)) return '#FF5722'
+    if (['txt', 'md', 'markdown'].includes(ext)) return '#607D8B'
+    
+    // 아카이브 파일
+    if (['zip', 'rar', '7z', 'tar', 'gz', 'bz2'].includes(ext)) return '#FF9800'
+    
+    // 기타
+    return '#9E9E9E'
   }
 
   // API 요청용 변환

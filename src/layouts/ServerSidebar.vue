@@ -242,29 +242,31 @@ onMounted(() => {
     <!-- 구분선 -->
     <v-divider class="server-divider" />
 
-    <!-- 프로젝트 워크스페이스 목록 (개인 워크스페이스는 제외) -->
-    <div 
-      v-for="workspace in workspaces.filter(w => w.type === 'project')"
-      :key="workspace.id"
-      class="server-icon project"
-      :class="{ 'active': currentWorkspace === workspace.id }"
-      @click="emit('select-workspace', workspace.id)"
-    >
-      <img 
-        v-if="workspace.profile" 
-        :src="workspace.profile" 
-        :alt="workspace.name"
-        class="workspace-thumbnail"
-      />
-      <span v-else>{{ workspace.icon }}</span>
-    </div>
+    <!-- 프로젝트 워크스페이스 목록 (스크롤 영역) -->
+    <div class="workspaces-scroll-container">
+      <div 
+        v-for="workspace in workspaces.filter(w => w.type === 'project')"
+        :key="workspace.id"
+        class="server-icon project"
+        :class="{ 'active': currentWorkspace === workspace.id }"
+        @click="emit('select-workspace', workspace.id)"
+      >
+        <img 
+          v-if="workspace.profile" 
+          :src="workspace.profile" 
+          :alt="workspace.name"
+          class="workspace-thumbnail"
+        />
+        <span v-else>{{ workspace.icon }}</span>
+      </div>
 
-    <!-- 프로젝트 추가 버튼 -->
-    <div 
-      class="server-icon add-server"
-      @click="openCreateWorkspaceDialog"
-    >
-      <v-icon>mdi-plus</v-icon>
+      <!-- 프로젝트 추가 버튼: 목록의 마지막에 위치하고 함께 스크롤 -->
+      <div 
+        class="server-icon add-server"
+        @click="openCreateWorkspaceDialog"
+      >
+        <v-icon>mdi-plus</v-icon>
+      </div>
     </div>
 
     <!-- 프로젝트 생성 다이얼로그 -->
@@ -549,14 +551,15 @@ onMounted(() => {
 <style scoped>
 .server-sidebar {
   width: 72px;
-  background: rgba(0, 0, 0, 0.4);
+  background: rgb(var(--v-theme-surface)); /* 라이트 모드 톤 맞춤, 다크 자동 대응 */
   backdrop-filter: blur(10px);
-  border-right: 1px solid rgba(255, 255, 255, 0.1);
+  border-right: 1px solid rgba(var(--v-theme-on-surface), 0.08);
+  box-shadow: 1px 0 0 rgba(var(--v-theme-on-surface), 0.04);
   padding: 12px 8px;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 6px;
+  gap: 2px; /* 홈-구분선-목록 사이 간격 축소 */
   position: fixed;
   left: 0;
   top: 60px;
@@ -565,12 +568,33 @@ onMounted(() => {
   transition: width 0.3s ease;
 }
 
+/* 프로젝트 목록 스크롤 영역 */
+.workspaces-scroll-container {
+  flex: 1 1 auto;
+  width: 100%;
+  min-height: 0; /* 중요: flex child의 스크롤을 위해 필수 */
+  overflow-y: auto;
+  overflow-x: visible; /* 좌측 액티브 인디케이터가 잘리지 않도록 */
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 0 0 6px 0; /* 좌측 패딩 복원: 아이콘 정렬 유지 */
+  /* 스크롤바 숨기기 */
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* IE and Edge */
+}
 
+.workspaces-scroll-container::-webkit-scrollbar {
+  display: none; /* Chrome, Safari, Opera */
+}
 
 .server-icon {
+  flex-shrink: 0; /* 고정 크기 유지 */
   width: 48px;
   height: 48px;
-  background: rgba(255, 255, 255, 0.1);
+  background: rgba(var(--v-theme-on-surface), 0.06);
+  border: none;
   border-radius: 50%;
   display: flex;
   align-items: center;
@@ -578,22 +602,34 @@ onMounted(() => {
   cursor: pointer;
   transition: all 0.2s ease;
   position: relative;
-  color: white;
+  color: rgb(var(--v-theme-on-surface));
   font-weight: 600;
   font-size: 16px;
+  margin-left: 8px; /* 모든 아이콘에 동일한 좌측 여백으로 인디케이터 라인 정렬 */
+}
+
+/* 프로젝트 아이콘 텍스트 톤 다운 */
+.server-icon span {
+  color: rgba(var(--v-theme-on-surface), 0.65);
+}
+
+.server-icon.active span {
+  color: white;
 }
 
 .server-icon.add-server {
+  flex-shrink: 0; /* 추가 버튼 고정 */
   width: 44px;
   height: 44px;
 }
 
 .server-icon:hover {
   border-radius: 16px;
-  background: rgba(var(--v-theme-primary), 0.2);
+  background: rgba(var(--v-theme-primary), 0.12);
 }
 
 .server-icon.home {
+  flex-shrink: 0; /* 홈 버튼 고정 */
   background: rgb(var(--v-theme-primary));
 }
 
@@ -602,14 +638,31 @@ onMounted(() => {
   border-radius: 16px;
 }
 
-.server-icon.active::before {
+/* 디스코드 형태의 왼쪽 인디케이터 */
+.server-icon::before {
   content: '';
   position: absolute;
-  left: -12px;
+  left: -6px;
   width: 4px;
-  height: 20px;
-  background: white;
+  height: 0;
+  background: transparent;
   border-radius: 0 4px 4px 0;
+  top: 50%;
+  transform: translateY(-50%);
+  transition: height 0.15s ease, background 0.15s ease, left 0.15s ease;
+  z-index: 2;
+}
+
+/* 호버 시 작은 표시 */
+.server-icon:hover::before {
+  height: 12px;
+  background: rgba(var(--v-theme-primary), 0.6);
+}
+
+/* 활성 시 긴 표시 */
+.server-icon.active::before {
+  height: 28px;
+  background: rgb(var(--v-theme-primary));
 }
 
 .workspace-thumbnail {
@@ -621,11 +674,12 @@ onMounted(() => {
 
 
 .server-divider {
+  flex-shrink: 0; /* 구분선 고정 */
   width: 32px;
   height: 2px;
-  background: rgba(255, 255, 255, 0.1);
+  background: rgba(var(--v-theme-on-surface), 0.08);
   border-radius: 1px;
-  /* margin: 2px 0; */
+  margin: 0 !important; /* 여백 제거: 외부 컨테이너 gap으로만 간격 제어 */
 }
 
 .sidebar-toggle-btn {
@@ -849,11 +903,11 @@ onMounted(() => {
 
 /* 화이트모드에서 워크스페이스 추가 버튼 텍스트 색상 */
 .server-icon.add-server {
-  color: rgba(255, 255, 255, 0.6) !important;
+  color: rgba(var(--v-theme-on-surface), 0.6) !important;
   font-size: 18px;
   font-weight: 300;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px dashed rgba(255, 255, 255, 0.3);
+  background: rgba(var(--v-theme-on-surface), 0.04);
+  border: 1px dashed rgba(var(--v-theme-on-surface), 0.2);
 }
 
 /* 친구 표시 스타일 */

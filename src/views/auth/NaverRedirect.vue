@@ -51,7 +51,7 @@ const sendCodeToServer = async (code, state) => {
         window.location.href = "/"
         return
     }
-    const baseUrl = (import.meta.env.VITE_API_URL || 'http://localhost:8080').replace(/\/+$/, '')
+    const baseUrl = (import.meta.env.VITE_API_URL).replace(/\/+$/, '')
     const payload = { code }
     if (state) payload.state = state
     const { data } = await axios.post(

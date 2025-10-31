@@ -12,6 +12,11 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@fullcalendar/core": "^6.1.19",
+    "@fullcalendar/daygrid": "^6.1.19",
+    "@fullcalendar/interaction": "^6.1.19",
+    "@fullcalendar/timegrid": "^6.1.19",
+    "@fullcalendar/vue3": "^6.1.19",
     "@mdi/font": "^7.4.47",
     "@stomp/stompjs": "^7.2.1",
     "@tiptap/core": "^2.4.0",
@@ -26,7 +31,10 @@
     "@vueuse/core": "^13.9.0",
     "axios": "^1.12.2",
     "chart.js": "^4.5.1",
+    "docx": "^9.5.1",
     "event-source-polyfill": "^1.0.31",
+    "html2pdf.js": "^0.12.1",
+    "jspdf": "^3.0.3",
     "jwt-decode": "^4.0.0",
     "livekit-client": "^2.0.0",
     "lodash": "^4.17.21",

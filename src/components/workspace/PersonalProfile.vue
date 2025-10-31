@@ -127,6 +127,7 @@
                   placeholder="010-0000-0000"
                   persistent-hint
                   @input="formatPhoneNumber"
+                  @keydown="handlePhoneKeydown"
                   maxlength="13"
                 />
                 <v-text-field
@@ -466,6 +467,12 @@ const formatDateOnly = (dateString) => {
 const formatPhoneNumber = (event) => {
   let value = event.target.value.replace(/[^\d]/g, '') // 숫자만 추출
   
+  // 숫자가 11자리를 초과하지 않도록 제한
+  if (value.length > 11) {
+    value = value.slice(0, 11)
+  }
+  
+  // 포맷팅 적용 - 정확한 길이에 따라 처리
   if (value.length >= 7) {
     value = value.slice(0, 3) + '-' + value.slice(3, 7) + '-' + value.slice(7, 11)
   } else if (value.length >= 3) {
@@ -473,6 +480,34 @@ const formatPhoneNumber = (event) => {
   }
   
   editForm.value.phone = value
+}
+
+// 전화번호 키 입력 처리 함수
+const handlePhoneKeydown = (event) => {
+  const { key, target } = event
+  const currentValue = target.value
+  const cursorPosition = target.selectionStart
+  
+  // 백스페이스 키 처리
+  if (key === 'Backspace') {
+    // 하이픈 바로 앞에 커서가 있으면 하이픈과 함께 앞의 숫자도 삭제
+    if (cursorPosition > 0 && currentValue[cursorPosition - 1] === '-') {
+      event.preventDefault()
+      const newValue = currentValue.slice(0, cursorPosition - 2) + currentValue.slice(cursorPosition)
+      editForm.value.phone = newValue
+      
+      // 커서 위치 조정
+      setTimeout(() => {
+        target.setSelectionRange(cursorPosition - 2, cursorPosition - 2)
+      }, 0)
+      return
+    }
+  }
+  
+  // 숫자와 필요한 키만 허용
+  if (!/[\d]/.test(key) && !['Backspace', 'Delete', 'ArrowLeft', 'ArrowRight', 'Tab', 'Enter'].includes(key)) {
+    event.preventDefault()
+  }
 }
 
 // 마이페이지 정보 조회
@@ -747,14 +782,12 @@ onMounted(() => {
 .personal-profile {
   padding: 24px;
   min-height: calc(100vh - 60px);
-  background: #f8fafc;
+  background: rgb(var(--v-theme-background));
   transition: all 0.3s ease;
 }
 
 /* 다크모드 */
-.personal-profile.dark-mode {
-  background: #0f0f23;
-}
+.personal-profile.dark-mode { background: rgb(var(--v-theme-background)); }
 
 /* 헤더 */
 .profile-header {
@@ -781,23 +814,19 @@ onMounted(() => {
   font-size: 32px;
   font-weight: 700;
   margin-bottom: 8px;
-  color: #1a1a1a;
+  color: rgb(var(--v-theme-on-surface));
   transition: color 0.3s ease;
 }
 
-.dark-mode .page-title {
-  color: #ffffff;
-}
+.dark-mode .page-title { color: rgb(var(--v-theme-on-surface)); }
 
 .page-subtitle {
-  color: #666666;
+  color: rgba(var(--v-theme-on-surface), 0.7);
   font-size: 16px;
   transition: color 0.3s ease;
 }
 
-.dark-mode .page-subtitle {
-  color: #cccccc;
-}
+.dark-mode .page-subtitle { color: rgba(var(--v-theme-on-surface), 0.7); }
 
 .logout-btn {
   border-radius: 8px;
@@ -819,17 +848,30 @@ onMounted(() => {
   box-shadow: 0 2px 12px rgba(59, 130, 246, 0.08);
   border: 1px solid rgba(59, 130, 246, 0.1);
   transition: all 0.3s ease;
+  background: rgb(var(--v-theme-surface));
 }
 
-.dark-mode .profile-card {
-  background: #1e1e1e;
-  box-shadow: 0 2px 12px rgba(59, 130, 246, 0.15);
-  border-color: rgba(59, 130, 246, 0.2);
+/* 입력 필드 다크모드 대응 */
+.profile-card :deep(.v-field) {
+  background: rgb(var(--v-theme-schedule-card-bg));
+  border: 1px solid rgb(var(--v-theme-schedule-border));
+  border-radius: 6px;
+  transition: border-color 0.2s ease, background-color 0.2s ease;
 }
+.profile-card :deep(.v-field:hover) {
+  border-color: rgb(var(--v-theme-schedule-border));
+}
+.profile-card :deep(.v-field--focused) {
+  border-color: #1976d2;
+  box-shadow: 0 0 0 2px rgba(25, 118, 210, 0.1);
+  background: rgb(var(--v-theme-schedule-card-bg));
+}
+.profile-card :deep(.v-field__input) { color: rgb(var(--v-theme-schedule-text)); }
+.profile-card :deep(.v-field__input::placeholder) { color: rgb(var(--v-theme-schedule-placeholder)); opacity: 1; }
 
 .profile-banner {
   position: relative;
-  background: #3b82f6;
+  background: rgb(var(--v-theme-primary));
   padding: 40px 32px;
   color: white;
 }
@@ -840,7 +882,7 @@ onMounted(() => {
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(59, 130, 246, 0.95);
+  background: rgba(var(--v-theme-primary), 0.95);
 }
 
 .profile-info {
@@ -936,6 +978,24 @@ onMounted(() => {
   color: white;
 }
 
+/* 다크모드 배너는 표면 계열로 톤 다운 */
+.dark-mode .profile-banner {
+  background: rgb(var(--v-theme-surface));
+  color: rgb(var(--v-theme-on-surface));
+}
+
+.dark-mode .banner-gradient { background: rgba(var(--v-theme-on-surface), 0.04); }
+
+.dark-mode .profile-name,
+.dark-mode .profile-id,
+.dark-mode .meta-item { color: rgb(var(--v-theme-on-surface)); }
+
+.dark-mode .status-message {
+  color: rgb(var(--v-theme-on-surface));
+  background: rgba(var(--v-theme-on-surface), 0.06);
+  border: 1px solid rgba(var(--v-theme-on-surface), 0.12);
+}
+
 .profile-actions {
   position: relative;
   display: flex;
@@ -1023,15 +1083,12 @@ onMounted(() => {
 .setting-card {
   border-radius: 12px;
   padding: 24px;
-  background: white;
+  background: rgb(var(--v-theme-surface));
   border: 1px solid rgba(59, 130, 246, 0.1);
   transition: all 0.3s ease;
 }
 
-.dark-mode .setting-card {
-  background: #1e1e1e;
-  border-color: rgba(59, 130, 246, 0.2);
-}
+.dark-mode .setting-card { background: rgb(var(--v-theme-surface)); }
 
 .setting-card:hover {
   transform: translateY(-2px);
@@ -1058,29 +1115,25 @@ onMounted(() => {
   width: 40px;
   height: 40px;
   border-radius: 10px;
-  background: rgba(59, 130, 246, 0.1);
+  background: rgba(var(--v-theme-on-surface), 0.06);
 }
 
 .setting-info h3 {
   font-size: 18px;
   font-weight: 600;
   margin-bottom: 4px;
-  color: #1a1a1a;
+  color: rgb(var(--v-theme-on-surface));
 }
 
-.dark-mode .setting-info h3 {
-  color: #ffffff;
-}
+.dark-mode .setting-info h3 { color: rgb(var(--v-theme-on-surface)); }
 
 .setting-info p {
   font-size: 14px;
-  color: #666;
+  color: rgba(var(--v-theme-on-surface), 0.7);
   margin: 0;
 }
 
-.dark-mode .setting-info p {
-  color: #ccc;
-}
+.dark-mode .setting-info p { color: rgba(var(--v-theme-on-surface), 0.7); }
 
 .setting-content {
   display: flex;

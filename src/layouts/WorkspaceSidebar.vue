@@ -1512,10 +1512,11 @@ const getStatusColor = (status) => {
 
 <style scoped>
 .workspace-sidebar {
-  width: 260px;
-  background: rgba(0, 0, 0, 0.2);
-  backdrop-filter: blur(10px);
-  border-right: 1px solid rgba(255, 255, 255, 0.1);
+  width: 220px;
+  background: rgb(var(--v-theme-surface));
+  backdrop-filter: blur(6px);
+  border-right: 1px solid rgba(var(--v-theme-on-surface), 0.08);
+  box-shadow: 1px 0 0 rgba(var(--v-theme-on-surface), 0.04);
   padding: 24px 0 80px 0;
   margin-left: 72px;
   position: fixed;
@@ -1526,6 +1527,26 @@ const getStatusColor = (status) => {
   overflow-y: auto;
   transition: transform 0.3s ease;
 }
+
+/* 스크롤바 스타일 (칸반보드와 동일) */
+.workspace-sidebar::-webkit-scrollbar {
+  width: 6px;
+}
+
+.workspace-sidebar::-webkit-scrollbar-track {
+  background: rgba(var(--v-theme-on-surface), 0.08);
+  border-radius: 3px;
+}
+
+.workspace-sidebar::-webkit-scrollbar-thumb {
+  background: rgba(var(--v-theme-on-surface), 0.25);
+  border-radius: 3px;
+}
+
+.workspace-sidebar::-webkit-scrollbar-thumb:hover {
+  background: #a8a8a8;
+}
+
 
 .workspace-sidebar.collapsed {
   width: 72px;
@@ -1543,8 +1564,8 @@ const getStatusColor = (status) => {
   gap: 12px;
   padding: 8px 16px;
   margin-bottom: 8px;
-  background: rgba(var(--v-theme-primary), 0.05);
-  border-bottom: 1px solid rgba(var(--v-theme-primary), 0.1);
+  background: rgba(var(--v-theme-on-surface), 0.02);
+  border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.06);
 }
 
 .workspace-sidebar.collapsed .project-info {
@@ -1607,8 +1628,7 @@ const getStatusColor = (status) => {
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.5px;
-  color: rgb(var(--v-theme-on-surface));
-  opacity: 0.6;
+  color: rgba(var(--v-theme-on-surface), 0.75);
   display: flex;
   align-items: center;
 }
@@ -1642,14 +1662,14 @@ const getStatusColor = (status) => {
 
 .channel-item:hover,
 .dm-item:hover {
-  background: rgba(var(--v-theme-primary), 0.1);
+  background: rgba(var(--v-theme-primary), 0.12);
   color: rgb(var(--v-theme-on-surface));
   opacity: 1;
 }
 
 .channel-item.active,
 .dm-item.active {
-  background: rgba(var(--v-theme-primary), 0.2);
+  background: rgba(var(--v-theme-primary), 0.18);
   color: rgb(var(--v-theme-on-surface));
   opacity: 1;
   border-right: 2px solid rgb(var(--v-theme-primary));
@@ -1974,7 +1994,7 @@ const getStatusColor = (status) => {
 /* 반응형 디자인 */
 @media (max-width: 768px) {
   .workspace-sidebar {
-    width: 240px;
+    width: 200px;
     margin-left: 60px;
   }
 }
@@ -2196,6 +2216,25 @@ const getStatusColor = (status) => {
   gap: 12px;
   max-height: 400px;
   overflow-y: auto;
+}
+
+/* 멤버 리스트 스크롤바 스타일 */
+.members-list::-webkit-scrollbar {
+  width: 6px;
+}
+
+.members-list::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 3px;
+}
+
+.members-list::-webkit-scrollbar-thumb {
+  background: #c1c1c1;
+  border-radius: 3px;
+}
+
+.members-list::-webkit-scrollbar-thumb:hover {
+  background: #a8a8a8;
 }
 
 .member-item {

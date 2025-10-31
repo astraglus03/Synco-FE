@@ -459,14 +459,81 @@
             <v-icon color="info" size="24">mdi-account-group</v-icon>
             <span>담당자별 업무 현황</span>
             <v-spacer />
-            <v-select
-              v-model="selectedAssignee"
-              :items="assigneeOptions"
-              density="compact"
-              variant="outlined"
-              hide-details
-              class="assignee-filter"
-            />
+            <v-menu
+              v-model="showAssigneeMenu"
+              location="bottom end"
+              :close-on-content-click="false"
+              offset="8"
+            >
+              <template #activator="{ props }">
+                <button class="assignee-filter-btn" v-bind="props">
+                  <v-icon size="16" class="mr-2">mdi-account</v-icon>
+                  <span class="label">{{ selectedAssigneeLabel }}</span>
+                  <v-icon size="16" class="ml-3 chevron">mdi-chevron-down</v-icon>
+                </button>
+              </template>
+              <v-card class="assignee-filter-menu" min-width="280">
+                <div class="menu-header">
+                  <v-icon size="18" color="primary">mdi-account-filter</v-icon>
+                  <span>담당자 선택</span>
+                </div>
+                <div class="menu-search">
+                  <v-text-field
+                    v-model="assigneeSearch"
+                    placeholder="담당자 검색"
+                    prepend-inner-icon="mdi-magnify"
+                    density="comfortable"
+                    variant="outlined"
+                    hide-details
+                    clearable
+                  />
+                </div>
+                <v-list density="comfortable" class="menu-list">
+                  <v-list-item :active="selectedAssignee === '내 업무'" @click="selectAssignee('내 업무')">
+                    <template #prepend>
+                      <v-icon>mdi-account-circle</v-icon>
+                    </template>
+                    <v-list-item-title>내 업무</v-list-item-title>
+                    <template #append>
+                      <v-icon v-if="selectedAssignee === '내 업무'" color="primary">mdi-check</v-icon>
+                    </template>
+                  </v-list-item>
+                  <v-list-item :active="selectedAssignee === '전체'" @click="selectAssignee('전체')">
+                    <template #prepend>
+                      <v-icon>mdi-infinity</v-icon>
+                    </template>
+                    <v-list-item-title>전체</v-list-item-title>
+                    <template #append>
+                      <v-icon v-if="selectedAssignee === '전체'" color="primary">mdi-check</v-icon>
+                    </template>
+                  </v-list-item>
+                  <v-divider class="my-1" />
+                  <v-list-item
+                    v-for="m in filteredAssigneeOptions"
+                    :key="m"
+                    :active="selectedAssignee === m"
+                    @click="selectAssignee(m)"
+                  >
+                    <template #prepend>
+                      <v-avatar size="22" color="primary">
+                        <span class="text-white" style="font-weight:700">{{ m.charAt(0) }}</span>
+                      </v-avatar>
+                    </template>
+                    <v-list-item-title>{{ m }}</v-list-item-title>
+                    <template #append>
+                      <v-icon v-if="selectedAssignee === m" color="primary">mdi-check</v-icon>
+                    </template>
+                  </v-list-item>
+                  <div v-if="filteredAssigneeOptions.length === 0" class="menu-empty">
+                    <v-icon size="22" color="grey">mdi-account-off</v-icon>
+                    <span>검색 결과가 없습니다</span>
+                  </div>
+                </v-list>
+                <div class="menu-actions">
+                  <v-btn variant="text" size="small" @click="showAssigneeMenu = false">닫기</v-btn>
+                </div>
+              </v-card>
+            </v-menu>
           </v-card-title>
 
           <v-card-text>
@@ -558,6 +625,8 @@ const timeFilter = ref('month')
 const customStartDate = ref('2025-09-01')
 const customEndDate = ref('2025-12-31')
 const selectedAssignee = ref('내 업무')
+const showAssigneeMenu = ref(false)
+const assigneeSearch = ref('')
 
 // 대시보드 통계 관련 refs
 const allTasks = ref([])
@@ -754,6 +823,20 @@ const assigneeOptions = computed(() => {
   const memberNames = teamMembers.value.map(member => member.name)
   return ['내 업무', '전체', ...memberNames]
 })
+
+const filteredAssigneeOptions = computed(() => {
+  const q = (assigneeSearch.value || '').toLowerCase().trim()
+  const base = (teamMembers.value || []).map(m => m.name)
+  if (!q) return base
+  return base.filter(n => (n || '').toLowerCase().includes(q))
+})
+
+const selectedAssigneeLabel = computed(() => selectedAssignee.value || '내 업무')
+
+const selectAssignee = (v) => {
+  selectedAssignee.value = v
+  showAssigneeMenu.value = false
+}
 
 // 담당자별 업무 필터링
 const filteredTasksByAssignee = computed(() => {
@@ -1997,7 +2080,7 @@ watch(showTaskDetailModal, async (newVal, oldVal) => {
 <style scoped>
 .team-dashboard {
   padding: 24px;
-  background-color: #f8f9fa;
+  background-color: rgb(var(--v-theme-background));
   min-height: 100vh;
 }
 
@@ -2010,12 +2093,12 @@ watch(showTaskDetailModal, async (newVal, oldVal) => {
   font-size: 28px;
   font-weight: 700;
   margin-bottom: 8px;
-  color: #1e293b;
+  color: rgb(var(--v-theme-on-surface));
 }
 
 .dashboard-header p {
   font-size: 16px;
-  color: #64748b;
+  color: rgba(var(--v-theme-on-surface), 0.85);
 }
 
 /* 2. 통계 카드 그리드 */
@@ -2107,21 +2190,21 @@ watch(showTaskDetailModal, async (newVal, oldVal) => {
 
 .stat-label {
   font-size: 14px;
-  color: #64748b;
+  color: rgba(var(--v-theme-on-surface), 0.7);
   margin-bottom: 4px;
 }
 
 .stat-value {
   font-size: 32px;
   font-weight: 700;
-  color: #1e293b;
+  color: rgb(var(--v-theme-on-surface));
   line-height: 1;
   margin-bottom: 4px;
 }
 
 .stat-description {
   font-size: 12px;
-  color: #94a3b8;
+  color: rgba(var(--v-theme-on-surface), 0.6);
 }
 
 /* 3. 프로젝트 진행 흐름 카드 */
@@ -2131,6 +2214,7 @@ watch(showTaskDetailModal, async (newVal, oldVal) => {
   position: relative;
   z-index: 1;
   overflow: visible;
+  background: rgb(var(--v-theme-surface));
 }
 
 .progress-flow-card .v-card-text {
@@ -2155,13 +2239,13 @@ watch(showTaskDetailModal, async (newVal, oldVal) => {
 .flow-title-text h3 {
   font-size: 20px;
   font-weight: 600;
-  color: #1e293b;
+  color: rgb(var(--v-theme-on-surface));
   margin: 0;
 }
 
 .flow-period {
   font-size: 13px;
-  color: #64748b;
+  color: rgba(var(--v-theme-on-surface), 0.85);
   margin-top: 4px;
   display: block;
 }
@@ -2196,7 +2280,7 @@ watch(showTaskDetailModal, async (newVal, oldVal) => {
   align-items: center;
   gap: 8px;
   font-size: 13px;
-  color: #64748b;
+  color: rgba(var(--v-theme-on-surface), 0.7);
 }
 
 .legend-color {
@@ -2231,7 +2315,7 @@ watch(showTaskDetailModal, async (newVal, oldVal) => {
 .page-info {
   font-size: 14px;
   font-weight: 500;
-  color: #64748b;
+  color: rgba(var(--v-theme-on-surface), 0.7);
   min-width: 60px;
   text-align: center;
 }
@@ -2244,7 +2328,7 @@ watch(showTaskDetailModal, async (newVal, oldVal) => {
 .period-progress-section h4 {
   font-size: 16px;
   font-weight: 600;
-  color: #1e293b;
+  color: rgb(var(--v-theme-on-surface));
   margin-bottom: 16px;
 }
 
@@ -2293,8 +2377,8 @@ watch(showTaskDetailModal, async (newVal, oldVal) => {
   top: calc(100% - 8px);
   left: 0;
   right: 0;
-  background: white;
-  border: 1px solid #e0e0e0;
+  background: rgb(var(--v-theme-surface));
+  border: 1px solid rgba(var(--v-theme-on-surface), 0.12);
   border-radius: 8px;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
   z-index: 20000;
@@ -2309,21 +2393,21 @@ watch(showTaskDetailModal, async (newVal, oldVal) => {
   justify-content: space-between;
   align-items: center;
   padding: 12px 16px;
-  border-bottom: 1px solid #e0e0e0;
-  background: #f8fafc;
+  border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.12);
+  background: rgba(var(--v-theme-on-surface), 0.02);
   border-radius: 8px 8px 0 0;
   margin-top: -8px;
 }
 
 .dropdown-header strong {
   font-size: 14px;
-  color: #1e293b;
+  color: rgb(var(--v-theme-on-surface));
 }
 
 .task-count {
   font-size: 12px;
-  color: #64748b;
-  background: white;
+  color: rgba(var(--v-theme-on-surface), 0.7);
+  background: rgb(var(--v-theme-surface));
   padding: 2px 8px;
   border-radius: 12px;
 }
@@ -2334,7 +2418,7 @@ watch(showTaskDetailModal, async (newVal, oldVal) => {
 
 .period-task-item {
   padding: 12px;
-  border-bottom: 1px solid #f1f5f9;
+  border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.08);
   transition: background-color 0.2s;
 }
 
@@ -2343,19 +2427,19 @@ watch(showTaskDetailModal, async (newVal, oldVal) => {
 }
 
 .period-task-item:hover {
-  background-color: #f8fafc;
+  background-color: rgba(var(--v-theme-on-surface), 0.03);
 }
 
 .period-name {
   font-size: 14px;
   font-weight: 600;
-  color: #1e293b;
+  color: rgb(var(--v-theme-on-surface));
   margin-bottom: 4px;
 }
 
 .period-phase {
   font-size: 12px;
-  color: #64748b;
+  color: rgba(var(--v-theme-on-surface), 0.85);
   margin-bottom: 12px;
 }
 
@@ -2373,12 +2457,12 @@ watch(showTaskDetailModal, async (newVal, oldVal) => {
 .period-percentage {
   font-size: 14px;
   font-weight: 600;
-  color: #1e293b;
+  color: rgb(var(--v-theme-on-surface));
 }
 
 .period-tasks {
   font-size: 12px;
-  color: #64748b;
+  color: rgba(var(--v-theme-on-surface), 0.85);
   display: flex;
   justify-content: space-between;
 }
@@ -2398,7 +2482,7 @@ watch(showTaskDetailModal, async (newVal, oldVal) => {
 
 .no-tasks-text {
   font-size: 13px;
-  color: #94a3b8;
+  color: rgba(var(--v-theme-on-surface), 0.75);
   font-weight: 500;
 }
 
@@ -2419,7 +2503,7 @@ watch(showTaskDetailModal, async (newVal, oldVal) => {
   gap: 8px;
   font-size: 18px;
   font-weight: 600;
-  color: #1e293b;
+  color: rgb(var(--v-theme-on-surface));
   padding: 20px 24px;
 }
 
@@ -2427,7 +2511,7 @@ watch(showTaskDetailModal, async (newVal, oldVal) => {
 .milestones-section h5 {
   font-size: 14px;
   font-weight: 600;
-  color: #1e293b;
+  color: rgb(var(--v-theme-on-surface));
   margin-bottom: 12px;
 }
 
@@ -2442,17 +2526,17 @@ watch(showTaskDetailModal, async (newVal, oldVal) => {
 }
 
 .scrollable-list::-webkit-scrollbar-track {
-  background: #f1f5f9;
+  background: rgba(var(--v-theme-on-surface), 0.05);
   border-radius: 3px;
 }
 
 .scrollable-list::-webkit-scrollbar-thumb {
-  background: #cbd5e1;
+  background: rgba(var(--v-theme-on-surface), 0.2);
   border-radius: 3px;
 }
 
 .scrollable-list::-webkit-scrollbar-thumb:hover {
-  background: #94a3b8;
+  background: rgba(var(--v-theme-on-surface), 0.3);
 }
 
 .deadline-item {
@@ -2461,12 +2545,12 @@ watch(showTaskDetailModal, async (newVal, oldVal) => {
   padding: 12px;
   border-radius: 8px;
   margin-bottom: 12px;
-  background-color: #f8f9fa;
-  transition: background-color 0.2s ease;
+  background-color: rgba(var(--v-theme-on-surface), 0.03);
+  transition: background-color 0.2s ease, box-shadow 0.2s ease;
 }
 
 .deadline-item:hover {
-  background-color: #f1f3f5;
+  background-color: rgba(var(--v-theme-on-surface), 0.06);
 }
 
 .deadline-marker {
@@ -2498,7 +2582,7 @@ watch(showTaskDetailModal, async (newVal, oldVal) => {
   font-size: 14px;
   font-weight: 600;
   flex: 1;
-  color: #1e293b;
+  color: rgb(var(--v-theme-on-surface));
 }
 
 .deadline-meta {
@@ -2506,7 +2590,7 @@ watch(showTaskDetailModal, async (newVal, oldVal) => {
   align-items: center;
   gap: 12px;
   font-size: 12px;
-  color: #64748b;
+  color: rgba(var(--v-theme-on-surface), 0.85);
   margin-bottom: 6px;
 }
 
@@ -2517,7 +2601,7 @@ watch(showTaskDetailModal, async (newVal, oldVal) => {
 
 .board-label {
   font-size: 11px;
-  color: #94a3b8;
+  color: rgba(var(--v-theme-on-surface), 0.75);
 }
 
 .milestone-item {
@@ -2525,13 +2609,13 @@ watch(showTaskDetailModal, async (newVal, oldVal) => {
   gap: 12px;
   padding: 12px;
   border-radius: 8px;
-  background-color: #f8f9fa;
+  background-color: rgba(var(--v-theme-on-surface), 0.03);
   margin-bottom: 12px;
   transition: background-color 0.2s ease;
 }
 
 .milestone-item:hover {
-  background-color: #f1f3f5;
+  background-color: rgba(var(--v-theme-on-surface), 0.06);
 }
 
 .milestone-marker {
@@ -2562,13 +2646,13 @@ watch(showTaskDetailModal, async (newVal, oldVal) => {
 .milestone-title {
   font-size: 14px;
   font-weight: 600;
-  color: #1e293b;
+  color: rgb(var(--v-theme-on-surface));
   flex: 1;
 }
 
 .milestone-description {
   font-size: 13px;
-  color: #64748b;
+  color: rgba(var(--v-theme-on-surface), 0.85);
   margin-bottom: 12px;
   line-height: 1.5;
 }
@@ -2584,7 +2668,7 @@ watch(showTaskDetailModal, async (newVal, oldVal) => {
   align-items: center;
   gap: 4px;
   font-size: 12px;
-  color: #64748b;
+  color: rgba(var(--v-theme-on-surface), 0.85);
 }
 
 .milestone-date {
@@ -2592,12 +2676,46 @@ watch(showTaskDetailModal, async (newVal, oldVal) => {
   align-items: center;
   gap: 4px;
   font-size: 12px;
-  color: #64748b;
+  color: rgba(var(--v-theme-on-surface), 0.85);
 }
 
 .assignee-filter {
   max-width: 150px;
 }
+
+/* 담당자 필터 - 버튼/메뉴 */
+.assignee-filter-btn {
+  display: inline-flex;
+  align-items: center;
+  padding: 8px 12px;
+  border: 1px solid rgba(var(--v-theme-on-surface), 0.2);
+  background: rgb(var(--v-theme-surface));
+  color: rgb(var(--v-theme-on-surface));
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.assignee-filter-btn:hover {
+  border-color: rgba(var(--v-theme-on-surface), 0.3);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.06);
+}
+
+.assignee-filter-btn .label { font-weight: 600; font-size: 14px; }
+.assignee-filter-btn .chevron { color: rgba(var(--v-theme-on-surface), 0.7); }
+
+.assignee-filter-menu { border-radius: 12px !important; overflow: hidden; }
+.assignee-filter-menu .menu-header {
+  display: flex; align-items: center; gap: 8px;
+  padding: 12px 14px; border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.12); font-weight: 600; color: rgb(var(--v-theme-on-surface));
+}
+
+.assignee-filter-menu .menu-search { padding: 10px 12px 0 12px; }
+/* 기본 텍스트필드 스타일 사용: 커스텀 제거 */
+
+.assignee-filter-menu .menu-list { max-height: 320px; overflow-y: auto; }
+.assignee-filter-menu .menu-empty { display:flex; align-items:center; justify-content:center; gap:8px; color:rgba(var(--v-theme-on-surface), 0.6); padding: 16px 0; }
+.assignee-filter-menu .menu-actions { display:flex; align-items:center; gap:8px; padding:8px 12px 10px 12px; border-top:1px solid rgba(var(--v-theme-on-surface), 0.12); }
 
 .assignee-tasks {
   max-height: 600px;
@@ -2610,17 +2728,17 @@ watch(showTaskDetailModal, async (newVal, oldVal) => {
 }
 
 .assignee-tasks::-webkit-scrollbar-track {
-  background: #f1f5f9;
+  background: rgba(var(--v-theme-on-surface), 0.05);
   border-radius: 3px;
 }
 
 .assignee-tasks::-webkit-scrollbar-thumb {
-  background: #cbd5e1;
+  background: rgba(var(--v-theme-on-surface), 0.2);
   border-radius: 3px;
 }
 
 .assignee-tasks::-webkit-scrollbar-thumb:hover {
-  background: #94a3b8;
+  background: rgba(var(--v-theme-on-surface), 0.3);
 }
 
 .assignee-task-item {
@@ -2629,12 +2747,12 @@ watch(showTaskDetailModal, async (newVal, oldVal) => {
   padding: 16px;
   border-radius: 8px;
   margin-bottom: 12px;
-  background-color: #f8f9fa;
+  background-color: rgba(var(--v-theme-on-surface), 0.03);
   transition: background-color 0.2s ease;
 }
 
 .assignee-task-item:hover {
-  background-color: #f1f3f5;
+  background-color: rgba(var(--v-theme-on-surface), 0.06);
 }
 
 .task-marker {
@@ -2665,7 +2783,7 @@ watch(showTaskDetailModal, async (newVal, oldVal) => {
 .task-title {
   font-size: 14px;
   font-weight: 600;
-  color: #1e293b;
+  color: rgb(var(--v-theme-on-surface));
   flex: 1;
 }
 
@@ -2674,7 +2792,7 @@ watch(showTaskDetailModal, async (newVal, oldVal) => {
   align-items: center;
   gap: 4px;
   font-size: 12px;
-  color: #64748b;
+  color: rgba(var(--v-theme-on-surface), 0.85);
   margin-bottom: 6px;
 }
 
@@ -2683,7 +2801,7 @@ watch(showTaskDetailModal, async (newVal, oldVal) => {
   align-items: center;
   gap: 4px;
   font-size: 12px;
-  color: #64748b;
+  color: rgba(var(--v-theme-on-surface), 0.85);
 }
 
 .task-meta {
@@ -2706,7 +2824,7 @@ watch(showTaskDetailModal, async (newVal, oldVal) => {
 .progress-text {
   font-size: 12px;
   font-weight: 600;
-  color: #1e293b;
+  color: rgb(var(--v-theme-on-surface));
   min-width: 40px;
   text-align: right;
 }
@@ -2717,8 +2835,8 @@ watch(showTaskDetailModal, async (newVal, oldVal) => {
   top: calc(100% - 8px);
   left: 0;
   right: 0;
-  background: white;
-  border: 1px solid #e0e0e0;
+  background: rgb(var(--v-theme-surface));
+  border: 1px solid rgba(var(--v-theme-on-surface), 0.15);
   border-radius: 8px;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
   z-index: 10000;
@@ -2740,7 +2858,7 @@ watch(showTaskDetailModal, async (newVal, oldVal) => {
 }
 
 .task-item {
-  border-bottom: 1px solid #f0f0f0;
+  border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.1);
 }
 
 .task-item:last-child {
@@ -2749,13 +2867,13 @@ watch(showTaskDetailModal, async (newVal, oldVal) => {
 
 .task-item-enhanced {
   padding: 12px 16px !important;
-  border-bottom: 1px solid #f0f0f0;
+  border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.1);
   cursor: pointer;
   transition: background-color 0.2s ease;
 }
 
 .task-item-enhanced:hover {
-  background-color: #f8f9fa;
+  background-color: rgba(var(--v-theme-on-surface), 0.05);
 }
 
 .task-item-enhanced:last-child {
@@ -2777,7 +2895,7 @@ watch(showTaskDetailModal, async (newVal, oldVal) => {
 .task-title {
   font-size: 14px;
   font-weight: 500;
-  color: #1e293b;
+  color: rgb(var(--v-theme-on-surface));
   flex: 1;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -2789,7 +2907,7 @@ watch(showTaskDetailModal, async (newVal, oldVal) => {
   align-items: center;
   gap: 12px;
   font-size: 12px;
-  color: #64748b;
+  color: rgba(var(--v-theme-on-surface), 0.7);
 }
 
 .task-assignee,
@@ -2809,7 +2927,7 @@ watch(showTaskDetailModal, async (newVal, oldVal) => {
 }
 
 .empty-text {
-  color: #94a3b8;
+  color: rgba(var(--v-theme-on-surface), 0.6);
   font-size: 13px;
   display: block;
 }

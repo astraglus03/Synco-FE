@@ -10,6 +10,38 @@
 
     <!-- 회원가입 폼 -->
     <v-form ref="signupForm" v-model="isFormValid" @submit.prevent="handleSignUp" class="signup-form">
+      <!-- 회원ID와 이름 -->
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">회원ID</label>
+          <div class="input-wrapper">
+            <v-icon class="input-icon">mdi-account</v-icon>
+            <v-text-field
+              v-model="formData.memberId"
+              placeholder="회원ID를 입력하세요"
+              :rules="memberIdRules"
+              variant="plain"
+              hide-details="auto"
+              class="custom-input"
+            />
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">이름</label>
+          <div class="input-wrapper">
+            <v-icon class="input-icon">mdi-account-circle</v-icon>
+            <v-text-field
+              v-model="formData.name"
+              placeholder="이름을 입력하세요"
+              :rules="nameRules"
+              variant="plain"
+              hide-details="auto"
+              class="custom-input"
+            />
+          </div>
+        </div>
+      </div>
+
       <!-- 이메일 -->
       <div class="form-group full-width">
         <label class="form-label">이메일</label>
@@ -78,38 +110,6 @@
         </div>
       </div>
 
-      <!-- 회원ID와 이름 -->
-      <div class="form-row">
-        <div class="form-group">
-          <label class="form-label">회원ID</label>
-          <div class="input-wrapper">
-            <v-icon class="input-icon">mdi-account</v-icon>
-            <v-text-field
-              v-model="formData.memberId"
-              placeholder="회원ID를 입력하세요"
-              :rules="memberIdRules"
-              variant="plain"
-              hide-details="auto"
-              class="custom-input"
-            />
-          </div>
-        </div>
-        <div class="form-group">
-          <label class="form-label">이름</label>
-          <div class="input-wrapper">
-            <v-icon class="input-icon">mdi-account-circle</v-icon>
-            <v-text-field
-              v-model="formData.name"
-              placeholder="이름을 입력하세요"
-              :rules="nameRules"
-              variant="plain"
-              hide-details="auto"
-              class="custom-input"
-            />
-          </div>
-        </div>
-      </div>
-
       <!-- 핸드폰 번호 -->
       <div class="form-group full-width">
         <label class="form-label">핸드폰 번호 (선택)</label>
@@ -123,6 +123,7 @@
             hide-details="auto"
             class="custom-input"
             @input="formatPhoneNumber"
+            @keydown="handlePhoneKeydown"
             maxlength="13"
           />
         </div>
@@ -312,6 +313,12 @@ const phoneRules = [
 const formatPhoneNumber = (event) => {
   let value = event.target.value.replace(/[^\d]/g, '') // 숫자만 추출
   
+  // 숫자가 11자리를 초과하지 않도록 제한
+  if (value.length > 11) {
+    value = value.slice(0, 11)
+  }
+  
+  // 포맷팅 적용 - 정확한 길이에 따라 처리
   if (value.length >= 7) {
     value = value.slice(0, 3) + '-' + value.slice(3, 7) + '-' + value.slice(7, 11)
   } else if (value.length >= 3) {
@@ -319,6 +326,34 @@ const formatPhoneNumber = (event) => {
   }
   
   formData.value.phone = value
+}
+
+// 전화번호 키 입력 처리 함수
+const handlePhoneKeydown = (event) => {
+  const { key, target } = event
+  const currentValue = target.value
+  const cursorPosition = target.selectionStart
+  
+  // 백스페이스 키 처리
+  if (key === 'Backspace') {
+    // 하이픈 바로 앞에 커서가 있으면 하이픈과 함께 앞의 숫자도 삭제
+    if (cursorPosition > 0 && currentValue[cursorPosition - 1] === '-') {
+      event.preventDefault()
+      const newValue = currentValue.slice(0, cursorPosition - 2) + currentValue.slice(cursorPosition)
+      formData.value.phone = newValue
+      
+      // 커서 위치 조정
+      setTimeout(() => {
+        target.setSelectionRange(cursorPosition - 2, cursorPosition - 2)
+      }, 0)
+      return
+    }
+  }
+  
+  // 숫자와 필요한 키만 허용
+  if (!/[\d]/.test(key) && !['Backspace', 'Delete', 'ArrowLeft', 'ArrowRight', 'Tab', 'Enter'].includes(key)) {
+    event.preventDefault()
+  }
 }
 
 // Methods

@@ -161,6 +161,7 @@ export class RoomDetailDto {
     this.createdAt = data.createdAt
     this.duration = data.duration
     this.summaryContent = data.summaryContent || ''
+    this.downloadUrl = data.downloadUrl || null
     this.participants = data.participants || []
     this.participantCount = data.participantCount
   }
