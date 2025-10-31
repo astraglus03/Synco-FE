@@ -1,5 +1,16 @@
 import axios from '@/utils/api'
 import { DriveItem, DocumentDetail } from '@/models/drive/DriveModels'
+import { useNotificationStore } from '@/store/notificationStore'
+
+// 알림 갱신 헬퍼 함수
+const refreshNotifications = async () => {
+  try {
+    const notificationStore = useNotificationStore()
+    await notificationStore.fetchNotifications()
+  } catch (error) {
+    console.error('[Drive API] 알림 갱신 실패:', error)
+  }
+}
 
 // API 엔드포인트 상수
 const API_ENDPOINTS = {
@@ -210,6 +221,11 @@ class DriveApiBase {
         driveChannelSeq,
         isLocked
       })
+      
+      // 프로젝트 드라이브 공유 문서 생성 시 알림 갱신 (백그라운드에서 실행, 실패해도 무시)
+      if (!this.isPersonal) {
+        refreshNotifications().catch(() => {})
+      }
       
       return createApiResponse(true, DriveItem.fromApiFormat({
         ...response.data.data,

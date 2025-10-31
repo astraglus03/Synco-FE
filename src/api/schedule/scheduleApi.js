@@ -1,4 +1,15 @@
 import apiClient from '../../utils/api.js'
+import { useNotificationStore } from '@/store/notificationStore'
+
+// 알림 갱신 헬퍼 함수
+const refreshNotifications = async () => {
+  try {
+    const notificationStore = useNotificationStore()
+    await notificationStore.fetchNotifications()
+  } catch (error) {
+    console.error('[Schedule API] 알림 갱신 실패:', error)
+  }
+}
 
 // 프로젝트 태스크 조회 API
 export const getProjectTasks = async (projectId, assigneeMemberSeq = null) => {
@@ -41,6 +52,8 @@ export const updateTaskStatus = async (taskSeq, newStatus) => {
 export const createTask = async (taskData) => {
   try {
     const response = await apiClient.post('/task-service/scheduleManagement/project/task', taskData)
+    // 업무 추가 시 알림 갱신 (백그라운드에서 실행, 실패해도 무시)
+    refreshNotifications().catch(() => {})
     return response.data
   } catch (error) {
     console.error('태스크 생성 실패:', error)
@@ -193,6 +206,8 @@ export const updateBoardOrders = async (boardOrders) => {
 export const createComment = async (taskSeq, commentData) => {
   try {
     const response = await apiClient.post(`/task-service/comment/task/${taskSeq}`, commentData)
+    // 업무에 댓글 달릴 때 알림 갱신 (백그라운드에서 실행, 실패해도 무시)
+    refreshNotifications().catch(() => {})
     return response.data
   } catch (error) {
     console.error('댓글 생성 실패:', error)

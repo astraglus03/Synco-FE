@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { 
   getChatChannels, 
@@ -22,6 +22,18 @@ import { emitter } from "@/eventBus"; // 채팅 채널 변경 이벤트 버스
 import { getIndividualChatChannels } from "@/api/chat/chatApi"; // 1:1 채팅 목록 조회 API
 
 const router = useRouter()
+
+// 화면 크기 감지
+const windowWidth = ref(window.innerWidth)
+
+const handleResize = () => {
+  windowWidth.value = window.innerWidth
+}
+
+// 반응형 collapsed 상태 (화면 크기에 따라 자동 결정)
+const isCollapsedView = computed(() => {
+  return windowWidth.value <= 1024 || (props.collapsed && props.workspaceType === 'project')
+})
 
 const props = defineProps({
   collapsed: Boolean,
@@ -674,14 +686,19 @@ watch(
   { deep: true, immediate: true }
 );
 
-// 컴포넌트 마운트 시 채널 데이터 로드
+// 컴포넌트 마운트 시 채널 데이터 로드 (resize 리스너와 함께)
 onMounted(() => {
   console.log("🚀 onMounted 실행됨:", props.workspaceType);
-  loadChannels();
-
+  window.addEventListener('resize', handleResize)
+  loadChannels()
   console.log("📢 현재 workspaceType:", props.workspaceType);
   console.log("📢 현재 workSpaceSeq:", props.currentWorkspaceData?.workSpaceSeq);
-});
+})
+
+// 컴포넌트 언마운트 시 이벤트 리스너 정리
+onUnmounted(() => {
+  window.removeEventListener('resize', handleResize)
+})
 
 // 워크스페이스 변경 시 채널 데이터 다시 로드
 watch(
@@ -862,10 +879,10 @@ const getStatusColor = (status) => {
             collapsed ? "mdi-chevron-right" : "mdi-chevron-left"
           }}</v-icon>
         </div>
-        <span v-if="!collapsed" class="project-name">{{ currentWorkspaceData.name }}</span>
+        <span v-if="!isCollapsedView" class="project-name">{{ currentWorkspaceData.name }}</span>
         <!-- 나가기 버튼 (SUPER가 아닌 경우에만 표시) -->
         <v-btn
-          v-if="!collapsed && !isWorkspaceSuper"
+          v-if="!isCollapsedView && !isWorkspaceSuper"
           icon
           size="small"
           variant="text"
@@ -878,20 +895,14 @@ const getStatusColor = (status) => {
       </div>
 
       <div class="section-title">
-        <span v-if="!collapsed || workspaceType === 'personal'">{{
-          workspaceType === "personal" ? "내 워크스페이스" : ""
-        }}</span>
+        <span v-if="!isCollapsedView || workspaceType === 'personal'">{{ workspaceType === 'personal' ? '내 워크스페이스' : '' }}</span>
       </div>
 
       <div class="channel-list">
         <!-- 로딩 상태 표시 -->
         <div v-if="isLoadingChannels" class="loading-channels">
           <v-progress-circular indeterminate size="20" width="2" />
-          <span
-            v-if="!collapsed || workspaceType === 'personal'"
-            class="loading-text"
-            >채널 로딩 중...</span
-          >
+          <span v-if="!isCollapsedView || workspaceType === 'personal'" class="loading-text">채널 로딩 중...</span>
         </div>
 
         <div
@@ -902,22 +913,17 @@ const getStatusColor = (status) => {
           <!-- 메인 채널 -->
           <!-- 채팅 채널 - 접힌 상태일 때 클릭 시 드롭다운 메뉴 -->
           <v-menu
-            v-if="
-              channel.id === 'chat' &&
-              collapsed &&
-              workspaceType === 'project' &&
-              chatChannels.length > 0
-            "
+            v-if="channel.id === 'chat' && isCollapsedView && workspaceType === 'project' && chatChannels.length > 0"
             location="end"
             offset="8"
           >
             <template v-slot:activator="{ props: menuProps }">
               <div
                 class="channel-item"
-                :class="{
-                  active: currentChannel === channel.id,
-                  collapsed: collapsed && workspaceType === 'project',
-                  'has-subchannels': channel.subChannels,
+                :class="{ 
+                  'active': currentChannel === channel.id, 
+                  'collapsed': isCollapsedView,
+                  'has-subchannels': channel.subChannels
                 }"
                 v-bind="menuProps"
                 @mouseenter="hoveredChannel = channel.id"
@@ -926,11 +932,7 @@ const getStatusColor = (status) => {
                 <v-icon class="channel-icon">
                   {{ channel.icon }}
                 </v-icon>
-                <span
-                  v-if="!collapsed || workspaceType === 'personal'"
-                  class="channel-name"
-                  >{{ channel.name }}</span
-                >
+                <span v-if="!isCollapsedView || workspaceType === 'personal'" class="channel-name">{{ channel.name }}</span>
               </div>
             </template>
 
@@ -956,14 +958,57 @@ const getStatusColor = (status) => {
             </v-card>
           </v-menu>
 
-          <!-- 일반 채널 (채팅이 아니거나 펼쳐진 상태일 때) -->
+          <!-- 일정관리 채널 - 접힌 상태일 때 클릭 시 드롭다운 메뉴 -->
+          <v-menu
+            v-else-if="channel.id === 'schedule' && isCollapsedView && workspaceType === 'project' && channel.subChannels"
+            location="end"
+            offset="8"
+          >
+            <template v-slot:activator="{ props: menuProps }">
+              <div
+                class="channel-item"
+                :class="{ 
+                  'active': currentChannel === channel.id, 
+                  'collapsed': isCollapsedView,
+                  'has-subchannels': channel.subChannels
+                }"
+                v-bind="menuProps"
+                @mouseenter="hoveredChannel = channel.id"
+                @mouseleave="hoveredChannel = null"
+              >
+                <v-icon class="channel-icon">
+                  {{ channel.icon }}
+                </v-icon>
+                <span v-if="!isCollapsedView || workspaceType === 'personal'" class="channel-name">{{ channel.name }}</span>
+              </div>
+            </template>
+            
+            <v-card class="collapsed-chat-menu" min-width="200" max-width="250">
+              <v-list density="compact">
+                <v-list-subheader>일정관리</v-list-subheader>
+                <v-list-item
+                  v-for="subChannel in channel.subChannels"
+                  :key="subChannel.id"
+                  @click="selectSubChannel(channel.id, subChannel.id)"
+                  :active="selectedSubChannel === subChannel.id"
+                >
+                  <template v-slot:prepend>
+                    <v-icon size="18">mdi-pound</v-icon>
+                  </template>
+                  <v-list-item-title>{{ subChannel.name }}</v-list-item-title>
+                </v-list-item>
+              </v-list>
+            </v-card>
+          </v-menu>
+
+          <!-- 일반 채널 (채팅/일정관리가 아니거나 펼쳐진 상태일 때) -->
           <div
             v-else
             class="channel-item"
-            :class="{
-              active: currentChannel === channel.id,
-              collapsed: collapsed && workspaceType === 'project',
-              'has-subchannels': channel.subChannels,
+            :class="{ 
+              'active': currentChannel === channel.id, 
+              'collapsed': isCollapsedView,
+              'has-subchannels': channel.subChannels
             }"
             @click="selectChannel(channel.id)"
             @mouseenter="hoveredChannel = channel.id"
@@ -972,21 +1017,12 @@ const getStatusColor = (status) => {
             <v-icon class="channel-icon">
               {{ channel.icon }}
             </v-icon>
-
-            <span
-              v-if="!collapsed || workspaceType === 'personal'"
-              class="channel-name"
-              >{{ channel.name }}</span
-            >
-
+            
+            <span v-if="!isCollapsedView || workspaceType === 'personal'" class="channel-name">{{ channel.name }}</span>
+            
             <!-- 채널 생성 버튼 (프로젝트 채팅일 때만, SUPER/MANAGER 권한 필요) -->
-            <v-icon
-              v-if="
-                channel.id === 'chat' &&
-                workspaceType === 'project' &&
-                (!collapsed || workspaceType === 'personal') &&
-                canCreateChatChannel
-              "
+            <v-icon 
+              v-if="channel.id === 'chat' && workspaceType === 'project' && (!isCollapsedView || workspaceType === 'personal') && canCreateChatChannel"
               class="create-channel-btn"
               @click.stop="showCreateChannelModal = true"
             >
@@ -1000,7 +1036,7 @@ const getStatusColor = (status) => {
             <v-icon 
               v-if="(channel.id === 'chat' || channel.id === 'schedule' || channel.id === 'meeting') && 
                     channel.id !== 'drive' && 
-                    (!collapsed || workspaceType === 'personal') && 
+                    (!isCollapsedView || workspaceType === 'personal') && 
                     (channel.id === 'chat' ? (workspaceType === 'project' && chatChannels.length > 0) : 
                      channel.id === 'schedule' ? hasSchedulePermission(channel.scheduleData) : 
                      channel.id === 'meeting' ? (workspaceType === 'project' && meetingChannels.length > 0) : false) &&
@@ -1010,12 +1046,9 @@ const getStatusColor = (status) => {
             >
               mdi-cog
             </v-icon>
-
-            <v-icon
-              v-if="
-                channel.subChannels &&
-                (!collapsed || workspaceType === 'personal')
-              "
+            
+            <v-icon 
+              v-if="channel.subChannels && (!isCollapsedView || workspaceType === 'personal')" 
               class="expand-icon"
               :class="{ expanded: channel.expanded }"
               @click.stop="toggleChannel(channel.id)"
@@ -1025,12 +1058,8 @@ const getStatusColor = (status) => {
           </div>
 
           <!-- 하위 채널들 -->
-          <div
-            v-if="
-              channel.subChannels &&
-              channel.expanded &&
-              (!collapsed || workspaceType === 'personal')
-            "
+          <div 
+            v-if="channel.subChannels && channel.expanded && (!isCollapsedView || workspaceType === 'personal')" 
             class="subchannel-list"
           >
             <div
@@ -1123,7 +1152,7 @@ const getStatusColor = (status) => {
           v-for="dm in directMessages"
           :key="dm.channelSeq"
           class="dm-item"
-          :class="{ active: currentChannel === dm.channelSeq }"
+          :class="{ 'active': currentChannel === dm.channelSeq, 'collapsed': isCollapsedView }"
           @click="selectDirectMessage(dm.channelSeq)"
         >
           <div class="dm-avatar">
@@ -1137,14 +1166,14 @@ const getStatusColor = (status) => {
             </v-avatar>
           </div>
 
-          <div class="dm-info">
+          <div v-if="!isCollapsedView || workspaceType === 'personal'" class="dm-info">
             <div class="dm-name">{{ dm.channelName }}</div>
             <div class="dm-last-message">
               {{ dm.isGroupChat ? "그룹 채팅" : "1:1 채팅" }}
             </div>
           </div>
 
-          <div class="dm-meta">
+          <div v-if="!isCollapsedView || workspaceType === 'personal'" class="dm-meta">
             <div class="dm-time">워크스페이스 #{{ dm.workspaceSeq }}</div>
             <div v-if="dm.unreadCount > 0" class="unread-badge">
               {{ dm.unreadCount }}
@@ -1522,6 +1551,7 @@ const getStatusColor = (status) => {
   border-right: 1px solid rgba(var(--v-theme-on-surface), 0.08);
   box-shadow: 1px 0 0 rgba(var(--v-theme-on-surface), 0.04);
   padding: 24px 0 80px 0;
+  padding-bottom: 80px;
   margin-left: 72px;
   position: fixed;
   left: 0;
@@ -2820,6 +2850,183 @@ const getStatusColor = (status) => {
   to {
     opacity: 0;
     transform: translateX(-50%) translateY(20px);
+  }
+}
+
+/* 반응형 디자인 - 태블릿 이하에서는 아이콘만 표시 */
+@media (max-width: 1024px) {
+  .workspace-sidebar {
+    width: 60px !important;
+    min-width: 60px !important;
+    padding: 16px 0 0 0 !important;
+  }
+  
+  .workspace-sidebar.collapsed {
+    width: 0 !important;
+    min-width: 0 !important;
+    padding: 0 !important;
+    overflow: hidden !important;
+  }
+  
+  /* 프로젝트 정보 숨기기 */
+  .project-info {
+    padding: 8px 0 !important;
+    justify-content: center !important;
+  }
+  
+  .project-name,
+  .leave-button {
+    display: none !important;
+  }
+  
+  .toggle-button {
+    margin: 0 auto !important;
+  }
+  
+  /* 섹션 타이틀 숨기기 */
+  .section-title {
+    padding: 0 !important;
+  }
+  
+  .section-title span {
+    display: none !important;
+  }
+  
+  /* 채널 아이템 - 아이콘만 표시 */
+  .channel-item,
+  .dm-item {
+    padding: 10px 0 !important;
+    justify-content: center !important;
+    margin: 4px 0 !important;
+    gap: 0 !important;
+  }
+  
+  .channel-item .v-icon {
+    margin: 0 !important;
+  }
+  
+  .channel-name,
+  .dm-name,
+  .channel-item-actions,
+  .channel-actions,
+  .add-channel-btn,
+  .channel-status {
+    display: none !important;
+  }
+  
+  /* 하위 채널 들여쓰기 제거 */
+  .sub-channels {
+    padding-left: 0 !important;
+  }
+  
+  .sub-channel-item {
+    padding: 8px 0 !important;
+    padding-left: 0 !important;
+    justify-content: center !important;
+    margin: 2px 0 !important;
+  }
+  
+  .sub-channel-name,
+  .sub-channel-actions {
+    display: none !important;
+  }
+  
+  /* 직접 메시지 섹션 완전히 숨기기 */
+  .direct-messages-section {
+    display: none !important;
+  }
+  
+  .dm-item .v-avatar {
+    margin: 0 !important;
+  }
+  
+  .dm-user-info {
+    display: none !important;
+  }
+  
+  /* 채널 그룹 조정 */
+  .channel-group {
+    margin-bottom: 2px !important;
+  }
+  
+  /* 채널 헤더 조정 */
+  .channel-header {
+    padding: 8px 0 !important;
+    justify-content: center !important;
+  }
+  
+  .channel-header-content {
+    width: 100% !important;
+    justify-content: center !important;
+  }
+  
+  .channel-header-content h3,
+  .channel-header-content .channel-count,
+  .header-actions {
+    display: none !important;
+  }
+}
+
+@media (max-width: 768px) {
+  .workspace-sidebar {
+    width: 56px !important;
+    min-width: 56px !important;
+    padding: 12px 0 0 0 !important;
+  }
+  
+  .workspace-sidebar.collapsed {
+    width: 0 !important;
+  }
+  
+  .channel-item,
+  .dm-item,
+  .sub-channel-item {
+    padding: 8px 0 !important;
+  }
+  
+  .channel-item .v-icon,
+  .sub-channel-item .v-icon,
+  .dm-item .v-icon {
+    font-size: 20px !important;
+  }
+  
+  .dm-item .v-avatar {
+    width: 32px !important;
+    height: 32px !important;
+  }
+}
+
+@media (max-width: 480px) {
+  .workspace-sidebar {
+    width: 52px !important;
+    min-width: 52px !important;
+    padding: 10px 0 0 0 !important;
+  }
+  
+  .channel-item,
+  .dm-item,
+  .sub-channel-item {
+    padding: 6px 0 !important;
+  }
+  
+  .channel-item .v-icon,
+  .sub-channel-item .v-icon,
+  .dm-item .v-icon {
+    font-size: 18px !important;
+  }
+  
+  .dm-item .v-avatar {
+    width: 28px !important;
+    height: 28px !important;
+  }
+  
+  .toggle-button {
+    width: 20px !important;
+    height: 20px !important;
+  }
+  
+  .toggle-button .v-icon {
+    font-size: 14px !important;
   }
 }
 </style>

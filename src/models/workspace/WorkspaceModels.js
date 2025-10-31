@@ -2,15 +2,23 @@
 // 워크스페이스 생성 요청 DTO
 // ----------------------
 export class TeamWorkSpaceCreateReqDto {
-  constructor(workSpaceName, workSpaceThumbnailImage, memberList) {
+  constructor(workSpaceName, workSpaceThumbnailImage, memberList, startDate, endDate) {
     this.workSpaceName = workSpaceName
     this.workSpaceThumbnailImage = workSpaceThumbnailImage
     this.memberList = memberList || []
+    this.startDate = startDate
+    this.endDate = endDate
   }
 
   toFormData() {
     const formData = new FormData()
     formData.append('workSpaceName', this.workSpaceName)
+    if (this.startDate) {
+      formData.append('startDate', this.startDate)
+    }
+    if (this.endDate) {
+      formData.append('endDate', this.endDate)
+    }
     
     if (this.workSpaceThumbnailImage instanceof File) {
       formData.append('workSpaceThumbnailImage', this.workSpaceThumbnailImage)
@@ -29,16 +37,24 @@ export class TeamWorkSpaceCreateReqDto {
 // 워크스페이스 수정 요청 DTO
 // ----------------------
 export class TeamWorkSpaceEditReqDto {
-  constructor(workSpaceSeq, workSpaceName, workSpaceThumbnailImage) {
+  constructor(workSpaceSeq, workSpaceName, workSpaceThumbnailImage, startDate, endDate) {
     this.workSpaceSeq = workSpaceSeq
     this.workSpaceName = workSpaceName
     this.workSpaceThumbnailImage = workSpaceThumbnailImage
+    this.startDate = startDate
+    this.endDate = endDate
   }
 
   toFormData() {
     const formData = new FormData()
     formData.append('workSpaceSeq', this.workSpaceSeq)
     formData.append('workSpaceName', this.workSpaceName)
+    if (this.startDate) {
+      formData.append('startDate', this.startDate)
+    }
+    if (this.endDate) {
+      formData.append('endDate', this.endDate)
+    }
     
     // 썸네일 이미지가 File 객체일 때만 추가 (null이나 undefined는 추가하지 않음)
     if (this.workSpaceThumbnailImage instanceof File) {
@@ -59,6 +75,8 @@ export class WorkSpaceResDto {
     this.workSpaceType = data.workSpaceType
     this.workSpaceOwner = data.workSpaceOwner
     this.workSpaceThumbnailImage = data.workSpaceThumbnailImage
+    this.startDate = data.startDate || data.projectStartDate
+    this.endDate = data.endDate || data.projectEndDate
   }
 
   static fromJson(json) {
@@ -67,7 +85,9 @@ export class WorkSpaceResDto {
       workSpaceName: json.workSpaceName,
       workSpaceType: json.workSpaceType,
       workSpaceOwner: json.workSpaceOwner,
-      workSpaceThumbnailImage: json.workSpaceThumbnailImage
+      workSpaceThumbnailImage: json.workSpaceThumbnailImage,
+      startDate: json.startDate,
+      endDate: json.endDate
     })
   }
 }
@@ -82,6 +102,8 @@ export class WorkSpaceInfoResDto {
     this.thumbnailImageUrl = data.thumbnailImageUrl
     this.workSpaceType = data.workSpaceType // TEAM or INDIVIDUAL
     this.isPersonal = data.isPersonal // Boolean 플래그
+    this.startDate = data.startDate || data.projectStartDate
+    this.endDate = data.endDate || data.projectEndDate
   }
 
   static fromJson(json) {
@@ -90,7 +112,9 @@ export class WorkSpaceInfoResDto {
       workSpaceName: json.workSpaceName,
       thumbnailImageUrl: json.thumbnailImageUrl,
       workSpaceType: json.workSpaceType,
-      isPersonal: json.isPersonal
+      isPersonal: json.isPersonal,
+      startDate: json.startDate,
+      endDate: json.endDate
     })
   }
 

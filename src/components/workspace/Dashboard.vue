@@ -1371,8 +1371,28 @@ const getMemberName = (memberSeq) => {
   return member?.name || '미지정'
 }
 
-// 프로젝트 기간 계산
+// 프로젝트 기간 계산 (우선순위: 워크스페이스 start/end → 태스크 범위)
 const calculateProjectDates = () => {
+  // 1) 워크스페이스 정보 우선
+  const wsInfo = workspaceStore.currentWorkspaceInfo
+  const wsStart = wsInfo?.startDate || wsInfo?.projectStartDate
+  const wsEnd = wsInfo?.endDate || wsInfo?.projectEndDate
+  if (wsStart && wsEnd) {
+    const startDate = new Date(wsStart)
+    const endDate = new Date(wsEnd)
+    if (!isNaN(startDate.getTime()) && !isNaN(endDate.getTime())) {
+      const months = (endDate.getFullYear() - startDate.getFullYear()) * 12 + (endDate.getMonth() - startDate.getMonth()) + 1
+      projectStartDate.value = startDate
+      projectEndDate.value = endDate
+      if (customStartDate.value === '2025-09-01' && customEndDate.value === '2025-12-31') {
+        customStartDate.value = startDate.toISOString().split('T')[0]
+        customEndDate.value = endDate.toISOString().split('T')[0]
+      }
+      return { startDate, endDate, months }
+    }
+  }
+
+  // 2) 태스크 데이터로 계산 (fallback)
   if (!allTasks.value || allTasks.value.length === 0) {
     return { startDate: null, endDate: null, months: 0 }
   }
@@ -1389,20 +1409,13 @@ const calculateProjectDates = () => {
 
   const startDate = new Date(Math.min(...dates))
   const endDate = new Date(Math.max(...dates))
-  
-  // 개월 수 계산 (년도 차이 * 12 + 월 차이 + 1)
-  const months = (endDate.getFullYear() - startDate.getFullYear()) * 12 + 
-                 (endDate.getMonth() - startDate.getMonth()) + 1
-
+  const months = (endDate.getFullYear() - startDate.getFullYear()) * 12 + (endDate.getMonth() - startDate.getMonth()) + 1
   projectStartDate.value = startDate
   projectEndDate.value = endDate
-  
-  // 사용자 정의 날짜 초기화 (처음 한 번만)
   if (customStartDate.value === '2025-09-01' && customEndDate.value === '2025-12-31') {
     customStartDate.value = startDate.toISOString().split('T')[0]
     customEndDate.value = endDate.toISOString().split('T')[0]
   }
-
   return { startDate, endDate, months }
 }
 
