@@ -2190,21 +2190,21 @@ watch(showTaskDetailModal, async (newVal, oldVal) => {
 
 .stat-label {
   font-size: 14px;
-  color: #64748b;
+  color: rgba(var(--v-theme-on-surface), 0.7);
   margin-bottom: 4px;
 }
 
 .stat-value {
   font-size: 32px;
   font-weight: 700;
-  color: #1e293b;
+  color: rgb(var(--v-theme-on-surface));
   line-height: 1;
   margin-bottom: 4px;
 }
 
 .stat-description {
   font-size: 12px;
-  color: #94a3b8;
+  color: rgba(var(--v-theme-on-surface), 0.6);
 }
 
 /* 3. 프로젝트 진행 흐름 카드 */
@@ -2280,7 +2280,7 @@ watch(showTaskDetailModal, async (newVal, oldVal) => {
   align-items: center;
   gap: 8px;
   font-size: 13px;
-  color: #64748b;
+  color: rgba(var(--v-theme-on-surface), 0.7);
 }
 
 .legend-color {
@@ -2315,7 +2315,7 @@ watch(showTaskDetailModal, async (newVal, oldVal) => {
 .page-info {
   font-size: 14px;
   font-weight: 500;
-  color: #64748b;
+  color: rgba(var(--v-theme-on-surface), 0.7);
   min-width: 60px;
   text-align: center;
 }
@@ -2328,7 +2328,7 @@ watch(showTaskDetailModal, async (newVal, oldVal) => {
 .period-progress-section h4 {
   font-size: 16px;
   font-weight: 600;
-  color: #1e293b;
+  color: rgb(var(--v-theme-on-surface));
   margin-bottom: 16px;
 }
 
@@ -2377,8 +2377,8 @@ watch(showTaskDetailModal, async (newVal, oldVal) => {
   top: calc(100% - 8px);
   left: 0;
   right: 0;
-  background: white;
-  border: 1px solid #e0e0e0;
+  background: rgb(var(--v-theme-surface));
+  border: 1px solid rgba(var(--v-theme-on-surface), 0.12);
   border-radius: 8px;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
   z-index: 20000;
@@ -2393,21 +2393,21 @@ watch(showTaskDetailModal, async (newVal, oldVal) => {
   justify-content: space-between;
   align-items: center;
   padding: 12px 16px;
-  border-bottom: 1px solid #e0e0e0;
-  background: #f8fafc;
+  border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.12);
+  background: rgba(var(--v-theme-on-surface), 0.02);
   border-radius: 8px 8px 0 0;
   margin-top: -8px;
 }
 
 .dropdown-header strong {
   font-size: 14px;
-  color: #1e293b;
+  color: rgb(var(--v-theme-on-surface));
 }
 
 .task-count {
   font-size: 12px;
-  color: #64748b;
-  background: white;
+  color: rgba(var(--v-theme-on-surface), 0.7);
+  background: rgb(var(--v-theme-surface));
   padding: 2px 8px;
   border-radius: 12px;
 }
@@ -2418,7 +2418,7 @@ watch(showTaskDetailModal, async (newVal, oldVal) => {
 
 .period-task-item {
   padding: 12px;
-  border-bottom: 1px solid #f1f5f9;
+  border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.08);
   transition: background-color 0.2s;
 }
 
@@ -2427,13 +2427,13 @@ watch(showTaskDetailModal, async (newVal, oldVal) => {
 }
 
 .period-task-item:hover {
-  background-color: #f8fafc;
+  background-color: rgba(var(--v-theme-on-surface), 0.03);
 }
 
 .period-name {
   font-size: 14px;
   font-weight: 600;
-  color: #1e293b;
+  color: rgb(var(--v-theme-on-surface));
   margin-bottom: 4px;
 }
 
@@ -2457,7 +2457,7 @@ watch(showTaskDetailModal, async (newVal, oldVal) => {
 .period-percentage {
   font-size: 14px;
   font-weight: 600;
-  color: #1e293b;
+  color: rgb(var(--v-theme-on-surface));
 }
 
 .period-tasks {
@@ -2526,17 +2526,17 @@ watch(showTaskDetailModal, async (newVal, oldVal) => {
 }
 
 .scrollable-list::-webkit-scrollbar-track {
-  background: #f1f5f9;
+  background: rgba(var(--v-theme-on-surface), 0.05);
   border-radius: 3px;
 }
 
 .scrollable-list::-webkit-scrollbar-thumb {
-  background: #cbd5e1;
+  background: rgba(var(--v-theme-on-surface), 0.2);
   border-radius: 3px;
 }
 
 .scrollable-list::-webkit-scrollbar-thumb:hover {
-  background: #94a3b8;
+  background: rgba(var(--v-theme-on-surface), 0.3);
 }
 
 .deadline-item {
@@ -2688,34 +2688,34 @@ watch(showTaskDetailModal, async (newVal, oldVal) => {
   display: inline-flex;
   align-items: center;
   padding: 8px 12px;
-  border: 1px solid #cbd5e1;
-  background: white;
-  color: #334155;
+  border: 1px solid rgba(var(--v-theme-on-surface), 0.2);
+  background: rgb(var(--v-theme-surface));
+  color: rgb(var(--v-theme-on-surface));
   border-radius: 12px;
   cursor: pointer;
   transition: all 0.2s ease;
 }
 
 .assignee-filter-btn:hover {
-  border-color: #94a3b8;
+  border-color: rgba(var(--v-theme-on-surface), 0.3);
   box-shadow: 0 4px 12px rgba(0,0,0,0.06);
 }
 
 .assignee-filter-btn .label { font-weight: 600; font-size: 14px; }
-.assignee-filter-btn .chevron { color: #64748b; }
+.assignee-filter-btn .chevron { color: rgba(var(--v-theme-on-surface), 0.7); }
 
 .assignee-filter-menu { border-radius: 12px !important; overflow: hidden; }
 .assignee-filter-menu .menu-header {
   display: flex; align-items: center; gap: 8px;
-  padding: 12px 14px; border-bottom: 1px solid #e2e8f0; font-weight: 600; color: #0f172a;
+  padding: 12px 14px; border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.12); font-weight: 600; color: rgb(var(--v-theme-on-surface));
 }
 
 .assignee-filter-menu .menu-search { padding: 10px 12px 0 12px; }
 /* 기본 텍스트필드 스타일 사용: 커스텀 제거 */
 
 .assignee-filter-menu .menu-list { max-height: 320px; overflow-y: auto; }
-.assignee-filter-menu .menu-empty { display:flex; align-items:center; justify-content:center; gap:8px; color:#94a3b8; padding: 16px 0; }
-.assignee-filter-menu .menu-actions { display:flex; align-items:center; gap:8px; padding:8px 12px 10px 12px; border-top:1px solid #e2e8f0; }
+.assignee-filter-menu .menu-empty { display:flex; align-items:center; justify-content:center; gap:8px; color:rgba(var(--v-theme-on-surface), 0.6); padding: 16px 0; }
+.assignee-filter-menu .menu-actions { display:flex; align-items:center; gap:8px; padding:8px 12px 10px 12px; border-top:1px solid rgba(var(--v-theme-on-surface), 0.12); }
 
 .assignee-tasks {
   max-height: 600px;
@@ -2728,17 +2728,17 @@ watch(showTaskDetailModal, async (newVal, oldVal) => {
 }
 
 .assignee-tasks::-webkit-scrollbar-track {
-  background: #f1f5f9;
+  background: rgba(var(--v-theme-on-surface), 0.05);
   border-radius: 3px;
 }
 
 .assignee-tasks::-webkit-scrollbar-thumb {
-  background: #cbd5e1;
+  background: rgba(var(--v-theme-on-surface), 0.2);
   border-radius: 3px;
 }
 
 .assignee-tasks::-webkit-scrollbar-thumb:hover {
-  background: #94a3b8;
+  background: rgba(var(--v-theme-on-surface), 0.3);
 }
 
 .assignee-task-item {
@@ -2783,7 +2783,7 @@ watch(showTaskDetailModal, async (newVal, oldVal) => {
 .task-title {
   font-size: 14px;
   font-weight: 600;
-  color: #1e293b;
+  color: rgb(var(--v-theme-on-surface));
   flex: 1;
 }
 
@@ -2824,7 +2824,7 @@ watch(showTaskDetailModal, async (newVal, oldVal) => {
 .progress-text {
   font-size: 12px;
   font-weight: 600;
-  color: #1e293b;
+  color: rgb(var(--v-theme-on-surface));
   min-width: 40px;
   text-align: right;
 }
@@ -2858,7 +2858,7 @@ watch(showTaskDetailModal, async (newVal, oldVal) => {
 }
 
 .task-item {
-  border-bottom: 1px solid #f0f0f0;
+  border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.1);
 }
 
 .task-item:last-child {
@@ -2867,13 +2867,13 @@ watch(showTaskDetailModal, async (newVal, oldVal) => {
 
 .task-item-enhanced {
   padding: 12px 16px !important;
-  border-bottom: 1px solid #f0f0f0;
+  border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.1);
   cursor: pointer;
   transition: background-color 0.2s ease;
 }
 
 .task-item-enhanced:hover {
-  background-color: #f8f9fa;
+  background-color: rgba(var(--v-theme-on-surface), 0.05);
 }
 
 .task-item-enhanced:last-child {
@@ -2895,7 +2895,7 @@ watch(showTaskDetailModal, async (newVal, oldVal) => {
 .task-title {
   font-size: 14px;
   font-weight: 500;
-  color: #1e293b;
+  color: rgb(var(--v-theme-on-surface));
   flex: 1;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -2907,7 +2907,7 @@ watch(showTaskDetailModal, async (newVal, oldVal) => {
   align-items: center;
   gap: 12px;
   font-size: 12px;
-  color: #64748b;
+  color: rgba(var(--v-theme-on-surface), 0.7);
 }
 
 .task-assignee,
@@ -2927,7 +2927,7 @@ watch(showTaskDetailModal, async (newVal, oldVal) => {
 }
 
 .empty-text {
-  color: #94a3b8;
+  color: rgba(var(--v-theme-on-surface), 0.6);
   font-size: 13px;
   display: block;
 }

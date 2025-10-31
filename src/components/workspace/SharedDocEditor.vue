@@ -2366,7 +2366,7 @@ const handleIncomingMessage = (message) => {
   display: flex;
   flex-direction: column;
   height: 100vh;
-  background-color: #fafafa;
+  background-color: #fafafa !important;
 }
 
 .editor-header {
@@ -2374,8 +2374,8 @@ const handleIncomingMessage = (message) => {
   justify-content: space-between;
   align-items: center;
   padding: 12px 20px;
-  background: rgb(var(--v-theme-surface));
-  border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.12);
+  background: #ffffff !important;
+  border-bottom: 1px solid #e0e0e0 !important;
   box-shadow: 0 1px 3px rgba(0,0,0,0.08);
   gap: 16px;
 }
@@ -2417,8 +2417,8 @@ const handleIncomingMessage = (message) => {
   font-weight: 600;
   display: flex;
   align-items: center;
-  color: rgb(var(--v-theme-on-surface));
-  background: rgba(var(--v-theme-primary), 0.04);
+  color: #1e293b !important;
+  background: rgba(59, 130, 246, 0.04) !important;
 }
 
 .download-list {
@@ -2435,7 +2435,7 @@ const handleIncomingMessage = (message) => {
 }
 
 .download-item:hover:not(.v-list-item--disabled) {
-  background: rgba(var(--v-theme-primary), 0.06);
+  background: rgba(59, 130, 246, 0.06) !important;
   transform: translateX(2px);
 }
 
@@ -2452,28 +2452,28 @@ const handleIncomingMessage = (message) => {
   justify-content: center;
   border-radius: 10px;
   margin-right: 12px;
-  background: rgba(var(--v-theme-on-surface), 0.04);
+  background: rgba(0, 0, 0, 0.04) !important;
   transition: all 0.2s ease;
 }
 
 .docx-item:hover .file-icon {
-  background: rgba(var(--v-theme-primary), 0.1);
+  background: rgba(59, 130, 246, 0.1) !important;
 }
 
 .pdf-item:hover .file-icon {
-  background: rgba(var(--v-theme-error), 0.1);
+  background: rgba(239, 68, 68, 0.1) !important;
 }
 
 .download-item-title {
   font-weight: 600;
   font-size: 15px;
-  color: rgb(var(--v-theme-on-surface));
+  color: #1e293b !important;
   margin-bottom: 2px;
 }
 
 .download-item .v-list-item-subtitle {
   font-size: 13px;
-  color: rgba(var(--v-theme-on-surface), 0.6);
+  color: #64748b !important;
   margin-top: 2px;
 }
 
@@ -2491,6 +2491,7 @@ const handleIncomingMessage = (message) => {
   margin: 0;
   font-size: 1.2em;
   font-weight: 500;
+  color: #1e293b !important;
 }
 
 .connection-status {
@@ -2628,7 +2629,7 @@ const handleIncomingMessage = (message) => {
 .editor-container {
   flex: 1;
   position: relative;
-  background-color: white;
+  background-color: white !important;
   margin: 16px;
   border-radius: 8px;
   box-shadow: 0 2px 4px rgba(0,0,0,0.1);
@@ -2657,6 +2658,8 @@ const handleIncomingMessage = (message) => {
   padding: 24px;
   font-size: 16px;
   line-height: 1.6;
+  color: #1e293b !important;
+  background-color: white !important;
 }
 
 :deep(.ProseMirror p) {

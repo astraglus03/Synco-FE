@@ -1704,21 +1704,6 @@ onMounted(() => {
                   </div>
                 </div>
               </div>
-
-              <!-- 초대 버튼 -->
-              <div class="invite-action">
-                <v-btn
-                  color="primary"
-                  variant="flat"
-                  size="large"
-                  @click="handleInviteMembers"
-                  prepend-icon="mdi-send"
-                  block
-                  :disabled="invitedMembers.length === 0"
-                >
-                  {{ invitedMembers.length > 0 ? `${invitedMembers.length}명 초대하기` : '멤버를 선택하세요' }}
-                </v-btn>
-              </div>
             </div>
           </div>
         </v-window-item>
@@ -1893,6 +1878,18 @@ onMounted(() => {
           class="save-btn"
         >
           변경사항 저장
+        </v-btn>
+        <v-btn
+          v-if="settingsTab === 'invite'"
+          color="primary"
+          variant="flat"
+          size="large"
+          @click="handleInviteMembers"
+          prepend-icon="mdi-send"
+          :disabled="invitedMembers.length === 0"
+          class="invite-btn"
+        >
+          {{ invitedMembers.length > 0 ? `${invitedMembers.length}명 초대하기` : '초대하기' }}
         </v-btn>
       </div>
     </v-card>
@@ -2599,11 +2596,6 @@ onMounted(() => {
   background: rgba(var(--v-theme-surface), 0.8);
 }
 
-.invite-action {
-  margin-top: 16px;
-  padding-top: 16px;
-  border-top: 1px solid rgba(var(--v-theme-on-surface), 0.08);
-}
 
 .member-left {
   display: flex;
@@ -2986,7 +2978,8 @@ onMounted(() => {
   }
   
   .cancel-btn,
-  .save-btn {
+  .save-btn,
+  .invite-btn {
     width: 100% !important;
   }
   
