@@ -587,16 +587,6 @@ const getNotificationColor = (type) => {
   return colors[type] || 'primary'
 }
 
-// 우선순위 색상 가져오기
-const getPriorityColor = (priority) => {
-  const colors = {
-    high: 'red',
-    medium: 'orange',
-    normal: 'blue',
-    low: 'grey'
-  }
-  return colors[priority] || 'grey'
-}
 
 // 우선순위 텍스트 가져오기
 const getPriorityText = (priority) => {
@@ -613,7 +603,7 @@ const getPriorityText = (priority) => {
 const workspaceSettingsOpen = ref(false)
 const settingsTab = ref('info') // 'info', 'invite', 'permissions'
 const isWorkspaceOwner = ref(true)
-const expandedChannels = ref(new Set())
+// 제거: expandedChannels (사용하지 않음)
 
 // 팀명 (실제 워크스페이스 이름 사용)
 const teamName = ref('')
@@ -716,39 +706,6 @@ const sidebarFeatures = ref([
 const memberPermissions = ref({
   project: {}
 })
-
-// 팀 채널 목록
-const teamChannels = ref([
-  { id: 1, name: '일반', type: 'text', memberCount: 12, unreadCount: 3 },
-  { id: 2, name: '개발팀', type: 'text', memberCount: 8, unreadCount: 0 },
-  { id: 3, name: '디자인팀', type: 'text', memberCount: 5, unreadCount: 1 },
-  { id: 4, name: '마케팅팀', type: 'text', memberCount: 6, unreadCount: 0 },
-  { id: 5, name: '회의실-1', type: 'voice', memberCount: 0, unreadCount: 0 },
-  { id: 6, name: '회의실-2', type: 'voice', memberCount: 0, unreadCount: 0 }
-])
-
-// 채널 멤버 권한 설정
-const channelMemberPermissions = ref({
-  sendMessages: true,
-  addReactions: true,
-  useExternalEmojis: true,
-  mentionEveryone: false,
-  manageMessages: false
-})
-
-// 채널 펼치기/접기
-const toggleChannel = (channelId) => {
-  if (expandedChannels.value.has(channelId)) {
-    expandedChannels.value.delete(channelId)
-  } else {
-    expandedChannels.value.add(channelId)
-  }
-}
-
-// 채널이 펼쳐져 있는지 확인
-const isChannelExpanded = (channelId) => {
-  return expandedChannels.value.has(channelId)
-}
 
 
 // 멤버 목록 로드
@@ -1410,7 +1367,7 @@ onMounted(() => {
   </v-app-bar>
 
   <!-- 프로젝트 설정 다이얼로그 - 새로운 디자인 -->
-  <v-dialog v-model="workspaceSettingsOpen" max-width="900" scrollable persistent>
+  <v-dialog v-model="workspaceSettingsOpen" max-width="900" scrollable>
     <v-card class="modern-settings-dialog">
       <!-- 모던한 헤더 -->
       <div class="modern-header">
@@ -1747,21 +1704,6 @@ onMounted(() => {
                   </div>
                 </div>
               </div>
-
-              <!-- 초대 버튼 -->
-              <div class="invite-action">
-                <v-btn
-                  color="primary"
-                  variant="flat"
-                  size="large"
-                  @click="handleInviteMembers"
-                  prepend-icon="mdi-send"
-                  block
-                  :disabled="invitedMembers.length === 0"
-                >
-                  {{ invitedMembers.length > 0 ? `${invitedMembers.length}명 초대하기` : '멤버를 선택하세요' }}
-                </v-btn>
-              </div>
             </div>
           </div>
         </v-window-item>
@@ -1937,55 +1879,75 @@ onMounted(() => {
         >
           변경사항 저장
         </v-btn>
+        <v-btn
+          v-if="settingsTab === 'invite'"
+          color="primary"
+          variant="flat"
+          size="large"
+          @click="handleInviteMembers"
+          prepend-icon="mdi-send"
+          :disabled="invitedMembers.length === 0"
+          class="invite-btn"
+        >
+          {{ invitedMembers.length > 0 ? `${invitedMembers.length}명 초대하기` : '초대하기' }}
+        </v-btn>
       </div>
     </v-card>
   </v-dialog>
 
   <!-- 워크스페이스 삭제 확인 다이얼로그 -->
-  <v-dialog v-model="deleteConfirmDialog" max-width="500" persistent>
-    <v-card>
-      <v-card-title class="text-h5 text-error d-flex align-center">
-        <v-icon color="error" class="mr-2">mdi-alert-circle</v-icon>
-        워크스페이스 삭제 확인
-      </v-card-title>
-      
-      <v-card-text class="pt-4">
-        <v-alert
-          type="error"
-          variant="tonal"
-          density="comfortable"
-          class="mb-4"
-        >
-          <strong>경고:</strong> 이 작업은 되돌릴 수 없습니다!
-        </v-alert>
-        
-        <p class="mb-4">
-          워크스페이스 <strong>"{{ props.currentWorkspace?.name }}"</strong>를 삭제하시겠습니까?
-        </p>
-        
-        <p class="mb-4">
-          이 워크스페이스의 모든 데이터(채팅, 파일, 일정 등)가 영구적으로 삭제됩니다.
-        </p>
-        
-        <p class="mb-2">
-          계속하려면 워크스페이스 이름을 정확히 입력하세요:
-        </p>
-        
-        <v-text-field
-          v-model="deleteConfirmText"
-          :placeholder="props.currentWorkspace?.name"
-          variant="outlined"
-          density="comfortable"
-          :error="deleteConfirmText && deleteConfirmText !== props.currentWorkspace?.name"
-          :error-messages="deleteConfirmText && deleteConfirmText !== props.currentWorkspace?.name ? '워크스페이스 이름이 일치하지 않습니다' : ''"
-          autofocus
-        />
+  <v-dialog v-model="deleteConfirmDialog" max-width="560" persistent>
+    <v-card class="delete-confirm-card">
+      <div class="delete-header">
+        <div class="delete-header-left">
+          <div class="delete-icon">
+            <v-icon size="28">mdi-alert-octagon</v-icon>
+          </div>
+          <div class="delete-header-text">
+            <h3 class="delete-title">워크스페이스 삭제</h3>
+            <p class="delete-subtitle">이 작업은 되돌릴 수 없습니다</p>
+          </div>
+        </div>
+        <v-chip size="small" color="error" variant="flat" class="delete-chip">위험 작업</v-chip>
+      </div>
+
+      <v-card-text class="delete-body">
+        <div class="delete-warning">
+          <v-icon size="20" color="error">mdi-alert</v-icon>
+          <div class="warning-text">
+            <p>
+              워크스페이스 <strong>"{{ props.currentWorkspace?.name }}"</strong> 을(를)
+              삭제하면 다음 데이터가 <strong>영구적으로 삭제</strong>됩니다.
+            </p>
+            <ul>
+              <li>채팅/메시지 기록</li>
+              <li>공유 파일 및 폴더</li>
+              <li>일정/회의 기록</li>
+              <li>채널 및 멤버 설정</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="confirm-input">
+          <label>계속하려면 아래 입력창에 워크스페이스 이름을 입력하세요.</label>
+          <v-text-field
+            v-model="deleteConfirmText"
+            :placeholder="props.currentWorkspace?.name"
+            variant="outlined"
+            density="comfortable"
+            :error="deleteConfirmText && deleteConfirmText !== props.currentWorkspace?.name"
+            :error-messages="deleteConfirmText && deleteConfirmText !== props.currentWorkspace?.name ? '워크스페이스 이름이 일치하지 않습니다' : ''"
+            autofocus
+            class="name-input"
+            hide-details="auto"
+          />
+        </div>
       </v-card-text>
-      
-      <v-card-actions>
-        <v-spacer />
+
+      <div class="delete-actions">
         <v-btn
-          text
+          variant="text"
+          class="btn-cancel"
           @click="deleteConfirmDialog = false"
           :disabled="isDeletingWorkspace"
         >
@@ -1993,14 +1955,16 @@ onMounted(() => {
         </v-btn>
         <v-btn
           color="error"
-          variant="elevated"
+          variant="flat"
+          class="btn-delete"
+          prepend-icon="mdi-delete-forever"
           @click="handleDeleteWorkspace"
           :disabled="deleteConfirmText !== props.currentWorkspace?.name"
           :loading="isDeletingWorkspace"
         >
           영구 삭제
         </v-btn>
-      </v-card-actions>
+      </div>
     </v-card>
   </v-dialog>
 
@@ -2141,15 +2105,16 @@ onMounted(() => {
 
 <style scoped>
 .app-header {
-  background: rgba(0, 0, 0, 0.2) !important;
+  background: rgb(var(--v-theme-surface)) !important; /* 라이트 모드: 프로젝트 톤과 일관 */
   backdrop-filter: blur(10px);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.08);
+  box-shadow: 0 1px 0 rgba(var(--v-theme-on-surface), 0.04);
   height: 60px !important;
   z-index: 1005 !important;
 }
 
 .dark-header {
-  background: rgba(0, 0, 0, 0.4) !important;
+  background: rgba(0, 0, 0, 0.4) !important; /* 다크 모드는 기존 느낌 유지 */
 }
 
 .header-left {
@@ -2631,11 +2596,6 @@ onMounted(() => {
   background: rgba(var(--v-theme-surface), 0.8);
 }
 
-.invite-action {
-  margin-top: 16px;
-  padding-top: 16px;
-  border-top: 1px solid rgba(var(--v-theme-on-surface), 0.08);
-}
 
 .member-left {
   display: flex;
@@ -3018,7 +2978,8 @@ onMounted(() => {
   }
   
   .cancel-btn,
-  .save-btn {
+  .save-btn,
+  .invite-btn {
     width: 100% !important;
   }
   
@@ -3718,6 +3679,113 @@ onMounted(() => {
     opacity: 0;
     transform: translateX(-50%) translateY(20px);
   }
+}
+
+/* 삭제 확인 모달 - 모던 스타일 */
+.delete-confirm-card {
+  border-radius: 16px !important;
+  overflow: hidden;
+  background: rgb(var(--v-theme-surface));
+  border: 1px solid rgba(var(--v-theme-on-surface), 0.1);
+}
+
+.delete-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  background: linear-gradient(135deg, rgba(239, 68, 68, 0.12), rgba(239, 68, 68, 0.06));
+  border-bottom: 1px solid rgba(239, 68, 68, 0.25);
+}
+
+.delete-header-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.delete-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  background: rgba(239, 68, 68, 0.15);
+  color: rgb(var(--v-theme-error));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.delete-title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 700;
+  color: rgb(var(--v-theme-on-surface));
+}
+
+.delete-subtitle {
+  margin: 2px 0 0 0;
+  font-size: 12px;
+  color: rgba(var(--v-theme-on-surface), 0.7);
+}
+
+.delete-chip {
+  font-weight: 700;
+}
+
+.delete-body {
+  padding: 16px 20px 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.delete-warning {
+  display: flex;
+  gap: 10px;
+  padding: 12px;
+  background: rgba(239, 68, 68, 0.06);
+  border: 1px solid rgba(239, 68, 68, 0.18);
+  border-radius: 10px;
+}
+
+.delete-warning .warning-text {
+  font-size: 13px;
+  color: rgba(var(--v-theme-on-surface), 0.8);
+}
+
+.delete-warning ul {
+  margin: 8px 0 0 18px;
+}
+
+.confirm-input label {
+  display: block;
+  font-size: 12px;
+  color: rgba(var(--v-theme-on-surface), 0.7);
+  margin-bottom: 6px;
+}
+
+.name-input :deep(.v-field) {
+  border-radius: 10px;
+}
+
+.delete-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 14px 20px 18px;
+  background: rgba(var(--v-theme-on-surface), 0.02);
+  border-top: 1px solid rgba(var(--v-theme-on-surface), 0.08);
+}
+
+.btn-cancel {
+  text-transform: none !important;
+  font-weight: 600 !important;
+}
+
+.btn-delete {
+  text-transform: none !important;
+  font-weight: 700 !important;
+  box-shadow: 0 6px 16px rgba(239, 68, 68, 0.25) !important;
 }
 
 </style>

@@ -22,6 +22,7 @@ const API_ENDPOINTS = {
   GET_ACTIVE_ROOMS: (channelSeq) => `/task-service/virtual-meeting/channel/${channelSeq}/rooms/active`,
   GET_ENDED_ROOMS: (channelSeq) => `/task-service/virtual-meeting/channel/${channelSeq}/rooms/ended`,
   GET_ROOM_DETAIL: (roomSeq) => `/task-service/virtual-meeting/rooms/${roomSeq}/summary`,
+  DOWNLOAD_RECORDING: (roomSeq) => `/task-service/virtual-meeting/rooms/${roomSeq}/recording/download`,
   GET_WORKSPACE_MEMBERS: (workSpaceSeq) => `/task-service/virtual-meeting/workspace/${workSpaceSeq}/members`,
 }
 
@@ -182,6 +183,22 @@ export const meetingApi = {
       return response.data
     } catch (error) {
       console.error('녹화 시작 실패:', error)
+      throw error
+    }
+  },
+
+  // 녹화 파일 다운로드 (Blob)
+  async downloadRecording(memberSeq, roomSeq) {
+    try {
+      const response = await axios.get(API_ENDPOINTS.DOWNLOAD_RECORDING(roomSeq), {
+        headers: {
+          'X-Member-Seq': memberSeq
+        },
+        responseType: 'blob'
+      })
+      return response
+    } catch (error) {
+      console.error('녹화 파일 다운로드 실패:', error)
       throw error
     }
   },

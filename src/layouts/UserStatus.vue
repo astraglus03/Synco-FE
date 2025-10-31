@@ -118,7 +118,7 @@ onMounted(() => {
           v-bind="menuProps"
         >
           <div class="avatar-wrapper">
-            <v-avatar :size="collapsed ? 48 : 40" color="primary">
+            <v-avatar :size="36" color="primary">
               <v-img 
                 v-if="displayProfileImage" 
                 :src="displayProfileImage"
@@ -175,11 +175,12 @@ onMounted(() => {
   position: fixed;
   bottom: 0;
   left: 72px;
-  width: 260px;
-  background: rgba(0, 0, 0, 0.4);
-  backdrop-filter: blur(10px);
-  border-top: 1px solid rgba(255, 255, 255, 0.1);
-  border-right: 1px solid rgba(255, 255, 255, 0.1);
+  width: 220px;
+  background: rgb(var(--v-theme-surface));
+  backdrop-filter: blur(6px);
+  border-top: 1px solid rgba(var(--v-theme-on-surface), 0.08);
+  border-right: 1px solid rgba(var(--v-theme-on-surface), 0.08);
+  box-shadow: 0 -1px 0 rgba(var(--v-theme-on-surface), 0.04);
   padding: 8px;
   z-index: 101;
   height: 60px;
@@ -215,11 +216,11 @@ onMounted(() => {
 }
 
 .user-info:hover {
-  background: rgba(255, 255, 255, 0.05);
+  background: rgba(var(--v-theme-on-surface), 0.06);
 }
 
 .user-info:active {
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(var(--v-theme-on-surface), 0.08);
 }
 
 /* 디스코드 스타일 - 아바타 래퍼 */
@@ -236,7 +237,7 @@ onMounted(() => {
   right: 0;
   width: 12px;
   height: 12px;
-  border: 3px solid rgba(0, 0, 0, 0.4);
+  border: 2px solid rgb(var(--v-theme-surface));
   border-radius: 50%;
   z-index: 1;
   box-shadow: none;
@@ -264,7 +265,7 @@ onMounted(() => {
 .user-name {
   font-size: 14px;
   font-weight: 600;
-  color: #ffffff;
+  color: rgb(var(--v-theme-on-surface));
   line-height: 18px;
   white-space: nowrap;
   overflow: hidden;
@@ -274,7 +275,7 @@ onMounted(() => {
 
 .user-status-text {
   font-size: 11px;
-  color: #b9bbbe;
+  color: rgba(var(--v-theme-on-surface), 0.7);
   line-height: 14px;
   white-space: nowrap;
   overflow: hidden;
@@ -284,11 +285,11 @@ onMounted(() => {
 
 /* 디스코드 스타일 - 상태 메뉴 (밝은 회색) */
 .status-menu {
-  border-radius: 8px;
-  background: #6a6a6a !important;
-  backdrop-filter: blur(10px);
-  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.4);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+  background: rgb(var(--v-theme-surface)) !important;
+  backdrop-filter: blur(6px);
+  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.12);
+  border: 1px solid rgba(var(--v-theme-on-surface), 0.12);
   overflow: hidden;
 }
 
@@ -298,11 +299,11 @@ onMounted(() => {
 }
 
 .status-menu .v-list-item {
-  border-radius: 4px;
+  border-radius: 8px;
   min-height: 40px !important;
-  padding: 6px 8px !important;
-  margin-bottom: 2px;
-  color: #dcddde !important;
+  padding: 8px 10px !important;
+  margin-bottom: 4px;
+  color: rgb(var(--v-theme-on-surface)) !important;
   font-size: 14px;
   transition: all 0.15s ease;
 }
@@ -312,13 +313,13 @@ onMounted(() => {
 }
 
 .status-menu .v-list-item:hover {
-  background: #7a7a7a !important;
-  color: #ffffff !important;
+  background: rgba(var(--v-theme-primary), 0.08) !important;
+  color: rgb(var(--v-theme-on-surface)) !important;
 }
 
 .status-menu .v-list-item.active {
-  background: #7a7a7a !important;
-  color: #ffffff !important;
+  background: rgba(var(--v-theme-primary), 0.12) !important;
+  color: rgb(var(--v-theme-on-surface)) !important;
 }
 
 .status-menu .v-list-item-title {
@@ -350,7 +351,7 @@ onMounted(() => {
 @media (max-width: 768px) {
   .user-status {
     left: 60px;
-    width: 240px;
+    width: 200px;
   }
 }
 </style>

@@ -128,7 +128,7 @@ const currentComponent = computed(() => {
 const contentStyle = computed(() => {
   const serverSidebarWidth = 72
   // 개인 워크스페이스일 때는 항상 확장된 상태로 계산
-  const workspaceSidebarWidth = (props.workspaceType === 'personal' || !props.workspaceSidebarCollapsed) ? 260 : 72
+  const workspaceSidebarWidth = (props.workspaceType === 'personal' || !props.workspaceSidebarCollapsed) ? 220 : 72
   const memberSidebarWidth = props.memberSidebarVisible ? 280 : 0
   
   return {

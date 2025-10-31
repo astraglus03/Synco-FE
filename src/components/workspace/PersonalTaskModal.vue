@@ -108,7 +108,7 @@
 </template>
 
 <script setup>
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import { createPersonalTask, updatePersonalTask } from '@/api/schedule/scheduleApi'
 
 const props = defineProps({
@@ -136,6 +136,32 @@ const emit = defineEmits(['update:modelValue', 'taskCreated', 'taskUpdated'])
 const isOpen = computed({
   get: () => props.modelValue,
   set: (value) => emit('update:modelValue', value)
+})
+
+// ESC 키로 닫기
+const handleKeydown = (event) => {
+  if (event.key === 'Escape' && isOpen.value) {
+    closeModal()
+  }
+}
+
+onMounted(() => {
+  if (isOpen.value) {
+    window.addEventListener('keydown', handleKeydown)
+  }
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('keydown', handleKeydown)
+})
+
+// 모달 열림 상태에 따라 ESC 리스너 토글
+watch(isOpen, (newValue) => {
+  if (newValue) {
+    window.addEventListener('keydown', handleKeydown)
+  } else {
+    window.removeEventListener('keydown', handleKeydown)
+  }
 })
 
 // 폼 참조
@@ -285,9 +311,8 @@ watch([isOpen, () => props.editTaskData], ([newValue]) => {
 /* 모달 헤더 */
 .modal-header {
   padding: 20px 24px;
-  background: linear-gradient(135deg, #1976d2, rgba(25, 118, 210, 0.8));
-  color: white;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+  background: rgb(var(--v-theme-surface));
+  border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.1);
 }
 
 .modal-header-content {
@@ -303,11 +328,11 @@ watch([isOpen, () => props.editTaskData], ([newValue]) => {
   width: 32px;
   height: 32px;
   border-radius: 6px;
-  background: rgba(255, 255, 255, 0.2);
+  background: rgba(var(--v-theme-primary), 0.1);
 }
 
 .modal-icon .v-icon {
-  color: white;
+  color: rgb(var(--v-theme-primary));
   font-size: 20px;
 }
 
@@ -315,7 +340,7 @@ watch([isOpen, () => props.editTaskData], ([newValue]) => {
   margin: 0;
   font-size: 18px;
   font-weight: 600;
-  color: white;
+  color: rgb(var(--v-theme-on-surface));
   letter-spacing: -0.3px;
 }
 
