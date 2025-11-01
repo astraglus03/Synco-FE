@@ -2,20 +2,24 @@ import { apiGet, apiPost, apiPatch, apiDelete } from "@/utils/api";
 import axios from "axios";
 
 // ----------------------
+// 1:1 채팅 채널 생성 API
+// ----------------------
+export const createIndividualChatChannel = async (workSpaceSeq, otherMemberSeq) => {
+  const res = await apiPost(
+    `/chat-service/chat/channels/individual`,
+    { workSpaceSeq, otherMemberSeq }
+  );
+  return res; // channelSeq 반환
+};
+
+// ----------------------
 // 1:1 채팅 목록 조회 API
 // ----------------------
-export const getIndividualChatChannels = async (workSpaceSeq) => {
-  const memberSeq = localStorage.getItem("memberSeq");
-  const token = localStorage.getItem("accessToken");
-
-  const res = await axios.get(
-    `${import.meta.env.VITE_API_URL}/chat-service/chat/channels/individual`,
-    {
-      params: { workSpaceSeq }, // 쿼리 파라미터로 전달됨 → ?workSpaceSeq=1
-      headers: { 
-        "Authorization": `Bearer ${token}`,
-        "X-Member-Seq": memberSeq }, // HTTP 헤더로 전달됨
-    }
+export const getIndividualChatChannels = async () => {
+  // apiGet을 사용하면 자동으로 ResponseDto.data만 추출됨
+  const res = await apiGet(
+    `/chat-service/chat/channels/individual`
   );
-  return res.data; // ResponseDto<List<MyChatListResDto>>
+  // res는 이미 배열 (List<MyChatListResDto>)
+  return res;
 };

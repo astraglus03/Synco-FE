@@ -272,17 +272,21 @@ const projectChannels = ref([
 // 1:1 채팅 목록 (개인 워크스페이스일 때만)
 const directMessages = ref([]);
 
+// 1:1 채팅 목록 로드
 const loadDirectMessages = async () => {
   console.log("🚀 loadDirectMessages() 실행됨");
   try {
-    const workSpaceSeq = props.currentWorkspaceData?.workSpaceSeq;
-    if (!workSpaceSeq) return;
-
-    const res = await getIndividualChatChannels(workSpaceSeq);
+    const res = await getIndividualChatChannels();
     console.log("📦 1:1 채팅 목록 API 응답:", res);
-    directMessages.value = res.data; // ← 서버 응답 구조에 따라 조정
+
+    // res가 이미 배열이므로 (apiGet이 data 필드만 추출)
+    // 백엔드 MyChatListResDto 구조에 맞게 매핑
+    directMessages.value = Array.isArray(res) ? res : [];
+
+    console.log("✅ 1:1 채팅 목록 로드 완료:", directMessages.value.length, "개");
   } catch (e) {
     console.error("❌ 1:1 채팅 목록 불러오기 실패:", e);
+    directMessages.value = [];
   }
 };
 
@@ -678,7 +682,7 @@ watch(
   () => [props.workspaceType, props.currentWorkspaceData],
   ([newType, newWorkspace]) => {
     console.log("👀 워크스페이스 변경 감지:", newType, newWorkspace?.workSpaceSeq);
-    if (newType?.toUpperCase() === "PERSONAL" && newWorkspace?.workSpaceSeq) {
+    if (newType === "personal") {
       console.log("🚀 워크스페이스 준비 완료 → loadDirectMessages 실행");
       loadDirectMessages();
     }
@@ -689,22 +693,45 @@ watch(
 // 컴포넌트 마운트 시 채널 데이터 로드 (resize 리스너와 함께)
 onMounted(() => {
   console.log("🚀 onMounted 실행됨:", props.workspaceType);
-  window.addEventListener('resize', handleResize)
-  loadChannels()
-  console.log("📢 현재 workspaceType:", props.workspaceType);
-  console.log("📢 현재 workSpaceSeq:", props.currentWorkspaceData?.workSpaceSeq);
+  window.addEventListener('resize', handleResize);
+
+  // 1:1 채팅 목록 새로고침 이벤트 리스너 추가
+  emitter.on('refresh-direct-messages', () => {
+    console.log('🔄 1:1 채팅 목록 새로고침 이벤트 수신');
+    if (props.workspaceType === 'personal') {
+      loadDirectMessages();
+    }
+  });
+
+  // 프로젝트 or 개인 워크스페이스 분기처리
+  if (props.workspaceType === 'project') {
+    loadChannels();
+  } else if (props.workspaceType === 'personal') { 
+    loadDirectMessages();
+  }
+
+   console.log("📢 현재 workspaceType:", props.workspaceType);
+   console.log("📢 현재 workSpaceSeq:", props.currentWorkspaceData?.workSpaceSeq)
 })
 
 // 컴포넌트 언마운트 시 이벤트 리스너 정리
 onUnmounted(() => {
   window.removeEventListener('resize', handleResize)
+
+  // 이벤트 리스너 제거
+  emitter.off('refresh-direct-messages')
 })
 
 // 워크스페이스 변경 시 채널 데이터 다시 로드
 watch(
   () => props.currentWorkspaceData,
-  () => {
-    loadChannels();
+  (newWorkspace) => {
+    // 프로젝트 or 개인 워크스페이스 분기처리
+    if (props.workspaceType === "project") {
+      loadChannels();
+    } else if (props.workspaceType === "personal" && newWorkspace?.workSpaceSeq) {
+      loadDirectMessages();
+    }
   },
   { deep: true }
 );
@@ -713,8 +740,11 @@ watch(
 watch(
   () => props.workspaceType,
   (newType) => {
+    // 프로젝트 or 개인 워크스페이스 분기처리
     if (newType === "project") {
       loadChannels();
+    } else if (newType === "personal") {
+      loadDirectMessages();
     }
   }
 );
@@ -834,14 +864,29 @@ const handleCollapsedChannelClick = (chatChannel) => {
 };
 
 // 1:1 채팅 선택 함수
-const selectDirectMessage = (dmId) => {
-  // emit("select-channel", "1-1-chat"); // 1:1 채팅 채널로 이동
-  // // PersonalChat 컴포넌트에서 selectedChat을 업데이트하도록 전역 이벤트 발생
-  // window.dispatchEvent(new CustomEvent("select-chat", { detail: dmId }));
+const selectDirectMessage = (channelSeq) => {
+  console.log("🔔 1:1 채팅 선택:", channelSeq);
 
-  emit("select-channel", "chat"); // Chat.vue를 불러오기 위해 'chat' 채널로 변경
-  // Chat 컴포넌트에서 선택된 채널을 업데이트하도록 이벤트 발생
-  emitter.emit("select-chat-channel", { parentId: "chat", subChannelId: dmId.toString() });
+  // ✅ channelSeq 유효성 검사
+  if (!channelSeq || channelSeq === null || channelSeq === undefined) {
+  console.error("❌ 유효하지 않은 channelSeq:", channelSeq);
+  return;
+  }
+  
+  // ✅ 숫자로 변환하여 검증
+  const parsedChannelSeq = parseInt(channelSeq);
+  if (isNaN(parsedChannelSeq) || parsedChannelSeq <= 0) {
+    console.error("❌ 유효하지 않은 channelSeq:", channelSeq);
+    return;
+  }
+
+  // 메인 채널을 'chat'으로 설정
+  emit("select-channel", "chat"); // 탭 UI 상태 변경(chat 탭으로)
+
+  // channelSeq를 문자열로 변환하여 전달
+  emitter.emit("select-chat-channel", {  // Chat.vue에 채널 변경 이벤트 전달
+    parentId: "chat", 
+    subChannelId: channelSeq.toString() });
 };
 
 // 사용자 상태 색상

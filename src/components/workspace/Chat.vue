@@ -87,6 +87,15 @@ let typingInterval = null;  // 타이핑 지속 알림 인터벌
 
 // 채널 목록 (Store에서 가져오기)
 const channels = computed(() => {
+  // 개인 워크스페이스: 1:1 채팅 목록을 채널로 변환
+  if (props.workspaceType === "personal") {
+    // directMessages는 WorkspaceSidebar에 있으므로
+    // Chat.vue에서는 props.selectedChannel을 channelSeq로 사용
+    // 빈 배열 반환 (실제로는 WorkspaceSidebar에서 채널 선택 시 channelSeq 전달)
+    return [];
+  }
+
+  // 프로젝트 워크스페이스: Store에서 채널 목록 가져오기
   const channelList =
     workspaceMemberStore.chatChannels?.map((channel) => ({
       id: channel.channelSeq.toString(),
@@ -187,7 +196,25 @@ const isPersonalChat = computed(() => {
 
 // ✅ WebSocket 연결
 const connectWebsocket = () => {
+  console.log("🔌 WebSocket 연결 시도 시작");
+  console.log("- token:", token.value ? "있음" : "없음");
+  console.log("- channelSeq:", channelSeq.value);
+  console.log("- memberSeq:", memberSeq.value);
+  console.log("- channelSeq 타입:", typeof channelSeq.value);
+
+    // ✅ channelSeq 유효성 검사 추가
+    if (!channelSeq.value || isNaN(channelSeq.value) || channelSeq.value <= 0) {
+    console.error("❌ 유효하지 않은 channelSeq:", channelSeq.value);
+    return;
+  }
+  
+  if (!token.value) {
+    console.error("❌ 토큰이 없습니다.");
+    return;
+  }
+
   console.log("토큰 확인:", token.value);
+
   if (stompClient.value && stompClient.value.connected) return;
 
   const sockJs = new SockJS(
@@ -344,19 +371,23 @@ const connectWebsocket = () => {
 const disconnectWebsocket = async () => {
   try {
     // 🟡 읽음 처리 API 호출
-    await axios.post(
-      `${import.meta.env.VITE_API_URL}/chat-service/chat/channels/${
-        channelSeq.value
-      }/read`,
-      {},
-      {
-        headers: {
-          "X-Member-Seq": memberSeq.value,
-          Authorization: `Bearer ${token.value}`,
-        },
-      }
-    );
-    console.log("✅ 마지막 읽은 메시지 업데이트 완료");
+    if (channelSeq.value && !isNaN(channelSeq.value) && channelSeq.value > 0) {
+      await axios.post(
+        `${import.meta.env.VITE_API_URL}/chat-service/chat/channels/${
+          channelSeq.value
+        }/read`,
+        {},
+        {
+          headers: {
+            "X-Member-Seq": memberSeq.value,
+            Authorization: `Bearer ${token.value}`,
+          },
+        }
+      );
+      console.log("✅ 마지막 읽은 메시지 업데이트 완료");
+    } else {
+      console.warn("⚠️ channelSeq가 유효하지 않아 읽음 처리 건너뜀:", channelSeq.value);
+    }
   } catch (e) {
     console.warn("읽음 처리 실패:", e);
   }
@@ -808,9 +839,31 @@ const changeChannel = async (channelId) => {
 
   console.log("🔄 채널 변경:", currentChannel.value, "→", channelId);
   console.log("🔍 새로운 채널 Seq:", channelId);
+  
+  // ✅ channelSeq 유효성 검사
+  const parsedChannelSeq = parseInt(channelId);
+  if (isNaN(parsedChannelSeq) || parsedChannelSeq <= 0) {
+    console.error("❌ 유효하지 않은 channelSeq:", channelId);
+    return;
+  }
 
-  // 기존 연결 해제
-  disconnectWebsocket();
+  // ✅ 기존 연결 해제 (channelSeq가 유효할 때만)
+  if (channelSeq.value && !isNaN(channelSeq.value) && channelSeq.value > 0) {
+    disconnectWebsocket();
+  } else {
+    // 기존 channelSeq가 없으면 WebSocket만 정리
+    try {
+      if (subscription.value) {
+        subscription.value.unsubscribe();
+        subscription.value = null;
+      }
+      if (stompClient.value && stompClient.value.connected) {
+        stompClient.value.disconnect();
+      }
+    } catch (e) {
+      console.warn("WebSocket 해제 중 오류:", e);
+    }
+  }
 
   // 새 채널로 변경
   currentChannel.value = channelId;
@@ -1090,36 +1143,49 @@ const handleScroll = async (e) => {
 };
 
 // @ 언급 관련 함수들 - 채널 참여 멤버 정보
-const getChannelMembers = async () => {
+const getChannelMembers = () => {
+  if (!channelSeq.value) {
+    mentionList.value = [];
+    return;
+  }
+
   try {
-    const res = await axios.get(
-      `${import.meta.env.VITE_API_URL}/chat-service/chat/channels/${
-        channelSeq.value
-      }/members`,
-      {
-        headers: {
-          Authorization: `Bearer ${token.value}`,
-        },
+    // 프로젝트 워크스페이스: Store에서 채널 멤버 정보 가져오기
+    if (props.workspaceType === "project") {
+      const channel = workspaceMemberStore.chatChannels?.find(
+        (c) => Number(c.channelSeq) === Number(channelSeq.value)
+      );
+      
+      if (channel?.channelMemberList && channel.channelMemberList.length > 0) {
+        mentionList.value = channel.channelMemberList
+          .map((m) => ({
+            id: m.memberSeq,
+            name: m.memberName,
+            profileImage: m.memberProfileUrl || null,
+          }))
+          .filter((member) => Number(member.id) !== Number(memberSeq.value));
+        
+        console.log("✅ 프로젝트 채널 멤버 목록:", mentionList.value);
+        return;
       }
-    );
+    }
+    
+    // 개인 워크스페이스: 1:1 채팅이므로 상대방만 멘션 가능
+    // directMessages에서 현재 channelSeq에 해당하는 채널 찾기
+    if (props.workspaceType === "personal") {
+      // WorkspaceSidebar에서 directMessages를 가져올 수 없으므로
+      // 다른 방법 필요: 백엔드 API 호출 또는 전역 상태 관리
+      // 임시로 빈 배열로 설정 (나중에 개선 가능)
+      mentionList.value = [];
+      console.log("⚠️ 개인 워크스페이스: 멘션 기능은 추후 구현 예정");
+      return;
+    }
 
-    console.log("📡 서버 응답 원본:", res.data);
-
-    // 백엔드에서 ChannelMemberResDto 리스트 반환됨 [{ memberSeq, memberName, memberProfileUrl }]
-    mentionList.value = res.data.data.map((m) => ({
-      id: m.memberSeq,
-      name: m.memberName,
-      profileImage: m.memberProfileUrl,
-    }));
-
-    // 현재 로그인 사용자 제외
-    mentionList.value = mentionList.value.filter(
-      (member) => member.id !== memberSeq.value
-    );
-
-    console.log("✅ 채팅 멤버 목록:", mentionList.value);
+    // 기본값: 빈 배열
+    mentionList.value = [];
   } catch (err) {
     console.error("❌ 채팅 멤버 목록 조회 실패:", err);
+    mentionList.value = [];
   }
 };
 
@@ -1470,65 +1536,105 @@ onMounted(async () => {
 
   console.log("🟢 Chat 시작");
   console.log("- memberSeq:", memberSeq.value);
+  console.log("- workspaceType:", props.workspaceType);
   console.log("- JWT payload:", payload);
 
-  // ✅ Store 초기화 대기
-  await waitForStore();
+  // ✅ 프로젝트 워크스페이스: Store 초기화 대기
+  if (props.workspaceType === "project") {
+    console.log("📦 프로젝트 워크스페이스: Store 초기화 대기");
+    await waitForStore();
 
-  // ✅ 채널 목록이 비어있으면 종료
-  if (channels.value.length === 0) {
-    console.warn("⚠️ 채널 목록이 비어있습니다.");
-    return;
+    // ✅ 채널 목록이 비어있으면 종료
+    if (channels.value.length === 0) {
+      console.warn("⚠️ 채널 목록이 비어있습니다.");
+      return;
+    }
+  } else {
+    console.log("📦 개인 워크스페이스: Store 초기화 건너뜀");
   }
 
   // ✅ URL에서 채널 ID 가져오기 (새로고침 시 유지)
   const urlChannelId = route.params.subChannel?.toString();
   console.log("🔍 URL 채널 ID:", urlChannelId);
   console.log("🔍 route.params:", route.params);
+  // ✅ 초기 채널 설정
+  let initialChannel;
+  
+  if (props.workspaceType === "personal") {
+    // 개인 워크스페이스: props.selectedChannel을 channelSeq로 사용
+    initialChannel = urlChannelId || props.selectedChannel;
+    console.log("🔍 개인 워크스페이스 채널 선택:", {
+      urlChannelId,
+      selectedChannel: props.selectedChannel,
+      initialChannel,
+    });
+    
+    if (!initialChannel) {
+      console.warn("⚠️ 개인 워크스페이스: 채널이 선택되지 않았습니다.");
+      return;
+    }
+  } else {
+    // 프로젝트 워크스페이스: URL > props > 첫번째 채널 순서
+    initialChannel =
+      urlChannelId || props.selectedChannel || channels.value[0]?.id;
+    
+    if (!initialChannel) {
+      console.warn("⚠️ 프로젝트 워크스페이스: 채널이 없습니다.");
+      return;
+    }
+  }
 
-  // ✅ 초기 채널 설정 (URL > props > 첫번째 채널 순서)
-  const initialChannel =
-    urlChannelId || props.selectedChannel || channels.value[0].id;
+  // ✅ 채널이 있으면 초기화 진행
   currentChannel.value = initialChannel;
-  channelSeq.value = parseInt(initialChannel);
-  console.log("🔍 최초 채널 선택:", {
+  const parsedChannelSeq = parseInt(initialChannel);
+  
+  // channelSeq 유효성 검사
+  if (isNaN(parsedChannelSeq) || parsedChannelSeq <= 0) {
+    console.error("❌ 유효하지 않은 channelSeq:", initialChannel);
+    return;
+  }
+  
+  channelSeq.value = parsedChannelSeq;
+  
+  console.log("🔍 최초 채널 선택 완료:", {
     urlChannelId,
     selectedChannel: props.selectedChannel,
     initialChannel,
     channelSeq: channelSeq.value,
+    workspaceType: props.workspaceType,
   });
 
-  // ✅ 채널 참여 멤버 목록 초기화
-  getChannelMembers().then(async () => {
-    // ✅ memberSeq가 유효할 때만 채널 로드
-    if (memberSeq.value > 0 && currentChannel.value) {
-      hasLoadedInitialChannel.value = true;
+  // ✅ 채널 참여 멤버 목록 초기화 (백엔드 API 호출)
+  await getChannelMembers();
+
+  // ✅ memberSeq와 channelSeq가 유효할 때만 채널 로드
+  if (memberSeq.value > 0 && currentChannel.value && channelSeq.value > 0) {
+    hasLoadedInitialChannel.value = true;
+    
+    try {
+      console.log("📥 메시지 로드 시작...");
+      
       // ✅ 1. 마지막 읽은 이후의 새 메시지 로드 시도
       const newMessages = await loadMessagesAfterLastRead();
 
       // ✅ 2. 재접속 여부에 따른 처리
       if (newMessages.length > 0 && lastReadMessageSeq.value) {
-        // 🔄 재접속: 새 메시지 표시 및 구분선으로 스크롤
+        console.log("🔄 재접속 감지 - 새 메시지 있음");
         messages.value = newMessages;
 
-        // DOM 업데이트 대기
         await new Promise((resolve) => setTimeout(resolve, 50));
 
-        // 구분선(새 메시지 시작점)이 상단에 오도록 스크롤
         const container = document.querySelector(".messages-container");
         if (container) {
           const firstNewMessage = document.querySelector(
             `[data-message-id="${lastReadMessageSeq.value}"]`
           );
           if (firstNewMessage) {
-            // 구분선이 메시지 위에 있으므로, 메시지의 이전 형제 요소를 찾아서 스크롤
             const divider = firstNewMessage.previousElementSibling;
             if (divider && divider.classList.contains("message-divider")) {
-              // 구분선으로 스크롤
               divider.scrollIntoView({ behavior: "instant", block: "start" });
               console.log("📍 구분선 위치로 스크롤 완료 (상단)");
             } else {
-              // 구분선이 없으면 메시지 상단으로 스크롤
               firstNewMessage.scrollIntoView({
                 behavior: "instant",
                 block: "start",
@@ -1538,22 +1644,33 @@ onMounted(async () => {
           }
         }
       } else {
-        // 🆕 최초 접속: 모든 메시지 로드 후 맨 아래로 스크롤
         console.log("🆕 최초 접속 감지 - 모든 메시지 로드");
       }
 
       // ✅ 3. 이전 메시지 로드
-      // 재접속 시(lastReadMessageSeq.value가 있으면): 구분선 이전의 메시지만 로드
-      // 최초 접속 시(null): 최신 메시지 로드
       const lastId = lastReadMessageSeq.value || null;
       await loadMoreMessages(lastId);
 
-      // ✅ 4. WebSocket 연결
-      connectWebsocket();
-    } else {
-      console.error("❌ memberSeq 또는 채널이 유효하지 않습니다.");
+      console.log("✅ 메시지 로드 완료");
+      
+    } catch (error) {
+      console.error("❌ 채널 로드 중 오류:", error);
     }
-  });
+    
+    // ✅ 4. WebSocket 연결
+    console.log("🔌 WebSocket 연결 시작...");
+    console.log("- channelSeq:", channelSeq.value);
+    console.log("- token:", token.value ? "있음" : "없음");
+    console.log("- memberSeq:", memberSeq.value);
+    connectWebsocket();
+    
+  } else {
+    console.error("❌ memberSeq 또는 채널이 유효하지 않습니다.", {
+      memberSeq: memberSeq.value,
+      currentChannel: currentChannel.value,
+      channelSeq: channelSeq.value,
+    });
+  }
 
   // ✅ 스크롤 이벤트 리스너 등록 (DOM 준비 대기)
   await nextTick();
