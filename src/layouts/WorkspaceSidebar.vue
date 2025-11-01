@@ -272,6 +272,11 @@ const projectChannels = ref([
 // 1:1 채팅 목록 (개인 워크스페이스일 때만)
 const directMessages = ref([]);
 
+// 1:1 채팅 컨텍스트 메뉴 관련 상태
+const showDmContextMenu = ref(false);
+const dmContextMenuPosition = ref({ x: 0, y: 0 });
+const selectedDm = ref(null);
+
 // 1:1 채팅 목록 로드
 const loadDirectMessages = async () => {
   console.log("🚀 loadDirectMessages() 실행됨");
@@ -287,6 +292,83 @@ const loadDirectMessages = async () => {
   } catch (e) {
     console.error("❌ 1:1 채팅 목록 불러오기 실패:", e);
     directMessages.value = [];
+  }
+};
+
+// 1:1 채팅 오른쪽 클릭 이벤트 처리
+const handleDmRightClick = (dm, event) => {
+  console.log("🖱️ 우클릭 이벤트 발생:", dm, event);
+  event.preventDefault();
+  event.stopPropagation();
+  
+  selectedDm.value = dm;
+  dmContextMenuPosition.value = { x: event.clientX, y: event.clientY };
+  showDmContextMenu.value = true;
+};
+
+// 1:1 채팅 컨텍스트 메뉴 닫기
+const closeDmContextMenu = (event) => {
+  // 컨텍스트 메뉴 자체를 클릭한 경우는 닫지 않음
+  if (event && event.target && event.target.closest('.dm-context-menu')) {
+    return;
+  }
+  
+  showDmContextMenu.value = false;
+  selectedDm.value = null;
+};
+
+// 1:1 채팅방 나가기
+const leaveDirectMessage = async () => {
+  if (!selectedDm.value) {
+    return;
+  }
+
+  const channelSeq = selectedDm.value.channelSeq;
+  const channelName = selectedDm.value.channelName;
+
+  // 확인 다이얼로그
+  if (!confirm(`정말로 "${channelName}"님과의 1:1 채팅방을 나가시겠습니까?`)) {
+    closeDmContextMenu();
+    return;
+  }
+
+  try {
+    console.log("🚪 1:1 채팅방 나가기 요청:", channelSeq);
+    
+    await leaveChannel(channelSeq);
+    
+    console.log("✅ 1:1 채팅방 나가기 성공");
+
+  // ✅ 현재 채팅방이면 먼저 WebSocket 해제를 위해 채널 변경 이벤트 전달
+  if (currentChannel.value === channelSeq.toString()) {
+    // Chat.vue에 채널 삭제 이벤트 전달 (WebSocket 해제를 위해)
+    emitter.emit("select-chat-channel", { 
+      parentId: "chat", 
+      subChannelId: null // null로 설정하여 Chat.vue에서 해제 처리
+    });
+    
+    // 대시보드로 이동
+    emit("select-channel", "dashboard");
+    
+    // Store 상태도 초기화
+    workspaceStore.selectChannel("dashboard");
+    workspaceStore.selectSubChannel("dashboard", null);
+  }
+    
+    // 목록에서 제거
+    directMessages.value = directMessages.value.filter(
+      (dm) => dm.channelSeq !== channelSeq
+    );
+    
+    closeDmContextMenu();
+    
+    // 성공 알림
+    alert("채팅방을 나갔습니다.");
+  } catch (error) {
+    console.error("❌ 1:1 채팅방 나가기 실패:", error);
+    const errorMessage = error.response?.data?.message || error.message || "채팅방 나가기에 실패했습니다.";
+    alert(`채팅방 나가기 실패: ${errorMessage}`);
+    closeDmContextMenu();
   }
 };
 
@@ -695,6 +777,20 @@ onMounted(() => {
   console.log("🚀 onMounted 실행됨:", props.workspaceType);
   window.addEventListener('resize', handleResize);
 
+  // ✅ 컨텍스트 메뉴 외부 클릭 시 닫기 (약간의 지연으로 우클릭 이벤트와 충돌 방지)
+  const handleClickOutside = (event) => {
+    // 컨텍스트 메뉴나 dm-item을 클릭한 경우는 무시
+    if (event.target.closest('.dm-context-menu') || event.target.closest('.dm-item')) {
+      return;
+    }
+    closeDmContextMenu(event);
+  };
+  
+  // 우클릭 이벤트가 처리된 후에 클릭 리스너 추가
+  setTimeout(() => {
+    window.addEventListener('click', handleClickOutside);
+  }, 100);
+
   // 1:1 채팅 목록 새로고침 이벤트 리스너 추가
   emitter.on('refresh-direct-messages', () => {
     console.log('🔄 1:1 채팅 목록 새로고침 이벤트 수신');
@@ -717,6 +813,9 @@ onMounted(() => {
 // 컴포넌트 언마운트 시 이벤트 리스너 정리
 onUnmounted(() => {
   window.removeEventListener('resize', handleResize)
+
+  // ✅ 컨텍스트 메뉴 리스너 제거
+  window.removeEventListener('click', closeDmContextMenu);
 
   // 이벤트 리스너 제거
   emitter.off('refresh-direct-messages')
@@ -1199,6 +1298,7 @@ const getStatusColor = (status) => {
           class="dm-item"
           :class="{ 'active': currentChannel === dm.channelSeq, 'collapsed': isCollapsedView }"
           @click="selectDirectMessage(dm.channelSeq)"
+          @contextmenu.prevent="handleDmRightClick(dm, $event)"
         >
           <div class="dm-avatar">
             <v-avatar size="24" color="primary">
@@ -1228,6 +1328,7 @@ const getStatusColor = (status) => {
       </div>
     </div>
   </div>
+  
 
   <!-- 채널 생성 모달 -->
   <v-dialog v-model="showCreateChannelModal" max-width="400">
@@ -1425,6 +1526,24 @@ const getStatusColor = (status) => {
       >
         <v-icon color="white" size="20">mdi-close</v-icon>
       </v-btn>
+    </div>
+  </div>
+  
+  <!-- ✅ 1:1 채팅 컨텍스트 메뉴 -->
+  <div
+    v-if="showDmContextMenu && selectedDm"
+    class="dm-context-menu"
+    :style="{
+      position: 'fixed',
+      left: dmContextMenuPosition.x + 'px',
+      top: dmContextMenuPosition.y + 'px',
+      zIndex: 1000
+    }"
+    @click.stop
+  >
+    <div class="context-item" @click="leaveDirectMessage">
+      <v-icon size="18" color="error">mdi-logout</v-icon>
+      <span>나가기</span>
     </div>
   </div>
 
@@ -3010,6 +3129,36 @@ const getStatusColor = (status) => {
   .header-actions {
     display: none !important;
   }
+}
+
+/* 1:1 채팅 컨텍스트 메뉴 스타일 */
+.dm-context-menu {
+  position: fixed;
+  background-color: white;
+  border: 1px solid #e0e0e0;
+  border-radius: 4px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  min-width: 150px;
+  padding: 4px 0;
+  z-index: 1000;
+}
+
+.dm-context-menu .context-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: background-color 0.2s;
+}
+
+.dm-context-menu .context-item:hover {
+  background-color: #f5f5f5;
+}
+
+.dm-context-menu .context-item span {
+  color: #d32f2f;
 }
 
 @media (max-width: 768px) {

@@ -23,3 +23,13 @@ export const getIndividualChatChannels = async () => {
   // res는 이미 배열 (List<MyChatListResDto>)
   return res;
 };
+
+// ----------------------
+// 채널 나가기 API (1:1 채팅방 포함)
+// ----------------------
+export const leaveChannel = async (channelSeq) => {
+  const res = await apiDelete(
+    `/chat-service/chat/channels/${channelSeq}/leave`
+  );
+  return res;
+};
