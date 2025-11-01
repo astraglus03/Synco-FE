@@ -53,8 +53,8 @@ class SSEConnection {
     this.cleanup()
 
     // EventSource 생성
-    const baseUrl = (import.meta.env.VITE_API_URL || 'http://localhost:8080').replace(/\/+$/, '')
-    const url = `${baseUrl}/workspace-service/alarms/sse/connect`
+    // 상대 경로 사용으로 프록시/동일 출처 모두 호환
+    const url = `/workspace-service/alarms/sse/connect`
 
     console.log('[SSE] 🌐 연결 URL:', url)
     console.log('[SSE] 🔑 헤더:', {
@@ -102,11 +102,13 @@ class SSEConnection {
         }
       }
 
-      // Heartbeat (ping) 이벤트
-      this.eventSource.addEventListener('ping', (event) => {
+      // Heartbeat 이벤트 (백엔드 이벤트명이 ping/heartbeat 등 다를 수 있어 모두 수신)
+      const onHeartbeat = () => {
         console.log('[SSE] 💓 heartbeat')
         this.lastMessageTime = Date.now()
-      })
+      }
+      this.eventSource.addEventListener('ping', onHeartbeat)
+      this.eventSource.addEventListener('heartbeat', onHeartbeat)
 
       // 백엔드 일반 알림 이벤트 (event: alarm)
       this.eventSource.addEventListener('alarm', (event) => {

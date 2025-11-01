@@ -49,14 +49,19 @@ export const updateTaskStatus = async (taskSeq, newStatus) => {
 }
 
 // 태스크 생성 API
-export const createTask = async (taskData) => {
+export const createTask = async (projectId, taskData) => {
   try {
-    const response = await apiClient.post('/task-service/scheduleManagement/project/task', taskData)
+    // 백엔드 컨트롤러: POST /task-service/scheduleManagement/project
+    const url = '/task-service/scheduleManagement/project/task'
+    console.log(`[Schedule API] 태스크 생성 요청: ${url}`, taskData)
+    const response = await apiClient.post(url, taskData)
     // 업무 추가 시 알림 갱신 (백그라운드에서 실행, 실패해도 무시)
     refreshNotifications().catch(() => {})
     return response.data
   } catch (error) {
     console.error('태스크 생성 실패:', error)
+    console.error('요청 URL:', url)
+    console.error('요청 데이터:', taskData)
     throw error
   }
 }

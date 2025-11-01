@@ -175,6 +175,7 @@
 <script setup>
 import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import { getProjectMemberList, createTask as createTaskApi, updateTask as updateTaskApi } from '../../api/schedule/scheduleApi.js'
+import { useWorkspaceMemberStore } from '@/store/workspaceMemberStore'
 
 const props = defineProps({
   modelValue: {
@@ -261,6 +262,7 @@ const taskStatusOptions = [
 
 // 멤버 목록
 const projectMembers = ref([])
+const workspaceMemberStore = useWorkspaceMemberStore()
 
 // 멤버 옵션 (v-select용)
 const memberOptions = computed(() => projectMembers.value)
@@ -297,9 +299,33 @@ const loadProjectMembers = async () => {
   try {
     isLoadingMembers.value = true
     const response = await getProjectMemberList(props.projectId)
-    if (response.success) {
+    // 배열 직접 응답 또는 { success, data } 형태 모두 지원
+    if (Array.isArray(response)) {
+      projectMembers.value = response
+    } else if (response && typeof response === 'object' && 'success' in response && 'data' in response) {
+      projectMembers.value = response.success ? (response.data || []) : []
+    } else if (response && typeof response === 'object' && 'data' in response && Array.isArray(response.data)) {
       projectMembers.value = response.data
+    } else {
+      projectMembers.value = []
     }
+
+    // 표준화: { memberSeq, memberName, profileImageUrl }
+    const normalize = (arr) => (arr || []).map(m => ({
+      // 백엔드 DTO가 요구하는 scheduleManagementChannelMemberSeq 우선 유지
+      scheduleManagementChannelMemberSeq: m.scheduleManagementChannelMemberSeq ?? m.picScheduleManagementChannelMemberSeq ?? m.picMemberSeq ?? m.memberSeq ?? m.id ?? m.memberId,
+      memberSeq: m.memberSeq ?? m.id ?? m.memberId, // 참고용
+      memberName: m.memberName ?? m.name ?? m.username ?? m.displayName,
+      profileImageUrl: m.profileImageUrl ?? m.memberProfileUrl ?? m.profileImage ?? m.avatarUrl
+    })).filter(x => x.scheduleManagementChannelMemberSeq && x.memberName)
+    projectMembers.value = normalize(projectMembers.value)
+
+    // 폴백: 비어 있으면 일정관리 채널 멤버 사용
+    if (projectMembers.value.length === 0 && Array.isArray(workspaceMemberStore.scheduleChannels)) {
+      projectMembers.value = normalize(workspaceMemberStore.scheduleChannels)
+    }
+
+    console.log('[Schedule][Modal] memberOptions normalized:', { count: projectMembers.value.length, sample: projectMembers.value.slice(0,5) })
   } catch (error) {
     console.error('프로젝트 멤버 목록 로드 실패:', error)
   } finally {
@@ -336,7 +362,7 @@ const createTask = async () => {
       }
     } else {
       // 생성 모드
-      const response = await createTaskApi(taskData.value)
+      const response = await createTaskApi(props.projectId, taskData.value)
       
       if (response.success) {
         alert('업무가 성공적으로 생성되었습니다.')
