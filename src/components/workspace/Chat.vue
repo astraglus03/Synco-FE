@@ -81,9 +81,9 @@ const channelSeq = ref(null);
 const memberSeq = ref(0);
 
 // 타이핑 인디케이터 관련
-let typingTimeout = null;  // 타이핑 종료 타이머
-let lastTypingSent = 0;     // 마지막 전송 시간
-let typingInterval = null;  // 타이핑 지속 알림 인터벌
+let typingTimeout = null; // 타이핑 종료 타이머
+let lastTypingSent = 0; // 마지막 전송 시간
+let typingInterval = null; // 타이핑 지속 알림 인터벌
 
 // 채널 목록 (Store에서 가져오기)
 const channels = computed(() => {
@@ -191,7 +191,7 @@ const chatUserInfo = ref(null);
 
 // 개인 워크스페이스에서 1:1 채팅인지 확인
 const isPersonalChat = computed(() => {
-  return props.workspaceType === 'personal';
+  return props.workspaceType === "personal";
 });
 
 // ✅ WebSocket 연결
@@ -202,12 +202,12 @@ const connectWebsocket = () => {
   console.log("- memberSeq:", memberSeq.value);
   console.log("- channelSeq 타입:", typeof channelSeq.value);
 
-    // ✅ channelSeq 유효성 검사 추가
-    if (!channelSeq.value || isNaN(channelSeq.value) || channelSeq.value <= 0) {
+  // ✅ channelSeq 유효성 검사 추가
+  if (!channelSeq.value || isNaN(channelSeq.value) || channelSeq.value <= 0) {
     console.error("❌ 유효하지 않은 channelSeq:", channelSeq.value);
     return;
   }
-  
+
   if (!token.value) {
     console.error("❌ 토큰이 없습니다.");
     return;
@@ -215,7 +215,28 @@ const connectWebsocket = () => {
 
   console.log("토큰 확인:", token.value);
 
-  if (stompClient.value && stompClient.value.connected) return;
+  // ✅ 이미 연결되어 있으면 return
+  if (stompClient.value && stompClient.value.connected) {
+    console.log("✅ WebSocket 이미 연결됨");
+    return;
+  }
+
+  // ✅ 기존 연결이 끊어진 상태면 정리
+  if (stompClient.value && !stompClient.value.connected) {
+    console.log("🔌 기존 연결이 끊어진 상태 - 정리 후 재연결");
+    try {
+      if (subscription.value) {
+        subscription.value.unsubscribe();
+        subscription.value = null;
+      }
+      if (stompClient.value) {
+        stompClient.value.disconnect();
+      }
+    } catch (e) {
+      console.warn("기존 연결 정리 중 오류:", e);
+    }
+    stompClient.value = null;
+  }
 
   const sockJs = new SockJS(
     `${import.meta.env.VITE_API_URL}/chat-service/connect`
@@ -239,16 +260,16 @@ const connectWebsocket = () => {
             // ✅ TYPING 이벤트 처리
             if (parsed.action === "TYPING") {
               console.log("⌨️ 타이핑 이벤트 수신:", parsed);
-              
+
               // 자신의 타이핑 이벤트는 무시
               if (Number(parsed.senderSeq) === Number(memberSeq.value)) {
                 return;
               }
-              
+
               // ✅ 타이핑 중인 사용자 이름 저장
               typingUserName.value = parsed.senderName || "사용자";
               otherTyping.value = parsed.typing;
-              
+
               // 타이핑 종료 시 자동으로 숨김
               if (!parsed.typing) {
                 otherTyping.value = false;
@@ -386,7 +407,10 @@ const disconnectWebsocket = async () => {
       );
       console.log("✅ 마지막 읽은 메시지 업데이트 완료");
     } else {
-      console.warn("⚠️ channelSeq가 유효하지 않아 읽음 처리 건너뜀:", channelSeq.value);
+      console.warn(
+        "⚠️ channelSeq가 유효하지 않아 읽음 처리 건너뜀:",
+        channelSeq.value
+      );
     }
   } catch (e) {
     console.warn("읽음 처리 실패:", e);
@@ -455,21 +479,49 @@ const uploadFilesToS3 = async () => {
 // ✅ 메시지 전송
 const sendMessage = async () => {
   console.log("============= 메시지 전송 ===============", memberSeq.value);
-  
+
   // 중복 전송 방지
   if (isSending.value) {
     console.warn("이미 전송 중입니다. 잠시만 기다려주세요.");
     return;
   }
-  
+
+  // ✅ WebSocket 연결 확인 및 재연결 시도
   if (!stompClient.value || !stompClient.value.connected) {
-    console.error("WebSocket 연결이 없습니다!");
-    return;
+    console.warn("⚠️ WebSocket 연결이 없습니다. 재연결 시도...");
+
+    if (!channelSeq.value || !token.value) {
+      console.error("❌ 채널 또는 토큰이 없습니다.");
+      alert("채널을 선택해주세요.");
+      return;
+    }
+
+    // 재연결 시도
+    connectWebsocket();
+
+    // 재연결 대기 (최대 3초)
+    let attempts = 0;
+    while (
+      attempts < 6 &&
+      (!stompClient.value || !stompClient.value.connected)
+    ) {
+      await new Promise((resolve) => setTimeout(resolve, 500));
+      attempts++;
+    }
+
+    // 재연결 실패 시
+    if (!stompClient.value || !stompClient.value.connected) {
+      console.error("❌ WebSocket 재연결 실패");
+      alert("채팅 연결에 실패했습니다. 페이지를 새로고침해주세요.");
+      return;
+    }
+
+    console.log("✅ WebSocket 재연결 성공");
   }
 
   if (newMessage.value.trim() === "" && attachedFiles.value.length === 0)
     return;
-  
+
   // 전송 시작
   isSending.value = true;
 
@@ -479,95 +531,95 @@ const sendMessage = async () => {
       uploadedUrls = await uploadFilesToS3(); // 🔹 S3 업로드 먼저 실행
     }
 
-  // 1️⃣ 전송할 메시지 데이터 생성 (사용자 정보 포함)
-  const currentUserName =
-    localStorage.getItem("memberName") ||
-    JSON.parse(localStorage.getItem("user") || "{}").name ||
-    JSON.parse(localStorage.getItem("user") || "{}").memberName ||
-    "사용자";
-  const currentUserProfileImage =
-    localStorage.getItem("profileImageUrl") || null;
+    // 1️⃣ 전송할 메시지 데이터 생성 (사용자 정보 포함)
+    const currentUserName =
+      localStorage.getItem("memberName") ||
+      JSON.parse(localStorage.getItem("user") || "{}").name ||
+      JSON.parse(localStorage.getItem("user") || "{}").memberName ||
+      "사용자";
+    const currentUserProfileImage =
+      localStorage.getItem("profileImageUrl") || null;
 
-  // ✅ MessageType enum 기반 메시지 타입 동적 결정
-  // TEXT, FILE, REPLY
-  let messageType = "TEXT";
-  if (replyToMessage.value) {
-    messageType = "REPLY"; // 답장 메시지
-  } else if (attachedFiles.value.length > 0) {
-    messageType = "FILE";
-  }
-  // ✅ replyToSeq 먼저 안전하게 복사
-  const replySeq = replyToMessage.value?.id || null;
+    // ✅ MessageType enum 기반 메시지 타입 동적 결정
+    // TEXT, FILE, REPLY
+    let messageType = "TEXT";
+    if (replyToMessage.value) {
+      messageType = "REPLY"; // 답장 메시지
+    } else if (attachedFiles.value.length > 0) {
+      messageType = "FILE";
+    }
+    // ✅ replyToSeq 먼저 안전하게 복사
+    const replySeq = replyToMessage.value?.id || null;
 
-  const message = {
-    senderSeq: memberSeq.value,
-    senderName: currentUserName,
-    senderProfileImageUrl: currentUserProfileImage,
-    messageType: messageType, // ✅ MessageType enum 값
-    chatMessageText: newMessage.value,
-    chatMessageFileUrls: uploadedUrls.join(","), // 🔹 S3 URL 문자열로 전달
-    replyToSeq: replySeq, // ✅ 지역 변수 사용
-  };
+    const message = {
+      senderSeq: memberSeq.value,
+      senderName: currentUserName,
+      senderProfileImageUrl: currentUserProfileImage,
+      messageType: messageType, // ✅ MessageType enum 값
+      chatMessageText: newMessage.value,
+      chatMessageFileUrls: uploadedUrls.join(","), // 🔹 S3 URL 문자열로 전달
+      replyToSeq: replySeq, // ✅ 지역 변수 사용
+    };
 
-  // 2️⃣ 즉시 화면에 표시 (로컬 메시지)
-  const localMessage = {
-    id: `temp_${Date.now()}`, // ✅ 임시 ID 사용 (백엔드에서 실제 ID로 업데이트됨)
-    user: currentUserName,
-    content: newMessage.value,
-    time: new Date().toLocaleTimeString("ko-KR", {
-      hour: "2-digit",
-      minute: "2-digit",
-    }),
-    avatar: currentUserName.charAt(0),
-    profileImageUrl: currentUserProfileImage,
-    senderSeq: memberSeq.value,
-    isOwn: true,
-    unread: 0,
-    files: uploadedUrls.map((url) => ({
-      name: url.split("/").pop(),
-      url,
-      type: "file",
-    })),
-    messageType: messageType, // ✅ 메시지 타입 추가
-    replyToSeq: replyToMessage.value?.id || null, // ✅ 답장 대상 메시지 ID 추가
-  };
-  messages.value.push(localMessage);
-  scrollToBottom();
+    // 2️⃣ 즉시 화면에 표시 (로컬 메시지)
+    const localMessage = {
+      id: `temp_${Date.now()}`, // ✅ 임시 ID 사용 (백엔드에서 실제 ID로 업데이트됨)
+      user: currentUserName,
+      content: newMessage.value,
+      time: new Date().toLocaleTimeString("ko-KR", {
+        hour: "2-digit",
+        minute: "2-digit",
+      }),
+      avatar: currentUserName.charAt(0),
+      profileImageUrl: currentUserProfileImage,
+      senderSeq: memberSeq.value,
+      isOwn: true,
+      unread: 0,
+      files: uploadedUrls.map((url) => ({
+        name: url.split("/").pop(),
+        url,
+        type: "file",
+      })),
+      messageType: messageType, // ✅ 메시지 타입 추가
+      replyToSeq: replyToMessage.value?.id || null, // ✅ 답장 대상 메시지 ID 추가
+    };
+    messages.value.push(localMessage);
+    scrollToBottom();
 
-  console.log("📤 보내는 메시지:", message);
+    console.log("📤 보내는 메시지:", message);
 
-  // 3️⃣ WebSocket 전송
-  console.log("📤 메시지 전송 시도...");
-  console.log("🔍 전송할 채널 Seq:", channelSeq.value);
-  console.log("🔍 전송 경로:", `/publish/${channelSeq.value}`);
-  console.log("🔍 메시지 내용:", message);
+    // 3️⃣ WebSocket 전송
+    console.log("📤 메시지 전송 시도...");
+    console.log("🔍 전송할 채널 Seq:", channelSeq.value);
+    console.log("🔍 전송 경로:", `/publish/${channelSeq.value}`);
+    console.log("🔍 메시지 내용:", message);
 
-  stompClient.value.send(
-    `/publish/${channelSeq.value}`,
-    JSON.stringify(message),
-    { Authorization: `Bearer ${token.value}` }
-  );
+    stompClient.value.send(
+      `/publish/${channelSeq.value}`,
+      JSON.stringify(message),
+      { Authorization: `Bearer ${token.value}` }
+    );
 
-  // ✅ 전송 직후 타이핑 종료 브로드캐스트
-  try {
-    sendTypingStopEvent();
-  } catch (e) {
-    console.warn("타이핑 종료 이벤트 전송 실패", e);
-  }
+    // ✅ 전송 직후 타이핑 종료 브로드캐스트
+    try {
+      sendTypingStopEvent();
+    } catch (e) {
+      console.warn("타이핑 종료 이벤트 전송 실패", e);
+    }
 
-  // 로컬 상태도 종료
-  isTyping.value = false;
+    // 로컬 상태도 종료
+    isTyping.value = false;
 
-  // 4️⃣ 입력창 초기화
-  newMessage.value = "";
-  attachedFiles.value = [];
-  showAttachmentMenu.value = false;
+    // 4️⃣ 입력창 초기화
+    newMessage.value = "";
+    attachedFiles.value = [];
+    showAttachmentMenu.value = false;
 
-  // 답장 상태 초기화
-  if (replyToMessage.value) {
-    replyToMessage.value = null;
-    showReplyInput.value = false;
-  }
+    // 답장 상태 초기화
+    if (replyToMessage.value) {
+      replyToMessage.value = null;
+      showReplyInput.value = false;
+    }
 
     scrollToBottom();
   } finally {
@@ -750,6 +802,14 @@ const loadMoreMessages = async (lastId = null) => {
 const loadMessagesAfterLastRead = async () => {
   if (isLoadingMessages.value) return [];
 
+  // ✅ channelSeq 유효성 검사 추가
+  if (!channelSeq.value || isNaN(channelSeq.value) || channelSeq.value <= 0) {
+    console.error("❌ 유효하지 않은 channelSeq:", channelSeq.value);
+    lastReadMessageSeq.value = null;
+    isLoadingMessages.value = false;
+    return [];
+  }
+
   isLoadingMessages.value = true;
 
   try {
@@ -825,6 +885,15 @@ const loadMessagesAfterLastRead = async () => {
     return formatted;
   } catch (e) {
     console.error("❌ 새 메시지 로드 실패:", e);
+    console.error("❌ 에러 상세:", e.response?.data || e.message);
+
+    // ✅ 404 또는 500 에러인 경우에도 이전 메시지는 로드해야 함
+    if (e.response?.status === 404) {
+      console.warn(
+        "⚠️ 채널 멤버를 찾을 수 없습니다. 이전 메시지는 로드합니다."
+      );
+    }
+
     lastReadMessageSeq.value = null;
     isLoadingMessages.value = false;
     return [];
@@ -834,12 +903,12 @@ const loadMessagesAfterLastRead = async () => {
 // 채널 변경 시 WebSocket 재연결
 const changeChannel = async (channelId) => {
   sendTypingStopEvent();
-  
+
   if (currentChannel.value === channelId) return;
 
   console.log("🔄 채널 변경:", currentChannel.value, "→", channelId);
   console.log("🔍 새로운 채널 Seq:", channelId);
-  
+
   // ✅ channelSeq 유효성 검사
   const parsedChannelSeq = parseInt(channelId);
   if (isNaN(parsedChannelSeq) || parsedChannelSeq <= 0) {
@@ -878,50 +947,63 @@ const changeChannel = async (channelId) => {
   console.log("✅ 채널 변경 완료 - 현재 채널 Seq:", channelSeq.value);
   console.log("🔍 channelSeq 타입:", typeof channelSeq.value);
 
-  // ✅ 1단계: 마지막 읽은 이후의 새 메시지 로드
-  const newMessages = await loadMessagesAfterLastRead();
+  try {
+    // ✅ 1단계: 마지막 읽은 이후의 새 메시지 로드
+    const newMessages = await loadMessagesAfterLastRead();
 
-  // ✅ 2단계: 재접속 여부에 따른 처리
-  if (newMessages.length > 0 && lastReadMessageSeq.value) {
-    // 🔄 재접속: 새 메시지 표시 및 구분선으로 스크롤
-    messages.value = newMessages;
+    // ✅ 2단계: 재접속 여부에 따른 처리
+    if (newMessages.length > 0 && lastReadMessageSeq.value) {
+      // 🔄 재접속: 새 메시지 표시 및 구분선으로 스크롤
+      messages.value = newMessages;
 
-    // DOM 업데이트 대기
-    await new Promise((resolve) => setTimeout(resolve, 50));
+      // DOM 업데이트 대기
+      await new Promise((resolve) => setTimeout(resolve, 50));
 
-    // 구분선(새 메시지 시작점)이 상단에 오도록 스크롤
-    const container = document.querySelector(".messages-container");
-    if (container) {
-      const firstNewMessage = document.querySelector(
-        `[data-message-id="${lastReadMessageSeq.value}"]`
-      );
-      if (firstNewMessage) {
-        // 구분선이 메시지 위에 있으므로, 메시지의 이전 형제 요소를 찾아서 스크롤
-        const divider = firstNewMessage.previousElementSibling;
-        if (divider && divider.classList.contains("message-divider")) {
-          // 구분선으로 스크롤
-          divider.scrollIntoView({ behavior: "instant", block: "start" });
-          console.log("📍 구분선 위치로 스크롤 완료 (상단)");
-        } else {
-          // 구분선이 없으면 메시지 상단으로 스크롤
-          firstNewMessage.scrollIntoView({
-            behavior: "instant",
-            block: "start",
-          });
-          console.log("📍 새 메시지 위치로 스크롤 완료");
+      // 구분선(새 메시지 시작점)이 상단에 오도록 스크롤
+      const container = document.querySelector(".messages-container");
+      if (container) {
+        const firstNewMessage = document.querySelector(
+          `[data-message-id="${lastReadMessageSeq.value}"]`
+        );
+        if (firstNewMessage) {
+          // 구분선이 메시지 위에 있으므로, 메시지의 이전 형제 요소를 찾아서 스크롤
+          const divider = firstNewMessage.previousElementSibling;
+          if (divider && divider.classList.contains("message-divider")) {
+            // 구분선으로 스크롤
+            divider.scrollIntoView({ behavior: "instant", block: "start" });
+            console.log("📍 구분선 위치로 스크롤 완료 (상단)");
+          } else {
+            // 구분선이 없으면 메시지 상단으로 스크롤
+            firstNewMessage.scrollIntoView({
+              behavior: "instant",
+              block: "start",
+            });
+            console.log("📍 새 메시지 위치로 스크롤 완료");
+          }
         }
       }
+    } else {
+      // 🆕 최초 접속: 모든 메시지 로드 후 맨 아래로 스크롤
+      console.log("🆕 최초 접속 감지 - 모든 메시지 로드");
     }
-  } else {
-    // 🆕 최초 접속: 모든 메시지 로드 후 맨 아래로 스크롤
-    console.log("🆕 최초 접속 감지 - 모든 메시지 로드");
+  } catch (error) {
+    console.error("❌ loadMessagesAfterLastRead 실패:", error);
+    // 에러가 발생해도 이전 메시지는 로드해야 함
+    lastReadMessageSeq.value = null;
   }
 
   // ✅ 3단계: 이전 메시지 로드
   // 재접속 시(lastReadMessageSeq.value가 있으면): 구분선 이전의 메시지만 로드
   // 최초 접속 시(null): 최신 메시지 로드
   const lastId = lastReadMessageSeq.value || null;
-  await loadMoreMessages(lastId);
+  try {
+    await loadMoreMessages(lastId);
+    console.log("✅ 이전 메시지 로드 완료");
+  } catch (error) {
+    console.error("❌ loadMoreMessages 실패:", error);
+    // 에러 발생 시에도 사용자에게 알림
+    alert("메시지를 불러오는 중 오류가 발생했습니다.");
+  }
 
   // 새 채널로 연결
   connectWebsocket();
@@ -1155,7 +1237,7 @@ const getChannelMembers = () => {
       const channel = workspaceMemberStore.chatChannels?.find(
         (c) => Number(c.channelSeq) === Number(channelSeq.value)
       );
-      
+
       if (channel?.channelMemberList && channel.channelMemberList.length > 0) {
         mentionList.value = channel.channelMemberList
           .map((m) => ({
@@ -1164,12 +1246,12 @@ const getChannelMembers = () => {
             profileImage: m.memberProfileUrl || null,
           }))
           .filter((member) => Number(member.id) !== Number(memberSeq.value));
-        
+
         console.log("✅ 프로젝트 채널 멤버 목록:", mentionList.value);
         return;
       }
     }
-    
+
     // 개인 워크스페이스: 1:1 채팅이므로 상대방만 멘션 가능
     // directMessages에서 현재 channelSeq에 해당하는 채널 찾기
     if (props.workspaceType === "personal") {
@@ -1220,8 +1302,8 @@ const handleMessageInput = (event) => {
   // ✅ 타이핑 상태 업데이트
   const hasContent = value.length > 0;
   isTyping.value = hasContent;
-  
-// ✅ 입력 내용에 따라 타이핑 시작/종료 이벤트 전송
+
+  // ✅ 입력 내용에 따라 타이핑 시작/종료 이벤트 전송
   if (hasContent && channelSeq.value && memberSeq.value) {
     // 입력 내용이 있으면 → 타이핑 시작 이벤트 전송
     // 이미 인터벌이 실행 중이면 스킵
@@ -1319,7 +1401,7 @@ const getFileIcon = (fileType) => {
 const isImageUrl = (url) => {
   if (!url) return false;
   try {
-    const lower = url.split('?')[0].toLowerCase();
+    const lower = url.split("?")[0].toLowerCase();
     return /(\.png|\.jpg|\.jpeg|\.gif|\.webp|\.bmp|\.svg)$/.test(lower);
   } catch (e) {
     return false;
@@ -1408,7 +1490,7 @@ const sendTypingStartEvent = () => {
         channelSeq: channelSeq.value,
         senderSeq: memberSeq.value,
         senderName: currentUserName,
-        typing: true
+        typing: true,
       };
 
       stompClient.value.send(
@@ -1463,7 +1545,7 @@ const sendTypingStopEvent = () => {
     channelSeq: channelSeq.value,
     senderSeq: memberSeq.value,
     senderName: currentUserName,
-    typing: false
+    typing: false,
   };
 
   // 6. WebSocket 전송
@@ -1486,31 +1568,35 @@ const shouldShowDivider = (message, index) => {
 // 1:1 채팅 상대방 정보 가져오기 (필요시 API 호출)
 const loadChatUserInfo = async () => {
   if (!isPersonalChat.value || !props.selectedChannel) return;
-  
+
   try {
     // TODO: 1:1 채팅 상대방 정보 API 호출
     // const res = await getIndividualChatUserInfo(props.selectedChannel);
     // chatUserInfo.value = res.data;
-    
+
     // 임시 데이터 (실제로는 API에서 가져와야 함)
     chatUserInfo.value = {
-      name: '사용자',
-      avatar: '?',
-      email: '-',
-      phone: '-',
-      status: '-',
+      name: "사용자",
+      avatar: "?",
+      email: "-",
+      phone: "-",
+      status: "-",
     };
   } catch (e) {
-    console.error('1:1 채팅 사용자 정보 로드 실패:', e);
+    console.error("1:1 채팅 사용자 정보 로드 실패:", e);
   }
 };
 
 // selectedChannel 변경 시 사용자 정보 로드
-watch(() => props.selectedChannel, () => {
-  if (isPersonalChat.value) {
-    loadChatUserInfo();
-  }
-}, { immediate: true });
+watch(
+  () => props.selectedChannel,
+  () => {
+    if (isPersonalChat.value) {
+      loadChatUserInfo();
+    }
+  },
+  { immediate: true }
+);
 
 // 이벤트 리스너 등록/해제
 onMounted(async () => {
@@ -1559,7 +1645,7 @@ onMounted(async () => {
   console.log("🔍 route.params:", route.params);
   // ✅ 초기 채널 설정
   let initialChannel;
-  
+
   if (props.workspaceType === "personal") {
     // 개인 워크스페이스: props.selectedChannel을 channelSeq로 사용
     initialChannel = urlChannelId || props.selectedChannel;
@@ -1568,7 +1654,7 @@ onMounted(async () => {
       selectedChannel: props.selectedChannel,
       initialChannel,
     });
-    
+
     if (!initialChannel) {
       console.warn("⚠️ 개인 워크스페이스: 채널이 선택되지 않았습니다.");
       return;
@@ -1577,7 +1663,7 @@ onMounted(async () => {
     // 프로젝트 워크스페이스: URL > props > 첫번째 채널 순서
     initialChannel =
       urlChannelId || props.selectedChannel || channels.value[0]?.id;
-    
+
     if (!initialChannel) {
       console.warn("⚠️ 프로젝트 워크스페이스: 채널이 없습니다.");
       return;
@@ -1587,15 +1673,15 @@ onMounted(async () => {
   // ✅ 채널이 있으면 초기화 진행
   currentChannel.value = initialChannel;
   const parsedChannelSeq = parseInt(initialChannel);
-  
+
   // channelSeq 유효성 검사
   if (isNaN(parsedChannelSeq) || parsedChannelSeq <= 0) {
     console.error("❌ 유효하지 않은 channelSeq:", initialChannel);
     return;
   }
-  
+
   channelSeq.value = parsedChannelSeq;
-  
+
   console.log("🔍 최초 채널 선택 완료:", {
     urlChannelId,
     selectedChannel: props.selectedChannel,
@@ -1610,10 +1696,10 @@ onMounted(async () => {
   // ✅ memberSeq와 channelSeq가 유효할 때만 채널 로드
   if (memberSeq.value > 0 && currentChannel.value && channelSeq.value > 0) {
     hasLoadedInitialChannel.value = true;
-    
+
     try {
       console.log("📥 메시지 로드 시작...");
-      
+
       // ✅ 1. 마지막 읽은 이후의 새 메시지 로드 시도
       const newMessages = await loadMessagesAfterLastRead();
 
@@ -1652,18 +1738,16 @@ onMounted(async () => {
       await loadMoreMessages(lastId);
 
       console.log("✅ 메시지 로드 완료");
-      
     } catch (error) {
       console.error("❌ 채널 로드 중 오류:", error);
     }
-    
+
     // ✅ 4. WebSocket 연결
     console.log("🔌 WebSocket 연결 시작...");
     console.log("- channelSeq:", channelSeq.value);
     console.log("- token:", token.value ? "있음" : "없음");
     console.log("- memberSeq:", memberSeq.value);
     connectWebsocket();
-    
   } else {
     console.error("❌ memberSeq 또는 채널이 유효하지 않습니다.", {
       memberSeq: memberSeq.value,
@@ -1707,7 +1791,7 @@ watch(
 onUnmounted(() => {
   emitter.off("select-chat-channel", handleSubChannelSelect);
   window.removeEventListener("click", closeContextMenu);
-  
+
   // ✅ 컴포넌트 종료 시 타이핑 종료 브로드캐스트
   try {
     if (isTyping.value || typingInterval) {
@@ -1717,13 +1801,13 @@ onUnmounted(() => {
   } catch (e) {
     console.warn("타이핑 종료 이벤트 전송 실패", e);
   }
-  
+
   disconnectWebsocket();
   const container = document.querySelector(".messages-container");
   if (container) {
     container.removeEventListener("scroll", handleScroll);
   }
-  
+
   // ✅ 타이핑 인터벌 정리
   if (typingInterval) {
     clearInterval(typingInterval);
@@ -1734,8 +1818,6 @@ onUnmounted(() => {
     typingTimeout = null;
   }
 });
-
-
 </script>
 
 <template>
@@ -1846,10 +1928,7 @@ onUnmounted(() => {
                         }}
                       </v-icon>
                       <span class="reply-preview-user">
-                        {{
-                          getReplyToMessage(message.replyToSeq)?.user ||
-                          " "
-                        }}
+                        {{ getReplyToMessage(message.replyToSeq)?.user || " " }}
                       </span>
                     </div>
                     <div
@@ -1894,7 +1973,11 @@ onUnmounted(() => {
                             rel="noopener noreferrer"
                             class="image-thumb-link"
                           >
-                            <img :src="file.url" :alt="file.name" class="image-thumb" />
+                            <img
+                              :src="file.url"
+                              :alt="file.name"
+                              class="image-thumb"
+                            />
                           </a>
                         </template>
                         <template v-else>
@@ -1936,7 +2019,9 @@ onUnmounted(() => {
           <span></span>
           <span></span>
         </div>
-        <span class="typing-text">{{ typingUserName }}님이 입력 중입니다...</span>
+        <span class="typing-text"
+          >{{ typingUserName }}님이 입력 중입니다...</span
+        >
       </div>
 
       <!-- 메시지 입력 -->
@@ -2078,7 +2163,9 @@ onUnmounted(() => {
               icon
               class="send-btn"
               @click="sendMessage"
-              :disabled="isSending || (!newMessage.trim() && attachedFiles.length === 0)"
+              :disabled="
+                isSending || (!newMessage.trim() && attachedFiles.length === 0)
+              "
             >
               <v-icon>mdi-send</v-icon>
             </v-btn>
@@ -2188,9 +2275,9 @@ onUnmounted(() => {
 
       <div class="user-profile">
         <v-avatar size="80" color="primary" class="user-avatar">
-          {{ chatUserInfo.avatar || '?' }}
+          {{ chatUserInfo.avatar || "?" }}
         </v-avatar>
-        <div class="user-name">{{ chatUserInfo.name || '사용자' }}</div>
+        <div class="user-name">{{ chatUserInfo.name || "사용자" }}</div>
         <div class="user-status">
           <v-chip size="small" color="success">
             <v-icon start>mdi-circle</v-icon>
@@ -2204,18 +2291,18 @@ onUnmounted(() => {
           <h4>연락처</h4>
           <div class="detail-item">
             <v-icon>mdi-email</v-icon>
-            <span>{{ chatUserInfo.email || '-' }}</span>
+            <span>{{ chatUserInfo.email || "-" }}</span>
           </div>
           <div class="detail-item">
             <v-icon>mdi-phone</v-icon>
-            <span>{{ chatUserInfo.phone || '-' }}</span>
+            <span>{{ chatUserInfo.phone || "-" }}</span>
           </div>
         </div>
 
         <div class="detail-section">
           <h4>상태 메시지</h4>
           <p class="status-message">
-            {{ chatUserInfo.status || '-' }}
+            {{ chatUserInfo.status || "-" }}
           </p>
         </div>
 
@@ -3196,7 +3283,7 @@ onUnmounted(() => {
   object-fit: cover;
   display: block;
   border-radius: 8px;
-  box-shadow: 0 1px 4px rgba(0,0,0,0.12);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.12);
 }
 
 .message-file-item:last-child {

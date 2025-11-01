@@ -19,7 +19,7 @@ import { useWorkspaceStore } from '@/store/workspaceStore'
 import { useWorkspaceMemberStore } from '@/store/workspaceMemberStore'
 import { Authority } from '@/models/workspace/WorkspaceModels'
 import { emitter } from "@/eventBus"; // 채팅 채널 변경 이벤트 버스
-import { getIndividualChatChannels } from "@/api/chat/chatApi"; // 1:1 채팅 목록 조회 API
+import { getIndividualChatChannels, leaveChannel } from "@/api/chat/chatApi"; // 1:1 채팅 관련 API
 
 const router = useRouter()
 
@@ -340,7 +340,7 @@ const leaveDirectMessage = async () => {
     console.log("✅ 1:1 채팅방 나가기 성공");
 
   // ✅ 현재 채팅방이면 먼저 WebSocket 해제를 위해 채널 변경 이벤트 전달
-  if (currentChannel.value === channelSeq.toString()) {
+  if (props.currentChannel === channelSeq.toString()) {
     // Chat.vue에 채널 삭제 이벤트 전달 (WebSocket 해제를 위해)
     emitter.emit("select-chat-channel", { 
       parentId: "chat", 
@@ -1528,7 +1528,7 @@ const getStatusColor = (status) => {
       </v-btn>
     </div>
   </div>
-  
+
   <!-- ✅ 1:1 채팅 컨텍스트 메뉴 -->
   <div
     v-if="showDmContextMenu && selectedDm"
