@@ -473,11 +473,13 @@ const handleNotificationClick = async (notification) => {
     }
 
     if (type === 'alarm-project') {
-      // 워크스페이스 초대 → 해당 워크스페이스 대시보드로 이동
+      // 워크스페이스 초대 → 목록 최신화 후 해당 워크스페이스 대시보드로 이동
       const workSpaceSeq = data.workSpaceSeq || notification.workSpaceSeq
       if (workSpaceSeq) {
-        const workspaceId = `workspace_${workSpaceSeq}`
-        router.push(`/workspaces/${workspaceId}/dashboard`)
+        try {
+          await workspaceStore.loadMyWorkspaces()
+        } catch {}
+        await router.push(`/workspaces/${workSpaceSeq}/dashboard`)
       }
       return
     }
@@ -2215,7 +2217,20 @@ onMounted(() => {
             <div v-if="notification.priority" class="priority-badge">
               {{ getPriorityText(notification.priority) }}
             </div>
-            <div v-if="notification.type === 'alarm-friend'" class="friend-actions">
+            <div
+              v-if="
+                !notification.read &&
+                (notification.type === 'alarm-friend' || /friend/i.test(notification.type || '')) &&
+                (
+                  notification.data?.subType === 'FRIEND_REQUEST' ||
+                  /요청/i.test(notification.message || '') ||
+                  /request/i.test(notification.type || '')
+                ) &&
+                !(/accept|accepted|approve|approved|수락|승인/i.test(notification.data?.subType || '')) &&
+                !(/수락|승인|accepted|approve/i.test(notification.message || ''))
+              "
+              class="friend-actions"
+            >
               <v-btn
                 size="small"
                 color="primary"
@@ -3547,9 +3562,11 @@ onMounted(() => {
 }
 
 .mark-all-button {
-  width: 100% !important;
+  width: auto !important;
+  min-width: 0 !important;
   text-transform: none !important;
   font-weight: 500 !important;
+  padding-inline: 8px !important;
 }
 
 /* 프로필 메뉴 */

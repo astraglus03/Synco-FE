@@ -148,6 +148,7 @@
 <script setup>
 import { ref } from 'vue'
 import { doLogin } from '@/api/member/auth'
+import { decodeJWT } from '@/utils/api'
 import { useAuthStore } from '@/store/authStore'
 import googleLogo from '@/assets/images/social/google.png'
 import kakaoLogo from '@/assets/images/social/kakao.png'
@@ -196,8 +197,15 @@ const handleLogin = async () => {
     
     const response = await doLogin(loginData)
     
-    // 토큰 저장
+    // 토큰 저장 및 memberSeq 설정
     authStore.setAccessToken(response.accessToken)
+    const payload = decodeJWT(response.accessToken)
+    if (payload?.sub) {
+      const memberSeq = parseInt(payload.sub, 10)
+      if (!Number.isNaN(memberSeq)) {
+        authStore.setMemberSeq(memberSeq)
+      }
+    }
     
     // 자동 로그인 설정
     if (formData.value.rememberMe) {

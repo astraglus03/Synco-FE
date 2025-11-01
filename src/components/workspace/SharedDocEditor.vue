@@ -364,7 +364,12 @@ const goBack = () => {
   // 항상 드라이브 페이지로 이동
   const workspace = workspaceStore.workspaces.find(w => w.id === workspaceStore.currentWorkspace);
   if (workspace) {
-    router.push(`/workspaces/${workspace.id}/drive`);
+    const numericId = workspace.workSpaceSeq || (String(workspace.id).match(/_(\d+)$/)?.[1]);
+    if (numericId) {
+      router.push(`/workspaces/${numericId}/drive`);
+    } else {
+      router.push('/workspaces/personal/drive');
+    }
   } else {
     router.push('/workspaces/personal/drive');
   }

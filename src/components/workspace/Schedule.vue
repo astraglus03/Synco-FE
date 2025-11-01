@@ -732,17 +732,24 @@ const currentProjectId = computed(() => {
   return workspaceStore.currentWorkspaceInfo?.workSpaceSeq || null
 })
 
-// 업무 추가 버튼 표시 권한 확인 (일정관리 채널 권한 기준)
+// 업무 추가 버튼 표시 권한 확인 (일정관리 채널 권한 기준 + 워크스페이스 권한 폴백)
 const canCreateTask = computed(() => {
-  // 일정관리 채널의 멤버 목록에서 현재 사용자 찾기
   const scheduleMembers = workspaceMemberStore.scheduleChannels || []
   const currentUser = scheduleMembers.find(member => 
     Number(member.memberSeq) === Number(authStore.memberSeq)
   )
-  
   const authority = currentUser?.authority
-  return authority === 'SUPER' || authority === 'MANAGER'
+  if (authority) {
+    return authority === 'SUPER' || authority === 'MANAGER'
+  }
+  // 채널 권한이 아직 로드되지 않았거나 누락된 경우, 워크스페이스 권한으로 폴백
+  try {
+    return workspaceMemberStore.canCreateChannel(authStore)
+  } catch {
+    return false
+  }
 })
+
 
 // participant라도 자신이 담당자인 업무는 수정 가능
 const canEditTask = (task) => {

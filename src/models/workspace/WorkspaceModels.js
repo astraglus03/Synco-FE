@@ -242,6 +242,7 @@ export class WorkSpaceMemberInfoResDto {
 // ----------------------
 export const Authority = {
   SUPER: 'SUPER',
+  MANAGER: 'MANAGER',
   PARTICIPANT: 'PARTICIPANT'
 }
 

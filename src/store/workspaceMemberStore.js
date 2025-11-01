@@ -102,6 +102,7 @@ export const useWorkspaceMemberStore = defineStore('workspaceMember', () => {
 
     try {
       isLoading.value = true
+      console.log('[WorkspaceMemberStore] loadChannels called with workSpaceSeq:', workSpaceSeq)
 
       // 각 채널을 개별적으로 로드
       const [chatData, meetingData, scheduleData] = await Promise.allSettled([
@@ -114,6 +115,48 @@ export const useWorkspaceMemberStore = defineStore('workspaceMember', () => {
       chatChannels.value = chatData.status === 'fulfilled' ? chatData.value : []
       meetingChannels.value = meetingData.status === 'fulfilled' ? meetingData.value : []
       scheduleChannels.value = scheduleData.status === 'fulfilled' ? scheduleData.value : []
+
+      // 디버그 로그: 일정관리 멤버 로드 결과
+      try {
+        const count = Array.isArray(scheduleChannels.value) ? scheduleChannels.value.length : 0
+        const sample = scheduleChannels.value?.slice?.(0, 5)
+        console.log('[WorkspaceMemberStore] scheduleChannels loaded:', { count, sample })
+      } catch {}
+
+      // 디버그 로그: 채팅/회의 멤버 로드 결과
+      try {
+        const chatCount = Array.isArray(chatChannels.value) ? chatChannels.value.length : 0
+        const chatMemberCount = chatChannels.value?.[0]?.channelMemberList?.length || 0
+        console.log('[WorkspaceMemberStore] chatChannels loaded:', { channels: chatCount, firstChannelMembers: chatMemberCount, sample: chatChannels.value?.slice?.(0, 2) })
+      } catch {}
+      try {
+        const meetingCount = Array.isArray(meetingChannels.value) ? meetingChannels.value.length : 0
+        const meetingMemberCount = meetingChannels.value?.[0]?.channelMemberList?.length || 0
+        console.log('[WorkspaceMemberStore] meetingChannels loaded:', { channels: meetingCount, firstChannelMembers: meetingMemberCount, sample: meetingChannels.value?.slice?.(0, 2) })
+      } catch {}
+
+      // 안전 폴백: 일정 채널 멤버가 비어 있으면, 워크스페이스 멤버 목록으로 대체 (권한 확인/표시용)
+      try {
+        const seq = currentWorkspaceSeq.value || workSpaceSeq
+        if ((Array.isArray(scheduleChannels.value) && scheduleChannels.value.length === 0) && seq) {
+          const wsMembers = await getWorkspaceMembers(seq)
+          if (Array.isArray(wsMembers) && wsMembers.length > 0) {
+            // ChannelMemberResDto 형태에 맞춰 매핑
+            scheduleChannels.value = wsMembers.map(m => ({
+              memberSeq: m.memberSeq,
+              authority: m.authority,
+              memberName: m.name,
+              memberProfileUrl: m.profileImageUrl
+            }))
+            console.log('[WorkspaceMemberStore] scheduleChannels fallback from workspace members:', {
+              count: scheduleChannels.value.length,
+              sample: scheduleChannels.value.slice(0, 5)
+            })
+          }
+        }
+      } catch (e) {
+        console.warn('[WorkspaceMemberStore] scheduleChannels fallback failed:', e?.message || e)
+      }
 
     } catch (error) {
       console.error('채널 데이터 로드 실패:', error)
