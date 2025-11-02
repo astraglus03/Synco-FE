@@ -120,6 +120,13 @@ const currentChannel = ref("general");
 
 // 현재 채널 이름 가져오기
 const currentChannelName = computed(() => {
+  // 1:1 채팅일 때는 상대방 이름 표시
+  if (isPersonalChat.value && chatUserInfo.value) {
+    return chatUserInfo.value.name || "사용자";
+  }
+
+    
+  // 프로젝트 워크스페이스: 채널 이름 표시
   const channel = channels.value.find((c) => c.id === currentChannel.value);
   return channel ? channel.name : "채널";
 });
@@ -1873,7 +1880,8 @@ onUnmounted(() => {
       <!-- 채팅 헤더 -->
       <div class="chat-header">
         <div class="channel-info">
-          <v-icon>mdi-pound</v-icon>
+          <v-icon v-if="isPersonalChat">mdi-account</v-icon>
+          <v-icon v-else>mdi-pound</v-icon>
           <span class="channel-name">{{ currentChannelName }}</span>
         </div>
       </div>
@@ -3769,7 +3777,8 @@ onUnmounted(() => {
 }
 
 .user-header {
-  padding: 20px;
+  padding: 14.5px;
+  text-align: center;
   border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.1);
 }
 
@@ -3809,6 +3818,7 @@ onUnmounted(() => {
 
 .detail-section {
   margin-bottom: 24px;
+  text-align: center;
 }
 
 .detail-section h4 {
