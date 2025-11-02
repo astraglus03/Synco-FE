@@ -338,18 +338,17 @@
 
     <!-- 4. 하단 섹션 (2열 그리드) -->
     <v-row class="bottom-section">
-      <!-- 좌측: 마감일 & 마일스톤 -->
+      <!-- 좌측: 마감일 임박 업무 -->
         <v-col cols="12" md="6">
         <v-card class="deadline-card">
           <v-card-title class="section-title">
             <v-icon color="error" size="24">mdi-calendar-clock</v-icon>
-            <span>마감일 & 마일스톤</span>
+            <span>마감일 임박 업무</span>
           </v-card-title>
 
           <v-card-text>
             <!-- 마감일 임박 업무 -->
             <div class="deadlines-section">
-              <h5>마감일 임박 업무 (5일 이내)</h5>
               <div v-if="upcomingDeadlines.length > 0" class="scrollable-list">
               <div
                 v-for="task in upcomingDeadlines"
@@ -357,18 +356,19 @@
                 class="deadline-item clickable"
                 @click="handleTaskClick(task.id)"
               >
-                <div class="deadline-marker" :style="{ backgroundColor: getPriorityColor(task.priority) }"></div>
+                <div class="deadline-marker" :style="{ backgroundColor: getAssigneeTaskMarkerColor(task.status, task.isOverdue) }"></div>
                 <div class="deadline-content">
                   <div class="deadline-header">
                     <span class="deadline-title">{{ task.title }}</span>
                       <div class="deadline-chips">
-                    <v-chip
-                      :color="getPriorityColor(task.priority)"
-                      size="x-small"
-                      class="priority-chip"
-                    >
-                      {{ getPriorityText(task.priority) }}
-                    </v-chip>
+                        <v-chip
+                          v-if="task.isOverdue && !isTaskCompleted(task.status)"
+                          color="error"
+                          size="x-small"
+                          class="overdue-chip"
+                        >
+                          기한이 지났습니다
+                        </v-chip>
                         <v-chip
                           :color="getMilestoneColor(task.status)"
                           size="x-small"
@@ -383,7 +383,7 @@
                         <v-icon size="small">mdi-account</v-icon>
                         {{ task.assignee }}
                       </span>
-                      <span class="remaining-time">
+                      <span class="remaining-time" :class="{ 'overdue': task.isOverdue }">
                         <v-icon size="small">mdi-clock-outline</v-icon>
                         {{ formatRemainingTime(task.endDate) }}
                       </span>
@@ -393,59 +393,7 @@
               </div>
               <div v-else class="empty-state">
                 <v-icon size="large" color="grey-lighten-1">mdi-calendar-check</v-icon>
-                <span class="empty-text">5일 이내 마감 업무가 없습니다</span>
-              </div>
-            </div>
-
-            <v-divider class="my-4" />
-
-            <!-- 다가오는 마일스톤 -->
-            <div class="milestones-section">
-              <h5>다가오는 마일스톤</h5>
-              <div v-if="upcomingMilestones.length > 0" class="scrollable-list">
-              <div
-                v-for="milestone in upcomingMilestones"
-                :key="milestone.id"
-                class="milestone-item clickable"
-                @click="handleTaskClick(milestone.id)"
-              >
-                  <div class="milestone-marker" :style="{ backgroundColor: getPriorityColor(milestone.priority) }"></div>
-                <div class="milestone-content">
-                    <div class="milestone-header">
-                  <div class="milestone-title">{{ milestone.title }}</div>
-                      <div class="milestone-chips">
-                        <v-chip
-                          :color="getPriorityColor(milestone.priority)"
-                          size="x-small"
-                          class="priority-chip"
-                        >
-                          {{ getPriorityText(milestone.priority) }}
-                        </v-chip>
-                    <v-chip
-                      :color="getMilestoneColor(milestone.status)"
-                          size="x-small"
-                          class="status-chip"
-                    >
-                      {{ getMilestoneStatusText(milestone.status) }}
-                    </v-chip>
-                  </div>
-                </div>
-                    <div class="milestone-footer">
-                      <span class="milestone-assignee">
-                        <v-icon size="small">mdi-account</v-icon>
-                        {{ milestone.assignee }}
-                      </span>
-                      <span class="milestone-date">
-                        <v-icon size="small">mdi-calendar</v-icon>
-                        {{ milestone.date }}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-              <div v-else class="empty-state">
-                <v-icon size="large" color="grey-lighten-1">mdi-flag-outline</v-icon>
-                <span class="empty-text">예정된 마일스톤이 없습니다</span>
+                <span class="empty-text">마감일 임박 업무가 없습니다</span>
               </div>
             </div>
           </v-card-text>
@@ -544,18 +492,19 @@
                 class="assignee-task-item clickable"
                 @click="handleTaskClick(task.id)"
               >
-                <div class="task-marker" :style="{ backgroundColor: getPriorityColor(task.priority) }"></div>
+                <div class="task-marker" :style="{ backgroundColor: getAssigneeTaskMarkerColor(task.status, task.isOverdue) }"></div>
                 <div class="task-content">
                   <div class="task-header">
                     <span class="task-title">{{ task.title }}</span>
                     <div class="task-chips">
-                    <v-chip
-                      :color="getPriorityColor(task.priority)"
-                      size="x-small"
-                      class="priority-chip"
-                    >
-                      {{ getPriorityText(task.priority) }}
-                    </v-chip>
+                        <v-chip
+                          v-if="task.isOverdue && !isTaskCompleted(task.status)"
+                          color="error"
+                          size="x-small"
+                          class="overdue-chip"
+                        >
+                          기한이 지났습니다
+                        </v-chip>
                     <v-chip
                         :color="getMilestoneColor(task.status)"
                       size="x-small"
@@ -732,7 +681,7 @@ const showPagination = computed(() => {
   return false
 })
 
-// 마감일 임박 업무 (5일 이내)
+// 마감일 임박 업무 (5일 이내, 완료 제외, 할일/진행중만)
 const upcomingDeadlines = computed(() => {
   if (!allTasks.value || allTasks.value.length === 0) return []
   
@@ -742,78 +691,63 @@ const upcomingDeadlines = computed(() => {
   return allTasks.value
     .filter(task => {
       if (!task.endDate) return false
+      
+      // 완료된 업무는 제외
+      const status = task.taskStatus || task.status || task.taskStatusDescription
+      if (status === 'COMPLETED' || status === '완료' || status === 'DONE' || status === 'FINISHED') {
+        return false
+      }
+      
+      // 할일/진행중 상태만 표시
+      const isActiveStatus = status === 'TODO' || status === '할일' || status === 'PENDING' ||
+                             status === 'IN_PROGRESS' || status === '진행중' || status === 'PROGRESS' || status === 'DOING'
+      if (!isActiveStatus) return false
+      
       const endDate = new Date(task.endDate)
       endDate.setHours(0, 0, 0, 0)
       const daysRemaining = Math.ceil((endDate - now) / (24 * 60 * 60 * 1000))
-      return daysRemaining >= 0 && daysRemaining <= 5 // 오늘부터 5일 이내
+      // 미래 기준 5일 후까지 (오늘 포함하여 0일~5일 후까지, 마감일 지난 것은 제외)
+      return daysRemaining >= 0 && daysRemaining <= 5
     })
-    .sort((a, b) => new Date(a.endDate) - new Date(b.endDate))
+    .sort((a, b) => {
+      // 마감일이 지난 업무를 먼저, 그 다음 날짜순
+      const aEndDate = new Date(a.endDate)
+      const bEndDate = new Date(b.endDate)
+      aEndDate.setHours(0, 0, 0, 0)
+      bEndDate.setHours(0, 0, 0, 0)
+      const aDays = Math.ceil((aEndDate - now) / (24 * 60 * 60 * 1000))
+      const bDays = Math.ceil((bEndDate - now) / (24 * 60 * 60 * 1000))
+      
+      // 둘 다 지났으면 날짜순 (빠른 순)
+      if (aDays < 0 && bDays < 0) {
+        return aEndDate - bEndDate
+      }
+      // 하나만 지났으면 지난 것이 먼저
+      if (aDays < 0) return -1
+      if (bDays < 0) return 1
+      // 둘 다 안 지났으면 날짜순 (빠른 순)
+      return aEndDate - bEndDate
+    })
     .slice(0, 10) // 최대 10개
     .map(task => {
       const endDate = new Date(task.endDate)
       endDate.setHours(0, 0, 0, 0)
       const daysRemaining = Math.ceil((endDate - now) / (24 * 60 * 60 * 1000))
-      
-      // 남은 일수에 따라 우선순위 자동 설정
-      let priority = 'high' // 기본값: 5일 이내
-      if (daysRemaining >= 14) {
-        priority = 'low' // 14일 이상
-      } else if (daysRemaining >= 10) {
-        priority = 'medium' // 10일 이상
-      }
+      const isOverdue = daysRemaining < 0
       
       return {
         id: task.taskSeq,
         title: task.taskTitle,
         endDate: task.endDate,
         assignee: getMemberName(task.picMemberSeq) || task.assigneeName || '미지정',
-        priority: priority,
         daysRemaining: daysRemaining,
+        isOverdue: isOverdue,
         boardId: task.boardId,
         status: task.taskStatus || task.status
       }
     })
 })
 
-// 다가오는 마일스톤 (오늘 기준 end_date가 있는 모든 업무)
-const upcomingMilestones = computed(() => {
-  if (!allTasks.value || allTasks.value.length === 0) return []
-  
-  const now = new Date()
-  now.setHours(0, 0, 0, 0)
-  
-  return allTasks.value
-    .filter(task => {
-      if (!task.endDate) return false
-      const endDate = new Date(task.endDate)
-      endDate.setHours(0, 0, 0, 0)
-      return endDate >= now // 오늘 포함 이후
-    })
-    .sort((a, b) => new Date(a.endDate) - new Date(b.endDate)) // end_date 빠른 순
-    .map(task => {
-      const endDate = new Date(task.endDate)
-      endDate.setHours(0, 0, 0, 0)
-      const daysRemaining = Math.ceil((endDate - now) / (24 * 60 * 60 * 1000))
-      
-      // 남은 일수에 따라 우선순위 자동 설정
-      let priority = 'high' // 기본값: 5일 미만
-      if (daysRemaining >= 14) {
-        priority = 'low' // 14일 이상
-      } else if (daysRemaining >= 10) {
-        priority = 'medium' // 10일 이상
-      }
-      
-      return {
-        id: task.taskSeq,
-        title: task.taskTitle,
-        date: task.endDate,
-        assignee: getMemberName(task.picMemberSeq) || task.assigneeName || '미지정',
-        status: task.taskStatus || task.status,
-        priority: priority,
-        daysRemaining: daysRemaining
-      }
-    })
-})
 
 
 // 담당자 옵션 (memberList에서 가져오기)
@@ -863,19 +797,15 @@ const filteredTasksByAssignee = computed(() => {
     })
   }
   
-  // 우선순위 및 날짜 정보 추가
+  // 날짜 정보 추가 및 기한 지남 여부 계산
   return filteredTasks
     .map(task => {
-      const endDate = new Date(task.endDate)
-      endDate.setHours(0, 0, 0, 0)
-      const daysRemaining = Math.ceil((endDate - now) / (24 * 60 * 60 * 1000))
-      
-      // 남은 일수에 따라 우선순위 자동 설정
-      let priority = 'high'
-      if (daysRemaining >= 14) {
-        priority = 'low'
-      } else if (daysRemaining >= 10) {
-        priority = 'medium'
+      const endDate = task.endDate ? new Date(task.endDate) : null
+      let isOverdue = false
+      if (endDate) {
+        endDate.setHours(0, 0, 0, 0)
+        const daysRemaining = Math.ceil((endDate - now) / (24 * 60 * 60 * 1000))
+        isOverdue = daysRemaining < 0
       }
       
       return {
@@ -883,11 +813,11 @@ const filteredTasksByAssignee = computed(() => {
         title: task.taskTitle,
         startDate: task.startDate || task.endDate, // startDate가 없으면 endDate 사용
         endDate: task.endDate,
-        priority: priority,
         progress: task.progress || 0,
         status: task.taskStatus || task.status,
         boardId: task.boardId,
-        assignee: getMemberName(task.picMemberSeq) || task.assigneeName || '미지정'
+        assignee: getMemberName(task.picMemberSeq) || task.assigneeName || '미지정',
+        isOverdue: isOverdue
       }
     })
     .sort((a, b) => new Date(a.endDate) - new Date(b.endDate)) // 마감일 빠른 순
@@ -1748,23 +1678,6 @@ const getPeriodColor = (status) => {
   return colors[status] || 'grey'
 }
 
-const getPriorityColor = (priority) => {
-  const colors = {
-    high: '#ef4444',      // 빨간색 (5일 미만)
-    medium: '#f4b64c',    // 노란색 (10일 이상)
-    low: '#4dc9a2'        // 초록색 (14일 이상)
-  }
-  return colors[priority] || '#6b7280'
-}
-
-const getPriorityText = (priority) => {
-  const texts = {
-    high: '높음',
-    medium: '보통',
-    low: '낮음'
-  }
-  return texts[priority] || priority
-}
 
 const getProgressColor = (progress) => {
   if (progress === 100) return 'success'
@@ -1810,6 +1723,37 @@ const getMilestoneStatusText = (status) => {
     'pending': '할일'
   }
   return texts[status] || status
+}
+
+// 업무 완료 여부 확인
+const isTaskCompleted = (status) => {
+  const statusValue = status || ''
+  return statusValue === 'COMPLETED' || statusValue === '완료' || statusValue === 'DONE' || statusValue === 'FINISHED' || statusValue === 'completed'
+}
+
+// 담당자별 업무 현황 마커 색상 (기한 만료 우선, 그 다음 상태)
+const getAssigneeTaskMarkerColor = (status, isOverdue) => {
+  // 완료된 업무는 기한 만료와 관계없이 녹색
+  const statusValue = status || ''
+  if (isTaskCompleted(status)) {
+    return '#22c55e' // 녹색
+  }
+  
+  // 기한 만료는 우선순위가 가장 높음 (빨간색)
+  if (isOverdue) {
+    return '#ef4444' // 빨간색
+  }
+  
+  // 상태에 따른 색상
+  if (statusValue === 'IN_PROGRESS' || statusValue === '진행중' || statusValue === 'PROGRESS' || statusValue === 'DOING' || statusValue === 'in-progress') {
+    return '#f59e0b' // 노란색
+  }
+  if (statusValue === 'TODO' || statusValue === '할일' || statusValue === 'PENDING' || statusValue === 'pending') {
+    return '#3b82f6' // 파란색
+  }
+  
+  // 기본값 (파란색)
+  return '#3b82f6'
 }
 
 const formatRemainingTime = (dateString) => {
@@ -2084,7 +2028,7 @@ watch(showTaskDetailModal, async (newVal, oldVal) => {
   // 모달이 열림 → 닫힘 상태로 변경될 때
   if (oldVal === true && newVal === false) {
     // 데이터 새로고침
-    await loadStats()
+    await loadDashboardStats()
     selectedTask.value = {}
   }
 })
@@ -2608,8 +2552,13 @@ watch(showTaskDetailModal, async (newVal, oldVal) => {
 }
 
 .remaining-time {
-  color: #ef4444;
+  color: #3b82f6;
   font-weight: 500;
+}
+
+.remaining-time.overdue {
+  color: #ef4444;
+  font-weight: 600;
 }
 
 .board-label {
