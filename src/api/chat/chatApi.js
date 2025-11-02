@@ -43,3 +43,13 @@ export const getChannelMembers = async (channelSeq) => {
   );
   return res; // List<IndividualChatUserResDto>
 };
+
+// ----------------------
+// 마지막 읽은 메시지 업데이트 API (채널 접속 시 사용)
+// ----------------------
+export const updateLastRead = async (channelSeq) => {
+  const res = await apiPost(
+    `/chat-service/chat/channels/${channelSeq}/read`
+  );
+  return res;
+};

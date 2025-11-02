@@ -10,7 +10,7 @@ import FileAttachmentModal from "./FileAttachmentModal.vue";
 import SockJS from "sockjs-client";
 import Stomp from "webstomp-client";
 import axios from "axios";
-import { getChannelMembers } from "@/api/chat/chatApi";
+import { getChannelMembers, updateLastRead } from "@/api/chat/chatApi";
 
 // ✅ 현재 사용자가 멘션된 메시지인지 확인
 const isMentionedMessage = (message) => {
@@ -378,6 +378,17 @@ const connectWebsocket = () => {
             if (!existingMessage && parsed.senderSeq !== memberSeq.value) {
               messages.value.push(formattedMessage);
               scrollToBottom();
+
+              // ✅ 1:1 채팅 목록의 unreadCount 실시간 업데이트를 위한 이벤트 발생
+              // 현재 채팅방이 아니면 unreadCount 증가
+              if (parsed.channelSeq && parsed.channelSeq !== channelSeq.value) {
+                emitter.emit('increment-direct-message-unread', {
+                  channelSeq: parsed.channelSeq
+                });
+              } else if (parsed.channelSeq === channelSeq.value) {
+                // 현재 채팅방이면 이미 읽은 것으로 간주하므로 이벤트 발생 안 함
+                // (채널 접속 시 이미 읽음 처리됨)
+              }
             }
           } catch (e) {
             console.error("메시지 파싱 실패:", e, message.body);
@@ -959,7 +970,17 @@ const changeChannel = async (channelId) => {
     // ✅ 1단계: 마지막 읽은 이후의 새 메시지 로드
     const newMessages = await loadMessagesAfterLastRead();
 
-    // ✅ 2단계: 재접속 여부에 따른 처리
+    // ✅ 2단계: 채널 접속 시 읽음 상태 업데이트 (최신 메시지로)
+    // 메시지 로드 후에 읽음 처리 (프로젝트/개인 워크스페이스 모두 동일)
+    try {
+      await updateLastRead(channelSeq.value);
+      console.log("✅ 읽음 상태 업데이트 완료");
+    } catch (error) {
+      console.warn("⚠️ 읽음 상태 업데이트 실패:", error);
+      // 읽음 상태 업데이트 실패해도 메시지 로드는 계속 진행
+    }
+
+    // ✅ 3단계: 재접속 여부에 따른 처리
     if (newMessages.length > 0 && lastReadMessageSeq.value) {
       // 🔄 재접속: 새 메시지 표시 및 구분선으로 스크롤
       messages.value = newMessages;
@@ -1756,7 +1777,15 @@ onMounted(async () => {
       // ✅ 1. 마지막 읽은 이후의 새 메시지 로드 시도
       const newMessages = await loadMessagesAfterLastRead();
 
-      // ✅ 2. 재접속 여부에 따른 처리
+      // ✅ 2. 채널 접속 시 읽음 상태 업데이트 (최신 메시지로)
+      try {
+        await updateLastRead(channelSeq.value);
+        console.log("✅ 읽음 상태 업데이트 완료");
+      } catch (error) {
+        console.warn("⚠️ 읽음 상태 업데이트 실패:", error);
+      }
+
+      // ✅ 3. 재접속 여부에 따른 처리
       if (newMessages.length > 0 && lastReadMessageSeq.value) {
         console.log("🔄 재접속 감지 - 새 메시지 있음");
         messages.value = newMessages;

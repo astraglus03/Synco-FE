@@ -778,6 +778,28 @@ watch(
   { deep: true, immediate: true }
 );
 
+// 1:1 채팅 목록에서 특정 채널의 unreadCount 증가
+const incrementDirectMessageUnread = (channelSeq) => {
+  const dm = directMessages.value.find(d => d.channelSeq === channelSeq);
+  if (dm) {
+    // ✅ 현재 채팅방이 아니면 unreadCount 증가
+    // props.currentChannel은 문자열이고, channelSeq는 숫자일 수 있으므로 타입 변환 필요
+    const currentChannelStr = props.currentChannel?.toString();
+    const channelSeqStr = channelSeq?.toString();
+    
+    console.log('🔍 비교:', { currentChannelStr, channelSeqStr, dm: dm.channelName });
+
+    if (currentChannelStr !== channelSeqStr) {
+      dm.unreadCount = (dm.unreadCount || 0) + 1;
+      console.log(`✅ ${dm.channelName}의 unreadCount 증가: ${dm.unreadCount}`);
+    } else {
+      console.log(`ℹ️ 현재 채팅방이므로 unreadCount 증가 안 함: ${dm.channelName}`);
+    }
+  } else {
+    console.warn(`⚠️ 채널을 찾을 수 없음: channelSeq=${channelSeq}`);
+  }
+};
+
 // 컴포넌트 마운트 시 채널 데이터 로드 (resize 리스너와 함께)
 onMounted(() => {
   console.log("🚀 onMounted 실행됨:", props.workspaceType);
@@ -805,6 +827,14 @@ onMounted(() => {
     }
   });
 
+  // ✅ 1:1 채팅 unreadCount 실시간 증가 이벤트 리스너 추가
+  emitter.on('increment-direct-message-unread', (data) => {
+    console.log('📨 1:1 채팅 unreadCount 증가 이벤트 수신:', data);
+    if (props.workspaceType === 'personal') {
+      incrementDirectMessageUnread(data.channelSeq);
+    }
+  });
+
   // 프로젝트 or 개인 워크스페이스 분기처리
   if (props.workspaceType === 'project') {
     loadChannels();
@@ -825,6 +855,7 @@ onUnmounted(() => {
 
   // 이벤트 리스너 제거
   emitter.off('refresh-direct-messages')
+  emitter.off('increment-direct-message-unread'); // ✅ 추가
 })
 
 // 워크스페이스 변경 시 채널 데이터 다시 로드
@@ -983,6 +1014,13 @@ const selectDirectMessage = (channelSeq) => {
   if (isNaN(parsedChannelSeq) || parsedChannelSeq <= 0) {
     console.error("❌ 유효하지 않은 channelSeq:", channelSeq);
     return;
+  }
+
+  // ✅ 채널 접속 시 unreadCount 초기화
+    const dm = directMessages.value.find(d => d.channelSeq === parsedChannelSeq);
+  if (dm) {
+    dm.unreadCount = 0;
+    console.log(`✅ ${dm.channelName}의 unreadCount 초기화`);
   }
 
   // 메인 채널을 'chat'으로 설정
