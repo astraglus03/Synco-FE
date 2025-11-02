@@ -1319,17 +1319,17 @@ const getStatusColor = (status) => {
 
           <div v-if="!isCollapsedView || workspaceType === 'personal'" class="dm-info">
             <div class="dm-name">{{ dm.channelName }}</div>
-            <div class="dm-last-message">
+            <!-- <div class="dm-last-message">
               {{ dm.isGroupChat ? "그룹 채팅" : "1:1 채팅" }}
-            </div>
+            </div> -->
           </div>
 
-          <div v-if="!isCollapsedView || workspaceType === 'personal'" class="dm-meta">
+          <!-- <div v-if="!isCollapsedView || workspaceType === 'personal'" class="dm-meta">
             <div class="dm-time">워크스페이스 #{{ dm.workspaceSeq }}</div>
             <div v-if="dm.unreadCount > 0" class="unread-badge">
               {{ dm.unreadCount }}
             </div>
-          </div>
+          </div> -->
         </div>
       </div>
     </div>

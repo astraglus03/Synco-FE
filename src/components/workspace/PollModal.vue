@@ -1,4 +1,4 @@
-<template>
+<!-- <template>
   <v-dialog v-model="isOpen" max-width="700px" @click:outside="closeModal">
     <v-card class="poll-modal">
       <v-card-title class="poll-header">
@@ -445,4 +445,4 @@ watch(isOpen, (newValue) => {
     width: 100%;
   }
 }
-</style>
+</style> -->

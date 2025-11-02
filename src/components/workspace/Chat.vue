@@ -5,7 +5,7 @@ import { useWorkspaceStore } from "@/store/workspaceStore";
 import { useWorkspaceMemberStore } from "@/store/workspaceMemberStore";
 import { emitter } from "@/eventBus";
 import { useRoute } from "vue-router";
-import PollModal from "./PollModal.vue";
+// import PollModal from "./PollModal.vue";
 import FileAttachmentModal from "./FileAttachmentModal.vue";
 import SockJS from "sockjs-client";
 import Stomp from "webstomp-client";
@@ -145,7 +145,7 @@ const otherTyping = ref(false);
 const typingUserName = ref("");
 
 // 모달 관련
-const showPollModal = ref(false);
+// const showPollModal = ref(false);
 const showFileModal = ref(false);
 const showFileLimitModal = ref(false);
 const fileLimitMessage = ref("");
@@ -1042,75 +1042,75 @@ const toggleAttachmentMenu = () => {
 };
 
 // 모달 관련 함수들
-const openPollModal = () => {
-  showPollModal.value = true;
-  showAttachmentMenu.value = false;
-};
+// const openPollModal = () => {
+//   showPollModal.value = true;
+//   showAttachmentMenu.value = false;
+// };
 
 const openFileModal = () => {
   showFileModal.value = true;
   showAttachmentMenu.value = false;
 };
 
-const handleCreatePoll = (pollData) => {
-  // 투표 메시지 생성
-  const currentUserName = localStorage.getItem("memberName") || "나";
-  const currentUserProfileImage =
-    localStorage.getItem("profileImageUrl") || null;
+// const handleCreatePoll = (pollData) => {
+//   // 투표 메시지 생성
+//   const currentUserName = localStorage.getItem("memberName") || "나";
+//   const currentUserProfileImage =
+//     localStorage.getItem("profileImageUrl") || null;
 
-  // ✅ WebSocket으로 투표 메시지 전송 (VOTE 타입)
-  const message = {
-    senderSeq: memberSeq.value,
-    senderName: currentUserName,
-    senderProfileImageUrl: currentUserProfileImage,
-    messageType: "VOTE", // ✅ 투표 메시지는 VOTE 타입
-    chatMessageText: `📊 **${pollData.title}**`,
-    chatMessageFileUrls: "",
-    replyToSeq: null,
-  };
+//   // ✅ WebSocket으로 투표 메시지 전송 (VOTE 타입)
+//   const message = {
+//     senderSeq: memberSeq.value,
+//     senderName: currentUserName,
+//     senderProfileImageUrl: currentUserProfileImage,
+//     messageType: "VOTE", // ✅ 투표 메시지는 VOTE 타입
+//     chatMessageText: `📊 **${pollData.title}**`,
+//     chatMessageFileUrls: "",
+//     replyToSeq: null,
+//   };
 
-  // 즉시 화면에 표시
-  const pollMessage = {
-    id: `temp_${Date.now()}`, // ✅ 임시 ID 사용
-    user: currentUserName,
-    content: `📊 **${pollData.title}**`,
-    time: new Date().toLocaleTimeString("ko-KR", {
-      hour: "2-digit",
-      minute: "2-digit",
-    }),
-    avatar: currentUserName.charAt(0),
-    profileImageUrl: currentUserProfileImage,
-    senderSeq: memberSeq.value,
-    isOwn: true,
-    type: "poll",
-    pollData: pollData,
-    messageType: "VOTE", // ✅ 투표 메시지 타입
-    replyToSeq: null, // ✅ 투표는 답장이 아님
-  };
+//   // 즉시 화면에 표시
+//   const pollMessage = {
+//     id: `temp_${Date.now()}`, // ✅ 임시 ID 사용
+//     user: currentUserName,
+//     content: `📊 **${pollData.title}**`,
+//     time: new Date().toLocaleTimeString("ko-KR", {
+//       hour: "2-digit",
+//       minute: "2-digit",
+//     }),
+//     avatar: currentUserName.charAt(0),
+//     profileImageUrl: currentUserProfileImage,
+//     senderSeq: memberSeq.value,
+//     isOwn: true,
+//     type: "poll",
+//     pollData: pollData,
+//     messageType: "VOTE", // ✅ 투표 메시지 타입
+//     replyToSeq: null, // ✅ 투표는 답장이 아님
+//   };
 
-  messages.value.push(pollMessage);
+//   messages.value.push(pollMessage);
 
-  // WebSocket으로 전송
-  if (stompClient.value && stompClient.value.connected) {
-    stompClient.value.send(
-      `/publish/${channelSeq.value}`,
-      JSON.stringify(message),
-      { Authorization: `Bearer ${token.value}` }
-    );
-  }
+//   // WebSocket으로 전송
+//   if (stompClient.value && stompClient.value.connected) {
+//     stompClient.value.send(
+//       `/publish/${channelSeq.value}`,
+//       JSON.stringify(message),
+//       { Authorization: `Bearer ${token.value}` }
+//     );
+//   }
 
-  // ✅ 투표 전송 후에도 타이핑 종료 브로드캐스트
-  try {
-    sendTypingStopEvent();
-  } catch (e) {
-    console.warn("타이핑 종료 이벤트 전송 실패", e);
-  }
+//   // ✅ 투표 전송 후에도 타이핑 종료 브로드캐스트
+//   try {
+//     sendTypingStopEvent();
+//   } catch (e) {
+//     console.warn("타이핑 종료 이벤트 전송 실패", e);
+//   }
 
-  newMessage.value = "";
-  isTyping.value = false;
-  showAttachmentMenu.value = false;
-  scrollToBottom();
-};
+//   newMessage.value = "";
+//   isTyping.value = false;
+//   showAttachmentMenu.value = false;
+//   scrollToBottom();
+// };
 
 const handleAttachFiles = (files) => {
   const currentCount = attachedFiles.value.length;
@@ -2082,7 +2082,7 @@ onUnmounted(() => {
       <div class="message-input-container">
         <!-- 첨부파일 메뉴 -->
         <div v-if="showAttachmentMenu" class="attachment-menu">
-          <div class="attachment-item" @click="openPollModal">
+          <!-- <div class="attachment-item" @click="openPollModal">
             <div class="attachment-icon poll-icon">
               <v-icon>mdi-poll</v-icon>
             </div>
@@ -2090,7 +2090,8 @@ onUnmounted(() => {
               <div class="attachment-title">투표</div>
               <div class="attachment-desc">팀원들의 의견을 수집해보세요</div>
             </div>
-          </div>
+          </div> -->
+
           <div
             class="attachment-item"
             :class="{ disabled: !canAttachMore }"
@@ -2229,7 +2230,7 @@ onUnmounted(() => {
     </div>
 
     <!-- 투표 모달 -->
-    <PollModal v-model="showPollModal" @create-poll="handleCreatePoll" />
+    <!-- <PollModal v-model="showPollModal" @create-poll="handleCreatePoll" /> -->
 
     <!-- 파일 첨부 모달 -->
     <FileAttachmentModal
@@ -2615,10 +2616,10 @@ onUnmounted(() => {
   font-size: 18px;
 }
 
-.poll-icon {
+/* .poll-icon {
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   color: white;
-}
+} */
 
 .file-icon {
   background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
