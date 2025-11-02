@@ -290,8 +290,14 @@ const loadDirectMessages = async () => {
 
     console.log("✅ 1:1 채팅 목록 로드 완료:", directMessages.value.length, "개");
   } catch (e) {
-    console.error("❌ 1:1 채팅 목록 불러오기 실패:", e);
-    directMessages.value = [];
+    // 500 에러는 백엔드 문제이지만, 목록이 없을 때도 발생할 수 있으므로 조용히 처리
+    if (e.response?.status === 500) {
+      console.log("ℹ️ 1:1 채팅 목록이 없거나 서버 오류가 발생했습니다. 빈 목록으로 처리합니다.");
+      directMessages.value = [];
+    } else {
+      console.error("❌ 1:1 채팅 목록 불러오기 실패:", e);
+      directMessages.value = [];
+    }
   }
 };
 
