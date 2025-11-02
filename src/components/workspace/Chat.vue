@@ -10,6 +10,7 @@ import FileAttachmentModal from "./FileAttachmentModal.vue";
 import SockJS from "sockjs-client";
 import Stomp from "webstomp-client";
 import axios from "axios";
+import { getChannelMembers } from "@/api/chat/chatApi";
 
 // ✅ 현재 사용자가 멘션된 메시지인지 확인
 const isMentionedMessage = (message) => {
@@ -1225,7 +1226,7 @@ const handleScroll = async (e) => {
 };
 
 // @ 언급 관련 함수들 - 채널 참여 멤버 정보
-const getChannelMembers = () => {
+const loadChannelMembers = () => {
   if (!channelSeq.value) {
     mentionList.value = [];
     return;
@@ -1565,25 +1566,70 @@ const shouldShowDivider = (message, index) => {
   return false;
 };
 
-// 1:1 채팅 상대방 정보 가져오기 (필요시 API 호출)
+// 1:1 채팅 상대방 정보 가져오기 
 const loadChatUserInfo = async () => {
   if (!isPersonalChat.value || !props.selectedChannel) return;
 
   try {
-    // TODO: 1:1 채팅 상대방 정보 API 호출
-    // const res = await getIndividualChatUserInfo(props.selectedChannel);
-    // chatUserInfo.value = res.data;
+    const channelSeq = parseInt(props.selectedChannel);
+    if (!channelSeq || isNaN(channelSeq)) {
+      console.error("❌ 유효하지 않은 channelSeq:", props.selectedChannel);
+      return;
+    }
 
-    // 임시 데이터 (실제로는 API에서 가져와야 함)
+    // 채널 멤버 목록 조회 (상대방 정보 포함)
+    const members = await getChannelMembers(channelSeq);
+    
+    if (!members || members.length === 0) {
+      console.warn("⚠️ 채널 멤버를 찾을 수 없습니다.");
+      return;
+    }
+
+    // 상대방 찾기 (본인 제외)
+    const otherMember = members.find(
+      (m) => Number(m.memberSeq) !== Number(memberSeq.value)
+    );
+
+    if (!otherMember) {
+      console.warn("⚠️ 상대방을 찾을 수 없습니다.");
+      return;
+    }
+
+    // 공통 워크스페이스 계산
+    const currentUserWorkSpaces = workspaceStore.workspaces
+      .filter(ws => ws.type === 'project') // 프로젝트 워크스페이스만
+      .map(ws => ws.workSpaceSeq);
+    
+    const otherUserWorkSpaces = otherMember.workSpaceList || [];
+    
+    // 교집합 구하기 (공통 워크스페이스)
+    const commonWorkSpaceSeqs = currentUserWorkSpaces.filter(wsSeq =>
+      otherUserWorkSpaces.includes(wsSeq)
+    );
+    
+    // 워크스페이스 이름 매핑
+    const commonWorkspaces = commonWorkSpaceSeqs.map(wsSeq => {
+      const workspace = workspaceStore.workspaces.find(ws => ws.workSpaceSeq === wsSeq);
+      return {
+        workSpaceSeq: wsSeq,
+        workSpaceName: workspace?.name || `워크스페이스 #${wsSeq}`
+      };
+    });
+
+    // chatUserInfo 업데이트
     chatUserInfo.value = {
-      name: "사용자",
-      avatar: "?",
-      email: "-",
-      phone: "-",
-      status: "-",
+      name: otherMember.memberName || "사용자",
+      avatar: otherMember.memberProfileUrl || "",
+      profileUrl: otherMember.memberProfileUrl || "",
+      status: otherMember.activeStatus || "OFFLINE",
+      memberSeq: otherMember.memberSeq,
+      commonWorkspaces: commonWorkspaces // ✅ 워크스페이스 정보 (이름 포함)
     };
+
+    console.log("✅ 1:1 채팅 상대방 정보 로드 완료:", chatUserInfo.value);
   } catch (e) {
-    console.error("1:1 채팅 사용자 정보 로드 실패:", e);
+    console.error("❌ 1:1 채팅 사용자 정보 로드 실패:", e);
+    chatUserInfo.value = null;
   }
 };
 
@@ -1691,7 +1737,7 @@ onMounted(async () => {
   });
 
   // ✅ 채널 참여 멤버 목록 초기화 (백엔드 API 호출)
-  await getChannelMembers();
+  await loadChannelMembers();
 
   // ✅ memberSeq와 channelSeq가 유효할 때만 채널 로드
   if (memberSeq.value > 0 && currentChannel.value && channelSeq.value > 0) {
@@ -2274,43 +2320,47 @@ onUnmounted(() => {
       </div>
 
       <div class="user-profile">
-        <v-avatar size="80" color="primary" class="user-avatar">
-          {{ chatUserInfo.avatar || "?" }}
+        <v-avatar 
+          size="80" 
+          color="primary" 
+          class="user-avatar"
+        >
+          <v-img
+            v-if="chatUserInfo.profileUrl"
+            :src="chatUserInfo.profileUrl"
+            :alt="chatUserInfo.name"
+            cover
+          />
+          <span v-else>{{ chatUserInfo.name?.charAt(0) || "?" }}</span>
         </v-avatar>
         <div class="user-name">{{ chatUserInfo.name || "사용자" }}</div>
         <div class="user-status">
-          <v-chip size="small" color="success">
+          <v-chip 
+            size="small" 
+            :color="chatUserInfo.status === 'ONLINE' ? 'success' : 'grey'"
+          >
             <v-icon start>mdi-circle</v-icon>
-            온라인
+            {{ chatUserInfo.status === 'ONLINE' ? '온라인' : '오프라인' }}
           </v-chip>
         </div>
       </div>
 
       <div class="user-details">
+        <!-- 공통 워크스페이스 -->
         <div class="detail-section">
-          <h4>연락처</h4>
-          <div class="detail-item">
-            <v-icon>mdi-email</v-icon>
-            <span>{{ chatUserInfo.email || "-" }}</span>
-          </div>
-          <div class="detail-item">
-            <v-icon>mdi-phone</v-icon>
-            <span>{{ chatUserInfo.phone || "-" }}</span>
-          </div>
-        </div>
-
-        <div class="detail-section">
-          <h4>상태 메시지</h4>
-          <p class="status-message">
-            {{ chatUserInfo.status || "-" }}
-          </p>
-        </div>
-
-        <div class="detail-section">
-          <h4>최근 활동</h4>
-          <div class="activity-item">
-            <v-icon>mdi-clock</v-icon>
-            <span>최근 활동</span>
+          <h4>공통 워크스페이스</h4>
+          <div class="workspace-list">
+            <div 
+            v-for="ws in chatUserInfo.commonWorkspaces" 
+            :key="ws.workSpaceSeq"
+            class="workspace-item"
+            >
+            <v-icon size="16">mdi-folder</v-icon>
+            <span>{{ ws.workSpaceName }}</span>
+            </div>
+            <div v-if="!chatUserInfo.commonWorkspaces || chatUserInfo.commonWorkspaces.length === 0" class="empty-text">
+              공통 워크스페이스가 없습니다
+            </div>
           </div>
         </div>
       </div>
@@ -3800,5 +3850,36 @@ onUnmounted(() => {
 
 .activity-item .v-icon {
   color: rgba(var(--v-theme-on-surface), 0.5);
+}
+
+.workspace-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.workspace-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: rgba(var(--v-theme-on-surface), 0.05);
+  border-radius: 8px;
+  transition: background 0.2s;
+}
+
+.workspace-item:hover {
+  background: rgba(var(--v-theme-on-surface), 0.1);
+}
+
+.workspace-item .v-icon {
+  color: rgb(var(--v-theme-primary));
+}
+
+.empty-text {
+  font-size: 14px;
+  color: rgba(var(--v-theme-on-surface), 0.6);
+  padding: 8px 0;
+  text-align: center;
 }
 </style>

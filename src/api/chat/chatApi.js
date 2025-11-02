@@ -33,3 +33,13 @@ export const leaveChannel = async (channelSeq) => {
   );
   return res;
 };
+
+// ----------------------
+// 채널 멤버 조회 API (1:1 채팅 상대방 정보 조회용)
+// ----------------------
+export const getChannelMembers = async (channelSeq) => {
+  const res = await apiGet(
+    `/chat-service/chat/channels/${channelSeq}/members`
+  );
+  return res; // List<IndividualChatUserResDto>
+};
