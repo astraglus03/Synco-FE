@@ -121,7 +121,8 @@
                 icon
                 size="small"
                 variant="text"
-                @click="console.log(`${friend.name}과 채팅 시작`)"
+                @click="startChatWithFriend(friend)"
+                title="1:1 채팅 시작"
               >
                 <v-icon>mdi-message</v-icon>
               </v-btn>
@@ -400,7 +401,11 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useTheme } from 'vuetify'
+import { useRouter } from 'vue-router'
+import { useWorkspaceStore } from '@/store/workspaceStore'
 import * as friendApi from '@/api/friend/friend'
+import { createIndividualChatChannel } from '@/api/chat/chatApi'
+import { emitter } from '@/eventBus' // 이벤트 버스
 import FriendStatusBadge from '@/components/common/FriendStatusBadge.vue'
 
 const props = defineProps({
@@ -408,6 +413,8 @@ const props = defineProps({
 })
 
 const theme = useTheme()
+const router = useRouter()
+const workspaceStore = useWorkspaceStore()
 
 // 현재 활성 탭
 const activeTab = ref('friendList')
@@ -688,6 +695,55 @@ const closeModal = () => {
   if (searchDebounceTimer) {
     clearTimeout(searchDebounceTimer)
     searchDebounceTimer = null
+  }
+}
+
+// 1:1 채팅 시작 함수 (친구 목록의 메시지 버튼 클릭 시)
+const startChatWithFriend = async (friend) => {
+  try {
+    console.log('🚀 1:1 채팅 시작:', friend.name, friend.memberSeq)
+    
+    // 현재 워크스페이스 정보 가져오기 (개인 워크스페이스)
+    const currentWorkspace = workspaceStore.currentWorkspaceInfo
+    if (!currentWorkspace || !currentWorkspace.workSpaceSeq) {
+      alert('워크스페이스 정보를 찾을 수 없습니다.')
+      return
+    }
+
+    const workSpaceSeq = currentWorkspace.workSpaceSeq
+    const otherMemberSeq = friend.memberSeq
+
+    console.log('📤 1:1 채팅 생성 요청:', { workSpaceSeq, otherMemberSeq })
+
+    // 1:1 채팅 채널 생성 또는 기존 채널 반환
+    const channelSeq = await createIndividualChatChannel(
+      workSpaceSeq,
+      otherMemberSeq
+    )
+
+    console.log('✅ 1:1 채팅 채널 생성 완료, channelSeq:', channelSeq)
+
+    // WorkspaceSidebar에 1:1 채팅 목록 새로고침 요청
+    emitter.emit('refresh-direct-messages')
+
+    // 채팅 화면으로 이동
+    // 1. 메인 채널을 'chat'으로 설정
+    workspaceStore.selectChannel('chat')
+    
+    // 2. 하위 채널을 생성된 channelSeq로 설정
+    workspaceStore.selectSubChannel('chat', channelSeq.toString())
+
+    // 3. Chat.vue에 채널 변경 이벤트 전달
+    emitter.emit('select-chat-channel', {
+      parentId: 'chat',
+      subChannelId: channelSeq.toString()
+    })
+
+    console.log('✅ 채팅 화면으로 이동 완료')
+
+  } catch (error) {
+    console.error('❌ 1:1 채팅 생성 실패:', error)
+    alert('1:1 채팅 생성에 실패했습니다: ' + (error.message || error))
   }
 }
 

@@ -4,13 +4,12 @@ import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import vueDevTools from 'vite-plugin-vue-devtools'
 
-
 export default defineConfig({
   plugins: [
     vue(),
     vueDevTools(),
   ],
-  server:{
+  server: {
     port: 3000,
     proxy: {
       // 백엔드 게이트웨이로 프록시 (개발 환경)

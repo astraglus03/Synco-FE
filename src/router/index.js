@@ -8,6 +8,7 @@ import GoogleRedirect from '@/views/auth/GoogleRedirect.vue'
 import KakaoRedirect from '@/views/auth/KakaoRedirect.vue'
 import NaverRedirect from '@/views/auth/NaverRedirect.vue'
 import SocialMemberId from '@/views/auth/SocialMemberId.vue'
+import Chat from '@/components/workspace/Chat.vue'
 import MeetingView from '@/views/MeetingView.vue'
 
 const routes = [
@@ -40,6 +41,11 @@ const routes = [
     name: 'Workspace',
     component: MainLayout,
     meta: { requiresAuth: true }, // 인증 필요
+  },
+  {
+    path: '/chatpage/:channelSeq',
+    name: 'Chat',
+    component: Chat
   },
   {
     path: '/drive/:driveChannelSeq/documents/:documentSeq',
@@ -78,7 +84,6 @@ const routes = [
     component: SocialMemberId,
     meta: { requiresAuth: false },
   },
-
 ]
 
 const router = createRouter({

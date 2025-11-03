@@ -1,6 +1,7 @@
 <script setup>
 import { computed, ref, onMounted, onUnmounted, watch } from 'vue'
 import { useUIStore } from '@/store/uiStore'
+import { emitter } from "@/eventBus";
 import PersonalDashboard from '@/components/workspace/PersonalDashboard.vue'
 import PersonalFriends from '@/components/workspace/PersonalFriends.vue'
 import PersonalDrive from '@/components/workspace/PersonalDrive.vue'
@@ -20,13 +21,13 @@ const props = defineProps({
   currentChannel: String,
   selectedSubChannel: String,
   memberSidebarVisible: Boolean,
-  workspaceSidebarCollapsed: Boolean
-})
+  workspaceSidebarCollapsed: Boolean,
+});
 
-const emit = defineEmits(['navigate-to-channel'])
+const emit = defineEmits(["navigate-to-channel"]);
 
 // UI Store
-const uiStore = useUIStore()
+const uiStore = useUIStore();
 
 // 멤버 사이드바 닫기
 const closeMemberSidebar = () => {
@@ -72,15 +73,15 @@ const handleSubChannelSelect = (parentId, subChannelId) => {
   }
 }
 
-// 채널 선택 이벤트 리스너
+// 채널 선택 이벤트 리스너 (meeting 전용)
 const handleChannelSelect = (event) => {
-  selectedChannel.value = event.detail.subChannelId
-}
+  selectedChannel.value = event.detail.subChannelId;
+};
 
 // 개인 드라이브로 이동하는 함수
 const navigateToPersonalDrive = () => {
-  emit('navigate-to-channel', 'drive')
-}
+  emit("navigate-to-channel", "drive");
+};
 
 // 화면 크기 변경 감지
 const windowWidth = ref(window.innerWidth)
@@ -94,6 +95,10 @@ onMounted(() => {
   window.addEventListener('select-meeting-channel', handleChannelSelect)
   window.addEventListener('select-chat-channel', handleChannelSelect)
   window.addEventListener('resize', handleResize)
+    // chat 채널은 event bus 사용
+    emitter.on("select-chat-channel", ({ parentId, subChannelId }) => {
+    selectedChannel.value = subChannelId;
+  })
 })
 
 onUnmounted(() => {
@@ -101,18 +106,21 @@ onUnmounted(() => {
   window.removeEventListener('select-meeting-channel', handleChannelSelect)
   window.removeEventListener('select-chat-channel', handleChannelSelect)
   window.removeEventListener('resize', handleResize)
+  emitter.off("select-chat-channel");
 })
 
 // 현재 표시할 컴포넌트 결정
 const currentComponent = computed(() => {
-  if (props.workspaceType === 'personal') {
+  if (props.workspaceType === "personal") {
     switch (props.currentChannel) {
       case 'dashboard': return PersonalDashboard
       case 'friends': return PersonalFriends
       case 'drive': return PersonalDrive
       case 'calendar': return PersonalKanbanBoard
       case 'profile': return PersonalProfile
-      case '1-1-chat': return PersonalChat // 1:1 채팅
+      // case '1-1-chat': return PersonalChat // 1:1 채팅
+      case 'chat' : return Chat
+      // case '1-1-chat' : return Chat // 없어도 될듯
       default: return PersonalDashboard
     }
   } else {
@@ -131,7 +139,7 @@ const currentComponent = computed(() => {
       default: return Dashboard
     }
   }
-})
+});
 
 // 컨텐츠 영역 스타일
 const contentStyle = computed(() => {
@@ -169,17 +177,18 @@ const contentStyle = computed(() => {
 <template>
   <div class="main-content" :style="contentStyle">
     <!-- 메인 컨텐츠 -->
-    <component 
-      :is="currentComponent" 
-      :current-channel="currentChannel" 
+    <component
+      :is="currentComponent"
+      :current-channel="currentChannel"
       :selected-schedule="selectedSchedule"
       :selected-channel="selectedChannel"
+      :workspace-type="workspaceType"
       :navigate-to-personal-drive="navigateToPersonalDrive"
       @toggle-member-sidebar="toggleMemberSidebar"
     />
-    
+
     <!-- 멤버 사이드바 (프로젝트 워크스페이스일 때만 표시) -->
-    <MemberSidebar 
+    <MemberSidebar
       v-if="workspaceType === 'project' && memberSidebarVisible"
       :visible="memberSidebarVisible"
       @close="closeMemberSidebar"
