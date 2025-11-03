@@ -1909,8 +1909,6 @@ onUnmounted(() => {
       <!-- 채팅 헤더 -->
       <div class="chat-header">
         <div class="channel-info">
-          <v-icon v-if="isPersonalChat">mdi-account</v-icon>
-          <v-icon v-else>mdi-pound</v-icon>
           <span class="channel-name">{{ currentChannelName }}</span>
         </div>
       </div>

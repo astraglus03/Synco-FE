@@ -1461,35 +1461,43 @@ const getStatusColor = (status) => {
 
       <div class="dm-list">
         <div
-          v-for="dm in directMessages"
+          v-for="(dm, idx) in directMessages"
           :key="dm.channelSeq"
-          class="dm-item"
-          :class="{ 'active': currentChannel === dm.channelSeq, 'collapsed': isCollapsedView }"
-          @click="selectDirectMessage(dm.channelSeq)"
-          @contextmenu.prevent="handleDmRightClick(dm, $event)"
         >
-          <div class="dm-avatar">
-            <v-avatar size="24" color="primary">
-              <v-img
-                v-if="dm.otherProfileUrl"
-                :src="dm.otherProfileUrl"
-                alt="프로필"
-              />
-              <span v-else>{{ dm.channelName.charAt(0) }}</span>
-            </v-avatar>
-          </div>
-
-          <div v-if="!isCollapsedView || workspaceType === 'personal'" class="dm-info">
-            <div class="dm-name">{{ dm.channelName }}</div>
-          </div>
-
-          <div v-if="!isCollapsedView || workspaceType === 'personal'" class="dm-meta">
-            <div v-if="dm.unreadCount > 0" class="unread-badge">
-              {{ dm.unreadCount }}
+          <div
+            class="dm-item"
+            :class="{ 'active': currentChannel === dm.channelSeq, 'collapsed': isCollapsedView }"
+            @click="selectDirectMessage(dm.channelSeq)"
+            @contextmenu.prevent="handleDmRightClick(dm, $event)"
+          >
+            <div class="dm-avatar">
+              <v-avatar size="24" color="primary">
+                <v-img
+                  v-if="dm.otherProfileUrl"
+                  :src="dm.otherProfileUrl"
+                  alt="프로필"
+                />
+                <span v-else>{{ dm.channelName.charAt(0) }}</span>
+              </v-avatar>
             </div>
-          </div>
+
+            <div v-if="!isCollapsedView || workspaceType === 'personal'" class="dm-info">
+              <div class="dm-name">{{ dm.channelName }}</div>
+            </div>
+
+            <div v-if="!isCollapsedView || workspaceType === 'personal'" class="dm-meta">
+              <div v-if="dm.unreadCount > 0" class="unread-badge">
+                {{ dm.unreadCount }}
+              </div>
+            </div>
         </div>
+
+        <v-divider
+          v-if="idx < directMessages.length - 1"
+          class="my-2"
+        />
       </div>
+    </div>
     </div>
   </div>
   
