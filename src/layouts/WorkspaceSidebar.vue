@@ -1,9 +1,9 @@
 <script setup>
-import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
-import { useRouter } from 'vue-router'
-import { 
-  getChatChannels, 
-  getMeetingChannels, 
+import { ref, computed, onMounted, onUnmounted, watch } from "vue";
+import { useRouter } from "vue-router";
+import {
+  getChatChannels,
+  getMeetingChannels,
   getScheduleChannels,
   changeChatChannelAuthority,
   changeScheduleChannelAuthority,
@@ -12,31 +12,34 @@ import {
   renameMeetingChannel,
   createChatChannel,
   deleteChatChannel,
-  leaveWorkspace
-} from '@/api/workspace/workSpaceApi'
-import { useAuthStore } from '@/store/authStore'
-import { useWorkspaceStore } from '@/store/workspaceStore'
-import { useWorkspaceMemberStore } from '@/store/workspaceMemberStore'
-import { useNotificationStore } from '@/store/notificationStore'
-import { Authority } from '@/models/workspace/WorkspaceModels'
+  leaveWorkspace,
+} from "@/api/workspace/workSpaceApi";
+import { useAuthStore } from "@/store/authStore";
+import { useWorkspaceStore } from "@/store/workspaceStore";
+import { useWorkspaceMemberStore } from "@/store/workspaceMemberStore";
+import { useNotificationStore } from "@/store/notificationStore";
+import { Authority } from "@/models/workspace/WorkspaceModels";
 import { emitter } from "@/eventBus"; // 채팅 채널 변경 이벤트 버스
 import { getIndividualChatChannels, leaveChannel } from "@/api/chat/chatApi"; // 1:1 채팅 관련 API
 import SockJS from "sockjs-client";
 import Stomp from "webstomp-client";
 
-const router = useRouter()
+const router = useRouter();
 
 // 화면 크기 감지
-const windowWidth = ref(window.innerWidth)
+const windowWidth = ref(window.innerWidth);
 
 const handleResize = () => {
-  windowWidth.value = window.innerWidth
-}
+  windowWidth.value = window.innerWidth;
+};
 
 // 반응형 collapsed 상태 (화면 크기에 따라 자동 결정)
 const isCollapsedView = computed(() => {
-  return windowWidth.value <= 1024 || (props.collapsed && props.workspaceType === 'project')
-})
+  return (
+    windowWidth.value <= 1024 ||
+    (props.collapsed && props.workspaceType === "project")
+  );
+});
 
 const props = defineProps({
   collapsed: Boolean,
@@ -62,11 +65,11 @@ const showCreateMeetingModal = ref(false);
 const newMeetingName = ref("");
 
 // 워크스페이스 탈퇴 확인 다이얼로그 상태
-const showLeaveConfirmDialog = ref(false)
+const showLeaveConfirmDialog = ref(false);
 
 // 탈퇴 성공 토스트 상태
-const showLeaveSuccessToast = ref(false)
-const leaveSuccessMessage = ref('')
+const showLeaveSuccessToast = ref(false);
+const leaveSuccessMessage = ref("");
 
 // 채널 설정 모달 상태
 const showChannelSettingsModal = ref(false);
@@ -130,15 +133,15 @@ const channelMembers = computed(() => {
 const hoveredChannel = ref(null);
 
 // 스토어
-const authStore = useAuthStore()
-const workspaceStore = useWorkspaceStore()
-const workspaceMemberStore = useWorkspaceMemberStore()
-const notificationStore = useNotificationStore()
+const authStore = useAuthStore();
+const workspaceStore = useWorkspaceStore();
+const workspaceMemberStore = useWorkspaceMemberStore();
+const notificationStore = useNotificationStore();
 
 // 워크스페이스에서 현재 사용자가 SUPER 권한인지 확인
 const isWorkspaceSuper = computed(() => {
-  return workspaceMemberStore.isCurrentUserSuper(authStore)
-})
+  return workspaceMemberStore.isCurrentUserSuper(authStore);
+});
 
 // 채널 접기/펼치기 상태
 const chatExpanded = ref(true); // 기본값: 펼침
@@ -225,53 +228,88 @@ const hasChatManagerOrSuperPermission = computed(() => {
 
 // 개인 워크스페이스 채널 목록
 const personalChannels = ref([
-  { id: 'dashboard', name: '내 대시보드', icon: 'mdi-view-dashboard', type: 'main' },
-  { id: 'friends', name: '내 친구관리', icon: 'mdi-account-group', type: 'main' },
-  { id: 'drive', name: '내 드라이브', icon: 'mdi-folder-account', type: 'main' },
-  { id: 'calendar', name: '내 일정관리', icon: 'mdi-calendar', type: 'main' },
-  { id: 'profile', name: '마이페이지', icon: 'mdi-account-cog', type: 'main' }
-])
+  {
+    id: "dashboard",
+    name: "내 대시보드",
+    icon: "mdi-view-dashboard",
+    type: "main",
+  },
+  {
+    id: "friends",
+    name: "내 친구관리",
+    icon: "mdi-account-group",
+    type: "main",
+  },
+  {
+    id: "drive",
+    name: "내 드라이브",
+    icon: "mdi-folder-account",
+    type: "main",
+  },
+  { id: "calendar", name: "내 일정관리", icon: "mdi-calendar", type: "main" },
+  { id: "profile", name: "마이페이지", icon: "mdi-account-cog", type: "main" },
+]);
 
 // 프로젝트 워크스페이스 채널 목록
 const projectChannels = ref([
-  { id: 'dashboard', name: '프로젝트 대시보드', icon: 'mdi-view-dashboard', type: 'main' },
-  { 
-    id: 'chat', 
-    name: '프로젝트 채팅', 
-    icon: 'mdi-chat', 
-    type: 'main',
-    expanded: true,  // 기본값: 펼침
-    subChannels: [
-      { id: 'general', name: '일반', type: 'text', unread: 3 },
-      { id: 'marketing', name: '마케팅', type: 'text', unread: 0 },
-      { id: 'development', name: '개발', type: 'text', unread: 1 }
-    ]
+  {
+    id: "dashboard",
+    name: "프로젝트 대시보드",
+    icon: "mdi-view-dashboard",
+    type: "main",
   },
-  { 
-    id: 'schedule', 
-    name: '프로젝트 일정관리', 
-    icon: 'mdi-calendar-check', 
-    type: 'main',
+  {
+    id: "chat",
+    name: "프로젝트 채팅",
+    icon: "mdi-chat",
+    type: "main",
+    expanded: true, // 기본값: 펼침
+    subChannels: [
+      { id: "general", name: "일반", type: "text", unread: 3 },
+      { id: "marketing", name: "마케팅", type: "text", unread: 0 },
+      { id: "development", name: "개발", type: "text", unread: 1 },
+    ],
+  },
+  {
+    id: "schedule",
+    name: "프로젝트 일정관리",
+    icon: "mdi-calendar-check",
+    type: "main",
     expanded: false,
     subChannels: [
-      { id: 'team-schedule', name: '팀 일정관리', type: 'schedule' },
-      { id: 'personal-schedule', name: '개인 일정관리', type: 'schedule' }
-    ]
+      { id: "team-schedule", name: "팀 일정관리", type: "schedule" },
+      { id: "personal-schedule", name: "개인 일정관리", type: "schedule" },
+    ],
   },
-  { id: 'drive', name: '드라이브', icon: 'mdi-folder', type: 'main' },
-  { 
-    id: 'meeting', 
-    name: '화상회의', 
-    icon: 'mdi-video', 
-    type: 'main',
+  { id: "drive", name: "드라이브", icon: "mdi-folder", type: "main" },
+  {
+    id: "meeting",
+    name: "화상회의",
+    icon: "mdi-video",
+    type: "main",
     expanded: false,
     subChannels: [
-      { id: 'general-meeting', name: '일반 회의실', type: 'video', isActive: false },
-      { id: 'project-meeting', name: '프로젝트 회의실', type: 'video', isActive: true },
-      { id: 'brainstorming', name: '브레인스토밍', type: 'video', isActive: false }
-    ]
-  }
-])
+      {
+        id: "general-meeting",
+        name: "일반 회의실",
+        type: "video",
+        isActive: false,
+      },
+      {
+        id: "project-meeting",
+        name: "프로젝트 회의실",
+        type: "video",
+        isActive: true,
+      },
+      {
+        id: "brainstorming",
+        name: "브레인스토밍",
+        type: "video",
+        isActive: false,
+      },
+    ],
+  },
+]);
 
 // 1:1 채팅 목록 (개인 워크스페이스일 때만)
 const directMessages = ref([]);
@@ -287,34 +325,36 @@ const personalWsSubscriptions = ref([]); // 각 채널별 구독 리스트
 
 // ✅ 개인 워크스페이스: 모든 1:1 채팅 채널에 대한 WebSocket 구독
 const connectPersonalChatWebSocket = () => {
-  if (props.workspaceType !== 'personal') return;
-  
-  const token = localStorage.getItem('token');
+  if (props.workspaceType !== "personal") return;
+
+  const token = localStorage.getItem("token");
   if (!token) {
-    console.warn('⚠️ 토큰이 없어 WebSocket 연결 불가');
+    console.warn("⚠️ 토큰이 없어 WebSocket 연결 불가");
     return;
   }
 
   // 이미 연결되어 있으면 return
   if (personalWsClient.value && personalWsClient.value.connected) {
-    console.log('✅ 개인 채팅 WebSocket 이미 연결됨');
+    console.log("✅ 개인 채팅 WebSocket 이미 연결됨");
     return;
   }
 
   // directMessages가 비어있으면 연결하지 않음
   if (!directMessages.value || directMessages.value.length === 0) {
-    console.log('ℹ️ 1:1 채팅 목록이 비어있어 WebSocket 연결 안 함');
+    console.log("ℹ️ 1:1 채팅 목록이 비어있어 WebSocket 연결 안 함");
     return;
   }
 
-  const sockJs = new SockJS(`${import.meta.env.VITE_API_URL}/chat-service/connect`);
+  const sockJs = new SockJS(
+    `${import.meta.env.VITE_API_URL}/chat-service/connect`
+  );
   personalWsClient.value = Stomp.over(sockJs);
 
   personalWsClient.value.connect(
     { Authorization: `Bearer ${token}` },
     () => {
-      console.log('✅ 개인 채팅 WebSocket 연결 성공');
-      
+      console.log("✅ 개인 채팅 WebSocket 연결 성공");
+
       // 모든 1:1 채팅 채널에 구독
       directMessages.value.forEach((dm) => {
         const subscription = personalWsClient.value.subscribe(
@@ -322,14 +362,14 @@ const connectPersonalChatWebSocket = () => {
           (message) => {
             try {
               const parsed = JSON.parse(message.body);
-              
+
               // TYPING 이벤트는 무시
               if (parsed.action === "TYPING" || parsed.action === "DELETE") {
                 return;
               }
 
               // 자신이 보낸 메시지는 무시
-              const memberSeq = Number(localStorage.getItem('memberSeq'));
+              const memberSeq = Number(localStorage.getItem("memberSeq"));
               if (Number(parsed.senderSeq) === memberSeq) {
                 return;
               }
@@ -337,37 +377,42 @@ const connectPersonalChatWebSocket = () => {
               // ✅ unreadCount 증가 (현재 채팅방이 아니면)
               const currentChannelStr = props.currentChannel?.toString();
               const channelSeqStr = parsed.channelSeq?.toString();
-              
+
               if (currentChannelStr !== channelSeqStr) {
                 incrementDirectMessageUnread(parsed.channelSeq);
               }
-              
+
               // ✅ 마지막 메시지 업데이트
-              const dm = directMessages.value.find(d => d.channelSeq === parsed.channelSeq);
+              const dm = directMessages.value.find(
+                (d) => d.channelSeq === parsed.channelSeq
+              );
               if (dm && parsed.chatMessageText) {
                 // 메시지 텍스트가 50자 이상이면 잘라서 표시
-                const messageText = parsed.chatMessageText.length > 50 
-                  ? parsed.chatMessageText.substring(0, 50) + '...' 
-                  : parsed.chatMessageText;
+                const messageText =
+                  parsed.chatMessageText.length > 50
+                    ? parsed.chatMessageText.substring(0, 50) + "..."
+                    : parsed.chatMessageText;
                 dm.lastMessage = messageText;
               }
             } catch (e) {
-              console.error('개인 채팅 WebSocket 메시지 파싱 실패:', e);
+              console.error("개인 채팅 WebSocket 메시지 파싱 실패:", e);
             }
           },
           { Authorization: `Bearer ${token}` }
         );
-        
+
         personalWsSubscriptions.value.push({
           channelSeq: dm.channelSeq,
-          subscription: subscription
+          subscription: subscription,
         });
       });
-      
-      console.log(`✅ ${personalWsSubscriptions.value.length}개 채널 구독 완료`);
+
+      console.log(
+        `✅ ${personalWsSubscriptions.value.length}개 채널 구독 완료`
+      );
     },
     (error) => {
-      console.error('❌ 개인 채팅 WebSocket 연결 실패:', error);
+      console.error("❌ 개인 채팅 WebSocket 연결 실패:", error);
     }
   );
 };
@@ -379,7 +424,7 @@ const disconnectPersonalChatWebSocket = () => {
       try {
         subscription.unsubscribe();
       } catch (e) {
-        console.warn('구독 해제 중 오류:', e);
+        console.warn("구독 해제 중 오류:", e);
       }
     });
     personalWsSubscriptions.value = [];
@@ -387,7 +432,7 @@ const disconnectPersonalChatWebSocket = () => {
 
   if (personalWsClient.value && personalWsClient.value.connected) {
     personalWsClient.value.disconnect(() => {
-      console.log('✅ 개인 채팅 WebSocket 연결 해제 완료');
+      console.log("✅ 개인 채팅 WebSocket 연결 해제 완료");
     });
   }
   personalWsClient.value = null;
@@ -404,11 +449,17 @@ const loadDirectMessages = async () => {
     // 백엔드 MyChatListResDto 구조에 맞게 매핑
     directMessages.value = Array.isArray(res) ? res : [];
 
-    console.log("✅ 1:1 채팅 목록 로드 완료:", directMessages.value.length, "개");
+    console.log(
+      "✅ 1:1 채팅 목록 로드 완료:",
+      directMessages.value.length,
+      "개"
+    );
   } catch (e) {
     // 500 에러는 백엔드 문제이지만, 목록이 없을 때도 발생할 수 있으므로 조용히 처리
     if (e.response?.status === 500) {
-      console.log("ℹ️ 1:1 채팅 목록이 없거나 서버 오류가 발생했습니다. 빈 목록으로 처리합니다.");
+      console.log(
+        "ℹ️ 1:1 채팅 목록이 없거나 서버 오류가 발생했습니다. 빈 목록으로 처리합니다."
+      );
       directMessages.value = [];
     } else {
       console.error("❌ 1:1 채팅 목록 불러오기 실패:", e);
@@ -422,7 +473,7 @@ const handleDmRightClick = (dm, event) => {
   console.log("🖱️ 우클릭 이벤트 발생:", dm, event);
   event.preventDefault();
   event.stopPropagation();
-  
+
   selectedDm.value = dm;
   dmContextMenuPosition.value = { x: event.clientX, y: event.clientY };
   showDmContextMenu.value = true;
@@ -431,10 +482,10 @@ const handleDmRightClick = (dm, event) => {
 // 1:1 채팅 컨텍스트 메뉴 닫기
 const closeDmContextMenu = (event) => {
   // 컨텍스트 메뉴 자체를 클릭한 경우는 닫지 않음
-  if (event && event.target && event.target.closest('.dm-context-menu')) {
+  if (event && event.target && event.target.closest(".dm-context-menu")) {
     return;
   }
-  
+
   showDmContextMenu.value = false;
   selectedDm.value = null;
 };
@@ -456,39 +507,42 @@ const leaveDirectMessage = async () => {
 
   try {
     console.log("🚪 1:1 채팅방 나가기 요청:", channelSeq);
-    
+
     await leaveChannel(channelSeq);
-    
+
     console.log("✅ 1:1 채팅방 나가기 성공");
 
-  // ✅ 현재 채팅방이면 먼저 WebSocket 해제를 위해 채널 변경 이벤트 전달
-  if (props.currentChannel === channelSeq.toString()) {
-    // Chat.vue에 채널 삭제 이벤트 전달 (WebSocket 해제를 위해)
-    emitter.emit("select-chat-channel", { 
-      parentId: "chat", 
-      subChannelId: null // null로 설정하여 Chat.vue에서 해제 처리
-    });
-    
-    // 대시보드로 이동
-    emit("select-channel", "dashboard");
-    
-    // Store 상태도 초기화
-    workspaceStore.selectChannel("dashboard");
-    workspaceStore.selectSubChannel("dashboard", null);
-  }
-    
+    // ✅ 현재 채팅방이면 먼저 WebSocket 해제를 위해 채널 변경 이벤트 전달
+    if (props.currentChannel === channelSeq.toString()) {
+      // Chat.vue에 채널 삭제 이벤트 전달 (WebSocket 해제를 위해)
+      emitter.emit("select-chat-channel", {
+        parentId: "chat",
+        subChannelId: null, // null로 설정하여 Chat.vue에서 해제 처리
+      });
+
+      // 대시보드로 이동
+      emit("select-channel", "dashboard");
+
+      // Store 상태도 초기화
+      workspaceStore.selectChannel("dashboard");
+      workspaceStore.selectSubChannel("dashboard", null);
+    }
+
     // 목록에서 제거
     directMessages.value = directMessages.value.filter(
       (dm) => dm.channelSeq !== channelSeq
     );
-    
+
     closeDmContextMenu();
-    
+
     // 성공 알림
     alert("채팅방을 나갔습니다.");
   } catch (error) {
     console.error("❌ 1:1 채팅방 나가기 실패:", error);
-    const errorMessage = error.response?.data?.message || error.message || "채팅방 나가기에 실패했습니다.";
+    const errorMessage =
+      error.response?.data?.message ||
+      error.message ||
+      "채팅방 나가기에 실패했습니다.";
     alert(`채팅방 나가기 실패: ${errorMessage}`);
     closeDmContextMenu();
   }
@@ -516,15 +570,18 @@ const currentChannels = computed(() => {
       expanded: chatExpanded.value,
       subChannels:
         workspaceMemberStore.chatChannels?.map((channel) => {
-          const notificationCount = notificationStore.getChannelNotificationCount(channel.channelSeq)
+          const notificationCount =
+            notificationStore.getChannelNotificationCount(channel.channelSeq);
           return {
             id: `chat_${channel.channelSeq}`,
             name: channel.channelName,
             type: "text",
             unread: notificationCount,
             channelData: channel,
-            hasNotification: notificationStore.hasChannelNotification(channel.channelSeq)
-          }
+            hasNotification: notificationStore.hasChannelNotification(
+              channel.channelSeq
+            ),
+          };
         }) || [],
     },
     {
@@ -534,10 +591,10 @@ const currentChannels = computed(() => {
       type: "main",
       expanded: scheduleExpanded.value,
       subChannels: [
-        { id: 'team-schedule', name: '팀 일정관리', type: 'schedule' },
-        { id: 'personal-schedule', name: '개인 일정관리', type: 'schedule' }
+        { id: "team-schedule", name: "팀 일정관리", type: "schedule" },
+        { id: "personal-schedule", name: "개인 일정관리", type: "schedule" },
       ],
-      scheduleData: workspaceMemberStore.scheduleChannels // 멤버 정보를 위한 데이터
+      scheduleData: workspaceMemberStore.scheduleChannels, // 멤버 정보를 위한 데이터
     },
     { id: "drive", name: "드라이브", icon: "mdi-folder", type: "main" },
     {
@@ -786,46 +843,46 @@ const loadChannels = async () => {
   } catch (error) {
     console.error("채널 데이터 로드 실패:", error);
   }
-}
+};
 
 // 워크스페이스 탈퇴 확인 다이얼로그 열기
 const handleLeaveWorkspace = () => {
-  if (!props.currentWorkspaceData?.workSpaceSeq) return
-  showLeaveConfirmDialog.value = true
-}
+  if (!props.currentWorkspaceData?.workSpaceSeq) return;
+  showLeaveConfirmDialog.value = true;
+};
 
 // 워크스페이스 탈퇴 실행
 const confirmLeaveWorkspace = async () => {
-  if (!props.currentWorkspaceData?.workSpaceSeq) return
-  
+  if (!props.currentWorkspaceData?.workSpaceSeq) return;
+
   try {
-    const workspaceName = props.currentWorkspaceData.name
-    await leaveWorkspace(props.currentWorkspaceData.workSpaceSeq)
-    
+    const workspaceName = props.currentWorkspaceData.name;
+    await leaveWorkspace(props.currentWorkspaceData.workSpaceSeq);
+
     // 다이얼로그 닫기
-    showLeaveConfirmDialog.value = false
-    
+    showLeaveConfirmDialog.value = false;
+
     // 워크스페이스 목록 새로고침
-    await workspaceStore.loadMyWorkspaces()
-    
+    await workspaceStore.loadMyWorkspaces();
+
     // 개인 대시보드로 이동
-    await router.push('/workspaces/personal/dashboard')
-    
+    await router.push("/workspaces/personal/dashboard");
+
     // 성공 토스트 표시 (이동 후)
     setTimeout(() => {
-      leaveSuccessMessage.value = `${workspaceName} 워크스페이스에서 탈퇴했습니다.`
-      showLeaveSuccessToast.value = true
-      
+      leaveSuccessMessage.value = `${workspaceName} 워크스페이스에서 탈퇴했습니다.`;
+      showLeaveSuccessToast.value = true;
+
       // 5초 후 자동으로 닫기
       setTimeout(() => {
-        showLeaveSuccessToast.value = false
-      }, 5000)
-    }, 300)
+        showLeaveSuccessToast.value = false;
+      }, 5000);
+    }, 300);
   } catch (error) {
-    console.error('워크스페이스 탈퇴 실패:', error)
-    alert('워크스페이스 탈퇴에 실패했습니다: ' + (error.message || error))
+    console.error("워크스페이스 탈퇴 실패:", error);
+    alert("워크스페이스 탈퇴에 실패했습니다: " + (error.message || error));
   }
-}
+};
 
 // 채널별 멤버 권한 확인 함수들
 const getChannelMemberAuthority = (channelType, memberSeq) => {
@@ -857,17 +914,20 @@ const getChannelMemberAuthority = (channelType, memberSeq) => {
 
 // 채널별 권한 확인 함수들
 const hasChannelManagePermission = (channelType) => {
-  const currentUserAuthority = getChannelMemberAuthority(channelType, authStore.memberSeq)
+  const currentUserAuthority = getChannelMemberAuthority(
+    channelType,
+    authStore.memberSeq
+  );
   // 관리자 이상만 관리 권한 노출
-  return currentUserAuthority === 'SUPER' || currentUserAuthority === 'MANAGER'
-}
+  return currentUserAuthority === "SUPER" || currentUserAuthority === "MANAGER";
+};
 
 // 사용자 권한 확인 (Store 기반)
 const hasChannelPermission = (channelData) => {
-  if (!channelData) return false
+  if (!channelData) return false;
   // channelData가 있으면 채팅 하위 채널로 간주
-  return hasChannelManagePermission('chat')
-}
+  return hasChannelManagePermission("chat");
+};
 
 // 일정관리 권한 확인 (Store 기반)
 const hasSchedulePermission = (scheduleData) => {
@@ -880,11 +940,14 @@ const hasMeetingPermission = (meetingData) => {
   return hasChannelManagePermission("meeting");
 };
 
-
 watch(
   () => [props.workspaceType, props.currentWorkspaceData],
   ([newType, newWorkspace]) => {
-    console.log("👀 워크스페이스 변경 감지:", newType, newWorkspace?.workSpaceSeq);
+    console.log(
+      "👀 워크스페이스 변경 감지:",
+      newType,
+      newWorkspace?.workSpaceSeq
+    );
     if (newType === "personal") {
       console.log("🚀 워크스페이스 준비 완료 → loadDirectMessages 실행");
       loadDirectMessages();
@@ -895,20 +958,26 @@ watch(
 
 // 1:1 채팅 목록에서 특정 채널의 unreadCount 증가
 const incrementDirectMessageUnread = (channelSeq) => {
-  const dm = directMessages.value.find(d => d.channelSeq === channelSeq);
+  const dm = directMessages.value.find((d) => d.channelSeq === channelSeq);
   if (dm) {
     // ✅ 현재 채팅방이 아니면 unreadCount 증가
     // props.currentChannel은 문자열이고, channelSeq는 숫자일 수 있으므로 타입 변환 필요
     const currentChannelStr = props.currentChannel?.toString();
     const channelSeqStr = channelSeq?.toString();
-    
-    console.log('🔍 비교:', { currentChannelStr, channelSeqStr, dm: dm.channelName });
+
+    console.log("🔍 비교:", {
+      currentChannelStr,
+      channelSeqStr,
+      dm: dm.channelName,
+    });
 
     if (currentChannelStr !== channelSeqStr) {
       dm.unreadCount = (dm.unreadCount || 0) + 1;
       console.log(`✅ ${dm.channelName}의 unreadCount 증가: ${dm.unreadCount}`);
     } else {
-      console.log(`ℹ️ 현재 채팅방이므로 unreadCount 증가 안 함: ${dm.channelName}`);
+      console.log(
+        `ℹ️ 현재 채팅방이므로 unreadCount 증가 안 함: ${dm.channelName}`
+      );
     }
   } else {
     console.warn(`⚠️ 채널을 찾을 수 없음: channelSeq=${channelSeq}`);
@@ -919,7 +988,7 @@ const incrementDirectMessageUnread = (channelSeq) => {
 watch(
   () => directMessages.value,
   (newDms) => {
-    if (props.workspaceType === 'personal') {
+    if (props.workspaceType === "personal") {
       // 기존 구독 해제
       disconnectPersonalChatWebSocket();
       // 새로 구독 (directMessages가 있을 때만)
@@ -936,42 +1005,45 @@ watch(
 // 컴포넌트 마운트 시 채널 데이터 로드 (resize 리스너와 함께)
 onMounted(() => {
   console.log("🚀 onMounted 실행됨:", props.workspaceType);
-  window.addEventListener('resize', handleResize);
+  window.addEventListener("resize", handleResize);
 
   // ✅ 컨텍스트 메뉴 외부 클릭 시 닫기 (약간의 지연으로 우클릭 이벤트와 충돌 방지)
   const handleClickOutside = (event) => {
     // 컨텍스트 메뉴나 dm-item을 클릭한 경우는 무시
-    if (event.target.closest('.dm-context-menu') || event.target.closest('.dm-item')) {
+    if (
+      event.target.closest(".dm-context-menu") ||
+      event.target.closest(".dm-item")
+    ) {
       return;
     }
     closeDmContextMenu(event);
   };
-  
+
   // 우클릭 이벤트가 처리된 후에 클릭 리스너 추가
   setTimeout(() => {
-    window.addEventListener('click', handleClickOutside);
+    window.addEventListener("click", handleClickOutside);
   }, 100);
 
   // 1:1 채팅 목록 새로고침 이벤트 리스너 추가
-  emitter.on('refresh-direct-messages', () => {
-    console.log('🔄 1:1 채팅 목록 새로고침 이벤트 수신');
-    if (props.workspaceType === 'personal') {
+  emitter.on("refresh-direct-messages", () => {
+    console.log("🔄 1:1 채팅 목록 새로고침 이벤트 수신");
+    if (props.workspaceType === "personal") {
       loadDirectMessages();
     }
   });
 
   // ✅ 1:1 채팅 unreadCount 실시간 증가 이벤트 리스너 추가
-  emitter.on('increment-direct-message-unread', (data) => {
-    console.log('📨 1:1 채팅 unreadCount 증가 이벤트 수신:', data);
-    if (props.workspaceType === 'personal') {
+  emitter.on("increment-direct-message-unread", (data) => {
+    console.log("📨 1:1 채팅 unreadCount 증가 이벤트 수신:", data);
+    if (props.workspaceType === "personal") {
       incrementDirectMessageUnread(data.channelSeq);
     }
   });
 
   // 프로젝트 or 개인 워크스페이스 분기처리
-  if (props.workspaceType === 'project') {
+  if (props.workspaceType === "project") {
     loadChannels();
-  } else if (props.workspaceType === 'personal') { 
+  } else if (props.workspaceType === "personal") {
     loadDirectMessages();
     // ✅ 개인 워크스페이스일 때 WebSocket 연결 (directMessages 로드 후)
     setTimeout(() => {
@@ -979,24 +1051,27 @@ onMounted(() => {
     }, 500);
   }
 
-   console.log("📢 현재 workspaceType:", props.workspaceType);
-   console.log("📢 현재 workSpaceSeq:", props.currentWorkspaceData?.workSpaceSeq)
-})
+  console.log("📢 현재 workspaceType:", props.workspaceType);
+  console.log(
+    "📢 현재 workSpaceSeq:",
+    props.currentWorkspaceData?.workSpaceSeq
+  );
+});
 
 // 컴포넌트 언마운트 시 이벤트 리스너 정리
 onUnmounted(() => {
-  window.removeEventListener('resize', handleResize)
+  window.removeEventListener("resize", handleResize);
 
   // ✅ 컨텍스트 메뉴 리스너 제거
-  window.removeEventListener('click', closeDmContextMenu);
+  window.removeEventListener("click", closeDmContextMenu);
 
   // 이벤트 리스너 제거
-  emitter.off('refresh-direct-messages')
-  emitter.off('increment-direct-message-unread');
+  emitter.off("refresh-direct-messages");
+  emitter.off("increment-direct-message-unread");
 
   // ✅ 개인 채팅 WebSocket 해제
   disconnectPersonalChatWebSocket();
-})
+});
 
 // 워크스페이스 변경 시 채널 데이터 다시 로드
 watch(
@@ -1005,7 +1080,10 @@ watch(
     // 프로젝트 or 개인 워크스페이스 분기처리
     if (props.workspaceType === "project") {
       loadChannels();
-    } else if (props.workspaceType === "personal" && newWorkspace?.workSpaceSeq) {
+    } else if (
+      props.workspaceType === "personal" &&
+      newWorkspace?.workSpaceSeq
+    ) {
       loadDirectMessages();
     }
   },
@@ -1066,7 +1144,9 @@ const createSchedule = () => {
   };
 
   // 프로젝트 일정관리의 하위 채널에 추가
-  const scheduleChannel = projectChannels.value.find(ch => ch.id === 'schedule')
+  const scheduleChannel = projectChannels.value.find(
+    (ch) => ch.id === "schedule"
+  );
   if (scheduleChannel && scheduleChannel.subChannels) {
     scheduleChannel.subChannels.push(newSchedule);
   }
@@ -1125,8 +1205,8 @@ const selectSubChannel = (parentId, subChannelId) => {
 
   // 채널 선택 시 해당 채널의 알림 개수 초기화
   if (parentId === "chat" && subChannelId) {
-    const channelSeq = subChannelId.toString().replace('chat_', '')
-    notificationStore.clearChannelNotificationCount(channelSeq)
+    const channelSeq = subChannelId.toString().replace("chat_", "");
+    notificationStore.clearChannelNotificationCount(channelSeq);
   }
 
   // 항상 부모로 emit (URL 변경)
@@ -1142,7 +1222,9 @@ const selectSubChannel = (parentId, subChannelId) => {
 // 접힌 상태에서 채팅 채널 클릭 시 처리
 const handleCollapsedChannelClick = (chatChannel) => {
   // ✅ 채널 선택 시 해당 채널의 알림 개수 초기화
-  notificationStore.clearChannelNotificationCount(chatChannel.channelSeq.toString());
+  notificationStore.clearChannelNotificationCount(
+    chatChannel.channelSeq.toString()
+  );
   // 사이드바는 접힌 상태 유지, 채널만 선택
   selectSubChannel("chat", chatChannel.channelSeq.toString());
 };
@@ -1153,10 +1235,10 @@ const selectDirectMessage = (channelSeq) => {
 
   // ✅ channelSeq 유효성 검사
   if (!channelSeq || channelSeq === null || channelSeq === undefined) {
-  console.error("❌ 유효하지 않은 channelSeq:", channelSeq);
-  return;
+    console.error("❌ 유효하지 않은 channelSeq:", channelSeq);
+    return;
   }
-  
+
   // ✅ 숫자로 변환하여 검증
   const parsedChannelSeq = parseInt(channelSeq);
   if (isNaN(parsedChannelSeq) || parsedChannelSeq <= 0) {
@@ -1165,22 +1247,26 @@ const selectDirectMessage = (channelSeq) => {
   }
 
   // ✅ 채널 접속 시 unreadCount 초기화
-    const dm = directMessages.value.find(d => d.channelSeq === parsedChannelSeq);
+  const dm = directMessages.value.find(
+    (d) => d.channelSeq === parsedChannelSeq
+  );
   if (dm) {
     dm.unreadCount = 0;
     console.log(`✅ ${dm.channelName}의 unreadCount 초기화`);
   }
 
   // ✅ 1:1 채팅 선택 시 알림 개수 초기화
-  notificationStore.clearChannelNotificationCount(parsedChannelSeq.toString())
+  notificationStore.clearChannelNotificationCount(parsedChannelSeq.toString());
 
   // 메인 채널을 'chat'으로 설정
   emit("select-channel", "chat"); // 탭 UI 상태 변경(chat 탭으로)
 
   // channelSeq를 문자열로 변환하여 전달
-  emitter.emit("select-chat-channel", {  // Chat.vue에 채널 변경 이벤트 전달
-    parentId: "chat", 
-    subChannelId: channelSeq.toString() });
+  emitter.emit("select-chat-channel", {
+    // Chat.vue에 채널 변경 이벤트 전달
+    parentId: "chat",
+    subChannelId: channelSeq.toString(),
+  });
 };
 
 // 사용자 상태 색상
@@ -1218,7 +1304,9 @@ const getStatusColor = (status) => {
             collapsed ? "mdi-chevron-right" : "mdi-chevron-left"
           }}</v-icon>
         </div>
-        <span v-if="!isCollapsedView" class="project-name">{{ currentWorkspaceData.name }}</span>
+        <span v-if="!isCollapsedView" class="project-name">{{
+          currentWorkspaceData.name
+        }}</span>
         <!-- 나가기 버튼 (SUPER가 아닌 경우에만 표시) -->
         <v-btn
           v-if="!isCollapsedView && !isWorkspaceSuper"
@@ -1234,14 +1322,20 @@ const getStatusColor = (status) => {
       </div>
 
       <div class="section-title">
-        <span v-if="!isCollapsedView || workspaceType === 'personal'">{{ workspaceType === 'personal' ? '내 워크스페이스' : '' }}</span>
+        <span v-if="!isCollapsedView || workspaceType === 'personal'">{{
+          workspaceType === "personal" ? "내 워크스페이스" : ""
+        }}</span>
       </div>
 
       <div class="channel-list">
         <!-- 로딩 상태 표시 -->
         <div v-if="isLoadingChannels" class="loading-channels">
           <v-progress-circular indeterminate size="20" width="2" />
-          <span v-if="!isCollapsedView || workspaceType === 'personal'" class="loading-text">채널 로딩 중...</span>
+          <span
+            v-if="!isCollapsedView || workspaceType === 'personal'"
+            class="loading-text"
+            >채널 로딩 중...</span
+          >
         </div>
 
         <div
@@ -1252,17 +1346,22 @@ const getStatusColor = (status) => {
           <!-- 메인 채널 -->
           <!-- 채팅 채널 - 접힌 상태일 때 클릭 시 드롭다운 메뉴 -->
           <v-menu
-            v-if="channel.id === 'chat' && isCollapsedView && workspaceType === 'project' && chatChannels.length > 0"
+            v-if="
+              channel.id === 'chat' &&
+              isCollapsedView &&
+              workspaceType === 'project' &&
+              chatChannels.length > 0
+            "
             location="end"
             offset="8"
           >
             <template v-slot:activator="{ props: menuProps }">
               <div
                 class="channel-item"
-                :class="{ 
-                  'active': currentChannel === channel.id, 
-                  'collapsed': isCollapsedView,
-                  'has-subchannels': channel.subChannels
+                :class="{
+                  active: currentChannel === channel.id,
+                  collapsed: isCollapsedView,
+                  'has-subchannels': channel.subChannels,
                 }"
                 v-bind="menuProps"
                 @mouseenter="hoveredChannel = channel.id"
@@ -1271,7 +1370,11 @@ const getStatusColor = (status) => {
                 <v-icon class="channel-icon">
                   {{ channel.icon }}
                 </v-icon>
-                <span v-if="!isCollapsedView || workspaceType === 'personal'" class="channel-name">{{ channel.name }}</span>
+                <span
+                  v-if="!isCollapsedView || workspaceType === 'personal'"
+                  class="channel-name"
+                  >{{ channel.name }}</span
+                >
               </div>
             </template>
 
@@ -1299,17 +1402,22 @@ const getStatusColor = (status) => {
 
           <!-- 일정관리 채널 - 접힌 상태일 때 클릭 시 드롭다운 메뉴 -->
           <v-menu
-            v-else-if="channel.id === 'schedule' && isCollapsedView && workspaceType === 'project' && channel.subChannels"
+            v-else-if="
+              channel.id === 'schedule' &&
+              isCollapsedView &&
+              workspaceType === 'project' &&
+              channel.subChannels
+            "
             location="end"
             offset="8"
           >
             <template v-slot:activator="{ props: menuProps }">
               <div
                 class="channel-item"
-                :class="{ 
-                  'active': currentChannel === channel.id, 
-                  'collapsed': isCollapsedView,
-                  'has-subchannels': channel.subChannels
+                :class="{
+                  active: currentChannel === channel.id,
+                  collapsed: isCollapsedView,
+                  'has-subchannels': channel.subChannels,
                 }"
                 v-bind="menuProps"
                 @mouseenter="hoveredChannel = channel.id"
@@ -1318,10 +1426,14 @@ const getStatusColor = (status) => {
                 <v-icon class="channel-icon">
                   {{ channel.icon }}
                 </v-icon>
-                <span v-if="!isCollapsedView || workspaceType === 'personal'" class="channel-name">{{ channel.name }}</span>
+                <span
+                  v-if="!isCollapsedView || workspaceType === 'personal'"
+                  class="channel-name"
+                  >{{ channel.name }}</span
+                >
               </div>
             </template>
-            
+
             <v-card class="collapsed-chat-menu" min-width="200" max-width="250">
               <v-list density="compact">
                 <v-list-subheader>일정관리</v-list-subheader>
@@ -1344,10 +1456,10 @@ const getStatusColor = (status) => {
           <div
             v-else
             class="channel-item"
-            :class="{ 
-              'active': currentChannel === channel.id, 
-              'collapsed': isCollapsedView,
-              'has-subchannels': channel.subChannels
+            :class="{
+              active: currentChannel === channel.id,
+              collapsed: isCollapsedView,
+              'has-subchannels': channel.subChannels,
             }"
             @click="selectChannel(channel.id)"
             @mouseenter="hoveredChannel = channel.id"
@@ -1356,38 +1468,56 @@ const getStatusColor = (status) => {
             <v-icon class="channel-icon">
               {{ channel.icon }}
             </v-icon>
-            
-            <span v-if="!isCollapsedView || workspaceType === 'personal'" class="channel-name">{{ channel.name }}</span>
-            
+
+            <span
+              v-if="!isCollapsedView || workspaceType === 'personal'"
+              class="channel-name"
+              >{{ channel.name }}</span
+            >
+
             <!-- 채널 생성 버튼 (프로젝트 채팅일 때만, SUPER/MANAGER 권한 필요) -->
-            <v-icon 
-              v-if="channel.id === 'chat' && workspaceType === 'project' && (!isCollapsedView || workspaceType === 'personal') && canCreateChatChannel"
+            <v-icon
+              v-if="
+                channel.id === 'chat' &&
+                workspaceType === 'project' &&
+                (!isCollapsedView || workspaceType === 'personal') &&
+                canCreateChatChannel
+              "
               class="create-channel-btn"
               @click.stop="showCreateChannelModal = true"
             >
               mdi-plus
             </v-icon>
-            
-            
-            
+
             <!-- 채널 설정 버튼 (채팅, 일정관리, 화상회의만 최상위에 표시, 드라이브 제외) -->
             <!-- 모든 멤버가 권한 목록을 조회할 수 있도록 톱니바퀴 표시 -->
-            <v-icon 
-              v-if="(channel.id === 'chat' || channel.id === 'schedule' || channel.id === 'meeting') && 
-                    channel.id !== 'drive' && 
-                    (!isCollapsedView || workspaceType === 'personal') && 
-                    (channel.id === 'chat' ? (workspaceType === 'project' && chatChannels.length > 0) : 
-                     channel.id === 'schedule' ? hasSchedulePermission(channel.scheduleData) : 
-                     channel.id === 'meeting' ? (workspaceType === 'project' && meetingChannels.length > 0) : false) &&
-                    hoveredChannel === channel.id"
+            <v-icon
+              v-if="
+                (channel.id === 'chat' ||
+                  channel.id === 'schedule' ||
+                  channel.id === 'meeting') &&
+                channel.id !== 'drive' &&
+                (!isCollapsedView || workspaceType === 'personal') &&
+                (channel.id === 'chat'
+                  ? workspaceType === 'project' && chatChannels.length > 0
+                  : channel.id === 'schedule'
+                  ? hasSchedulePermission(channel.scheduleData)
+                  : channel.id === 'meeting'
+                  ? workspaceType === 'project' && meetingChannels.length > 0
+                  : false) &&
+                hoveredChannel === channel.id
+              "
               class="channel-settings-btn"
               @click.stop="openChannelSettings(channel)"
             >
               mdi-cog
             </v-icon>
-            
-            <v-icon 
-              v-if="channel.subChannels && (!isCollapsedView || workspaceType === 'personal')" 
+
+            <v-icon
+              v-if="
+                channel.subChannels &&
+                (!isCollapsedView || workspaceType === 'personal')
+              "
               class="expand-icon"
               :class="{ expanded: channel.expanded }"
               @click.stop="toggleChannel(channel.id)"
@@ -1397,8 +1527,12 @@ const getStatusColor = (status) => {
           </div>
 
           <!-- 하위 채널들 -->
-          <div 
-            v-if="channel.subChannels && channel.expanded && (!isCollapsedView || workspaceType === 'personal')" 
+          <div
+            v-if="
+              channel.subChannels &&
+              channel.expanded &&
+              (!isCollapsedView || workspaceType === 'personal')
+            "
             class="subchannel-list"
           >
             <div
@@ -1413,9 +1547,19 @@ const getStatusColor = (status) => {
               @mouseleave="hoveredChannel = null"
             >
               <v-icon class="subchannel-icon">
-                {{ subChannel.type === 'video' ? 'mdi-video' : subChannel.type === 'schedule' ? 'mdi-pound' : 'mdi-pound' }}
+                {{
+                  subChannel.type === "video"
+                    ? "mdi-video"
+                    : subChannel.type === "schedule"
+                    ? "mdi-pound"
+                    : "mdi-pound"
+                }}
               </v-icon>
-              <span class="subchannel-name" :class="{ 'bold': subChannel.hasNotification }">{{ subChannel.name }}</span>
+              <span
+                class="subchannel-name"
+                :class="{ bold: subChannel.hasNotification }"
+                >{{ subChannel.name }}</span
+              >
 
               <!-- 채팅 채널: 메뉴 버튼 (이름 수정, 삭제) - MANAGER 또는 SUPER 권한일 때, 첫 번째 채널 제외 -->
               <v-menu
@@ -1487,13 +1631,15 @@ const getStatusColor = (status) => {
       <div class="section-title">개인 메시지</div>
 
       <div class="dm-list">
-        <div
-          v-for="(dm, idx) in directMessages"
-          :key="dm.channelSeq"
-        >
+        <template v-for="(dm, idx) in directMessages" :key="dm.channelSeq">
+          <div v-if="idx !== 0" class="dm-divider"></div>
+
           <div
             class="dm-item"
-            :class="{ 'active': currentChannel === dm.channelSeq, 'collapsed': isCollapsedView }"
+            :class="{
+              active: currentChannel === dm.channelSeq,
+              collapsed: isCollapsedView,
+            }"
             @click="selectDirectMessage(dm.channelSeq)"
             @contextmenu.prevent="handleDmRightClick(dm, $event)"
           >
@@ -1508,28 +1654,46 @@ const getStatusColor = (status) => {
               </v-avatar>
             </div>
 
-          <div v-if="!isCollapsedView || workspaceType === 'personal'" class="dm-info">
-            <div class="dm-name" :class="{ 'bold': notificationStore.hasChannelNotification(dm.channelSeq) }">
-              {{ dm.channelName }}
+            <div
+              v-if="!isCollapsedView || workspaceType === 'personal'"
+              class="dm-info"
+            >
+              <div
+                class="dm-name"
+                :class="{
+                  bold: notificationStore.hasChannelNotification(dm.channelSeq),
+                }"
+              >
+                {{ dm.channelName }}
+              </div>
+              <div v-if="dm.lastMessage" class="dm-last-message">
+                {{ dm.lastMessage }}
+              </div>
             </div>
-            <div v-if="dm.lastMessage" class="dm-last-message">
-              {{ dm.lastMessage }}
+
+            <div
+              v-if="!isCollapsedView || workspaceType === 'personal'"
+              class="dm-meta"
+            >
+              <div
+                v-if="
+                  dm.unreadCount > 0 ||
+                  notificationStore.getChannelNotificationCount(dm.channelSeq) >
+                    0
+                "
+                class="unread-badge"
+              >
+                {{
+                  dm.unreadCount +
+                  notificationStore.getChannelNotificationCount(dm.channelSeq)
+                }}
+              </div>
             </div>
           </div>
-
-          <div v-if="!isCollapsedView || workspaceType === 'personal'" class="dm-meta">
-            <div v-if="dm.unreadCount > 0 || notificationStore.getChannelNotificationCount(dm.channelSeq) > 0" class="unread-badge">
-              {{ dm.unreadCount + notificationStore.getChannelNotificationCount(dm.channelSeq) }}
-            </div>
-          </div>
-
-        </div>
-        </div>
-
+        </template>
       </div>
     </div>
   </div>
-  
 
   <!-- 채널 생성 모달 -->
   <v-dialog v-model="showCreateChannelModal" max-width="400">
@@ -1667,13 +1831,14 @@ const getStatusColor = (status) => {
         <v-icon color="error" size="32" class="mr-3">mdi-alert-circle</v-icon>
         <span class="leave-dialog-title">워크스페이스 탈퇴</span>
       </v-card-title>
-      
+
       <v-card-text class="leave-dialog-content">
         <div class="warning-message">
           <p class="workspace-name">
-            <strong>{{ currentWorkspaceData?.name }}</strong> 워크스페이스를 정말 탈퇴하시겠습니까?
+            <strong>{{ currentWorkspaceData?.name }}</strong> 워크스페이스를
+            정말 탈퇴하시겠습니까?
           </p>
-          
+
           <div class="warning-box">
             <v-icon color="warning" size="20" class="mr-2">mdi-alert</v-icon>
             <div class="warning-text">
@@ -1687,7 +1852,7 @@ const getStatusColor = (status) => {
           </div>
         </div>
       </v-card-text>
-      
+
       <v-card-actions class="leave-dialog-actions">
         <v-btn
           variant="text"
@@ -1738,7 +1903,7 @@ const getStatusColor = (status) => {
       position: 'fixed',
       left: dmContextMenuPosition.x + 'px',
       top: dmContextMenuPosition.y + 'px',
-      zIndex: 1000
+      zIndex: 1000,
     }"
     @click.stop
   >
@@ -1946,7 +2111,6 @@ const getStatusColor = (status) => {
   background: #a8a8a8;
 }
 
-
 .workspace-sidebar.collapsed {
   width: 72px;
 }
@@ -2036,6 +2200,12 @@ const getStatusColor = (status) => {
 .dm-list {
   display: flex;
   flex-direction: column;
+}
+
+.dm-divider {
+  height: 1px;
+  background: rgba(var(--v-theme-on-surface), 0.08);
+  margin: 4px 16px;
 }
 
 .channel-group {
@@ -2775,10 +2945,12 @@ const getStatusColor = (status) => {
 }
 
 .leave-dialog-header {
-  background: linear-gradient(135deg, 
-    rgba(239, 68, 68, 0.15) 0%, 
+  background: linear-gradient(
+    135deg,
+    rgba(239, 68, 68, 0.15) 0%,
     rgba(220, 38, 38, 0.08) 50%,
-    rgba(239, 68, 68, 0.12) 100%);
+    rgba(239, 68, 68, 0.12) 100%
+  );
   background-size: 200% 200%;
   animation: gradientShift 3s ease infinite;
   padding: 24px !important;
@@ -2790,21 +2962,24 @@ const getStatusColor = (status) => {
 }
 
 .leave-dialog-header::before {
-  content: '';
+  content: "";
   position: absolute;
   top: 0;
   left: -100%;
   width: 100%;
   height: 100%;
-  background: linear-gradient(90deg, 
-    transparent, 
-    rgba(255, 255, 255, 0.1), 
-    transparent);
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.1),
+    transparent
+  );
   animation: shimmer 2s infinite;
 }
 
 @keyframes gradientShift {
-  0%, 100% {
+  0%,
+  100% {
     background-position: 0% 50%;
   }
   50% {
@@ -2826,7 +3001,8 @@ const getStatusColor = (status) => {
 }
 
 @keyframes pulse {
-  0%, 100% {
+  0%,
+  100% {
     transform: scale(1);
     opacity: 1;
   }
@@ -2896,9 +3072,11 @@ const getStatusColor = (status) => {
 .workspace-name strong {
   color: rgb(var(--v-theme-primary));
   font-weight: 700;
-  background: linear-gradient(135deg, 
-    rgb(var(--v-theme-primary)), 
-    rgba(var(--v-theme-primary), 0.7));
+  background: linear-gradient(
+    135deg,
+    rgb(var(--v-theme-primary)),
+    rgba(var(--v-theme-primary), 0.7)
+  );
   background-clip: text;
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
@@ -2907,7 +3085,8 @@ const getStatusColor = (status) => {
 }
 
 @keyframes textGradient {
-  0%, 100% {
+  0%,
+  100% {
     background-position: 0% 50%;
   }
   50% {
@@ -2919,10 +3098,12 @@ const getStatusColor = (status) => {
   display: flex;
   gap: 12px;
   padding: 16px;
-  background: linear-gradient(135deg, 
-    rgba(251, 191, 36, 0.12) 0%, 
+  background: linear-gradient(
+    135deg,
+    rgba(251, 191, 36, 0.12) 0%,
     rgba(251, 191, 36, 0.08) 50%,
-    rgba(251, 191, 36, 0.10) 100%);
+    rgba(251, 191, 36, 0.1) 100%
+  );
   background-size: 200% 200%;
   animation: warningGlow 3s ease infinite, fadeInUp 0.5s ease-out 0.4s both;
   border: 1px solid rgba(251, 191, 36, 0.3);
@@ -2933,20 +3114,23 @@ const getStatusColor = (status) => {
 }
 
 .warning-box::before {
-  content: '';
+  content: "";
   position: absolute;
   top: -50%;
   left: -50%;
   width: 200%;
   height: 200%;
-  background: radial-gradient(circle, 
-    rgba(251, 191, 36, 0.1) 0%, 
-    transparent 70%);
+  background: radial-gradient(
+    circle,
+    rgba(251, 191, 36, 0.1) 0%,
+    transparent 70%
+  );
   animation: rotate 4s linear infinite;
 }
 
 @keyframes warningGlow {
-  0%, 100% {
+  0%,
+  100% {
     background-position: 0% 50%;
     box-shadow: 0 0 0 rgba(251, 191, 36, 0);
   }
@@ -2978,7 +3162,8 @@ const getStatusColor = (status) => {
 }
 
 @keyframes bounce {
-  0%, 100% {
+  0%,
+  100% {
     transform: translateY(0);
   }
   50% {
@@ -3055,7 +3240,7 @@ const getStatusColor = (status) => {
 }
 
 .leave-dialog-actions .v-btn::before {
-  content: '';
+  content: "";
   position: absolute;
   top: 50%;
   left: 50%;
@@ -3107,10 +3292,7 @@ const getStatusColor = (status) => {
   align-items: center;
   gap: 16px;
   padding: 16px 20px;
-  background: linear-gradient(135deg, 
-    #10b981 0%, 
-    #059669 50%,
-    #047857 100%);
+  background: linear-gradient(135deg, #10b981 0%, #059669 50%, #047857 100%);
   background-size: 200% 200%;
   animation: toastGradient 3s ease infinite;
   border-radius: 16px;
@@ -3122,21 +3304,24 @@ const getStatusColor = (status) => {
 }
 
 .toast-content::before {
-  content: '';
+  content: "";
   position: absolute;
   top: 0;
   left: -100%;
   width: 100%;
   height: 100%;
-  background: linear-gradient(90deg, 
-    transparent, 
-    rgba(255, 255, 255, 0.2), 
-    transparent);
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.2),
+    transparent
+  );
   animation: toastShimmer 2s infinite;
 }
 
 @keyframes toastGradient {
-  0%, 100% {
+  0%,
+  100% {
     background-position: 0% 50%;
   }
   50% {
@@ -3168,7 +3353,8 @@ const getStatusColor = (status) => {
 }
 
 @keyframes toastIconPulse {
-  0%, 100% {
+  0%,
+  100% {
     transform: scale(1);
     box-shadow: 0 0 0 0 rgba(255, 255, 255, 0.4);
   }
@@ -3216,7 +3402,7 @@ const getStatusColor = (status) => {
 /* 토스트 자동 닫기 효과 */
 .leave-success-toast {
   animation: slideUpToast 0.5s cubic-bezier(0.68, -0.55, 0.265, 1.55) both,
-             fadeOutToast 0.3s ease 4.7s both;
+    fadeOutToast 0.3s ease 4.7s both;
 }
 
 @keyframes fadeOutToast {
@@ -3233,38 +3419,38 @@ const getStatusColor = (status) => {
     min-width: 60px !important;
     padding: 16px 0 0 0 !important;
   }
-  
+
   .workspace-sidebar.collapsed {
     width: 0 !important;
     min-width: 0 !important;
     padding: 0 !important;
     overflow: hidden !important;
   }
-  
+
   /* 프로젝트 정보 숨기기 */
   .project-info {
     padding: 8px 0 !important;
     justify-content: center !important;
   }
-  
+
   .project-name,
   .leave-button {
     display: none !important;
   }
-  
+
   .toggle-button {
     margin: 0 auto !important;
   }
-  
+
   /* 섹션 타이틀 숨기기 */
   .section-title {
     padding: 0 !important;
   }
-  
+
   .section-title span {
     display: none !important;
   }
-  
+
   /* 채널 아이템 - 아이콘만 표시 */
   .channel-item,
   .dm-item {
@@ -3273,11 +3459,11 @@ const getStatusColor = (status) => {
     margin: 4px 0 !important;
     gap: 0 !important;
   }
-  
+
   .channel-item .v-icon {
     margin: 0 !important;
   }
-  
+
   .channel-name,
   .dm-name,
   .channel-item-actions,
@@ -3286,53 +3472,53 @@ const getStatusColor = (status) => {
   .channel-status {
     display: none !important;
   }
-  
+
   /* 하위 채널 들여쓰기 제거 */
   .sub-channels {
     padding-left: 0 !important;
   }
-  
+
   .sub-channel-item {
     padding: 8px 0 !important;
     padding-left: 0 !important;
     justify-content: center !important;
     margin: 2px 0 !important;
   }
-  
+
   .sub-channel-name,
   .sub-channel-actions {
     display: none !important;
   }
-  
+
   /* 직접 메시지 섹션 완전히 숨기기 */
   .direct-messages-section {
     display: none !important;
   }
-  
+
   .dm-item .v-avatar {
     margin: 0 !important;
   }
-  
+
   .dm-user-info {
     display: none !important;
   }
-  
+
   /* 채널 그룹 조정 */
   .channel-group {
     margin-bottom: 2px !important;
   }
-  
+
   /* 채널 헤더 조정 */
   .channel-header {
     padding: 8px 0 !important;
     justify-content: center !important;
   }
-  
+
   .channel-header-content {
     width: 100% !important;
     justify-content: center !important;
   }
-  
+
   .channel-header-content h3,
   .channel-header-content .channel-count,
   .header-actions {
@@ -3376,23 +3562,23 @@ const getStatusColor = (status) => {
     min-width: 56px !important;
     padding: 12px 0 0 0 !important;
   }
-  
+
   .workspace-sidebar.collapsed {
     width: 0 !important;
   }
-  
+
   .channel-item,
   .dm-item,
   .sub-channel-item {
     padding: 8px 0 !important;
   }
-  
+
   .channel-item .v-icon,
   .sub-channel-item .v-icon,
   .dm-item .v-icon {
     font-size: 20px !important;
   }
-  
+
   .dm-item .v-avatar {
     width: 32px !important;
     height: 32px !important;
@@ -3405,29 +3591,29 @@ const getStatusColor = (status) => {
     min-width: 52px !important;
     padding: 10px 0 0 0 !important;
   }
-  
+
   .channel-item,
   .dm-item,
   .sub-channel-item {
     padding: 6px 0 !important;
   }
-  
+
   .channel-item .v-icon,
   .sub-channel-item .v-icon,
   .dm-item .v-icon {
     font-size: 18px !important;
   }
-  
+
   .dm-item .v-avatar {
     width: 28px !important;
     height: 28px !important;
   }
-  
+
   .toggle-button {
     width: 20px !important;
     height: 20px !important;
   }
-  
+
   .toggle-button .v-icon {
     font-size: 14px !important;
   }

@@ -1909,6 +1909,27 @@ onUnmounted(() => {
       <!-- 채팅 헤더 -->
       <div class="chat-header">
         <div class="channel-info">
+          <template v-if="isPersonalChat">
+            <v-avatar
+              v-if="chatUserInfo?.profileUrl"
+              size="36"
+              class="channel-avatar"
+            >
+              <v-img :src="chatUserInfo.profileUrl" alt="상대방 프로필" />
+            </v-avatar>
+            <v-avatar
+              v-else
+              size="36"
+              class="channel-avatar channel-avatar--fallback"
+              color="primary"
+            >
+              {{
+                (chatUserInfo?.name || currentChannelName || "사용자").charAt(0) ||
+                  "?"
+              }}
+            </v-avatar>
+          </template>
+          <v-icon v-else class="channel-icon">mdi-pound</v-icon>
           <span class="channel-name">{{ currentChannelName }}</span>
         </div>
       </div>
@@ -2435,6 +2456,15 @@ onUnmounted(() => {
   font-size: 16px;
   font-weight: 600;
   color: rgb(var(--v-theme-on-surface));
+}
+
+.channel-avatar {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+}
+
+.channel-avatar--fallback {
+  font-weight: 600;
+  color: #ffffff;
 }
 
 .channel-name {
