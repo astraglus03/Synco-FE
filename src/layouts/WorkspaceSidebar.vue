@@ -1522,7 +1522,10 @@ const getStatusColor = (status) => {
               {{ dm.unreadCount + notificationStore.getChannelNotificationCount(dm.channelSeq) }}
             </div>
           </div>
+
         </div>
+        </div>
+
       </div>
     </div>
   </div>
