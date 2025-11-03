@@ -3,7 +3,7 @@
     <!-- 미팅 헤더 -->
     <div class="meeting-header">
       <div class="call-info">
-        <h3 class="call-title">{{ meetingData?.roomName || '회의' }}</h3>
+        <h3 class="call-title">{{ displayRoomName }}</h3>
         <p class="call-duration">{{ callDuration }}</p>
       </div>
       <div class="call-controls">
@@ -51,7 +51,7 @@
           <!-- 내 비디오 -->
           <div v-if="localParticipantIdentity" class="participant-video my-video">
             <video :id="`video-${localParticipantIdentity}`" autoplay muted playsinline class="video-element"></video>
-            <div class="video-label">나</div>
+            <div class="video-label">{{ getParticipantName(localParticipantIdentity) || authStore.user?.name || localParticipantIdentity }}</div>
           </div>
           
           <!-- 원격 참여자들 -->
@@ -61,7 +61,7 @@
             class="participant-video"
           >
             <video :id="`video-${participant.identity}`" autoplay playsinline class="video-element"></video>
-            <div class="video-label">{{ participant.name || participant.identity }}</div>
+            <div class="video-label">{{ getParticipantName(participant.identity) || participant.name || participant.identity }}</div>
           </div>
         </div>
       </div>
@@ -163,6 +163,7 @@ const chatMessagesRef = ref(null)
 const callTimer = ref(null)
 const remoteParticipants = ref([])
 const localParticipantIdentity = ref(null)
+const roomParticipants = ref([]) // API로 가져온 참가자 정보 (이름 포함)
 
 // meetingData
 const meetingData = computed(() => {
@@ -197,39 +198,153 @@ const meetingData = computed(() => {
 
   // 3) sessionStorage에서 읽기 (페이지 새로고침 시)
   const storedIsHost = sessionStorage.getItem('meetingIsHost')
+  const storedRoomName = sessionStorage.getItem('meetingRoomName')
   if (storedIsHost) {
     return {
       roomId: props.roomId || 'unknown',
-      roomName: `미팅 ${props.roomId || 'Unknown'}`,
+      roomName: storedRoomName || `미팅 ${props.roomId || 'Unknown'}`,
       isHost: storedIsHost === 'true',
       livekitToken: null,
       livekitRoomName: props.roomId?.toString() || 'unknown',
     }
   }
 
-  // 4) 최후 fallback
+  // 4) 최후 fallback (API 호출 없이 기본값)
   return {
     roomId: props.roomId || 'unknown',
-    roomName: `미팅 ${props.roomId || 'Unknown'}`,
+    roomName: '회의',
     isHost: false,
     livekitToken: null,
     livekitRoomName: props.roomId?.toString() || 'unknown',
   }
 })
 
+// 회의 제목 로드 (fallback용)
+const roomTitle = ref(null)
+
+// 회의 제목이 기본값인지 확인 (미팅 N 패턴 또는 "회의")
+const isDefaultRoomName = (roomName) => {
+  if (!roomName) return true
+  if (roomName === '회의') return true
+  // "미팅 N" 패턴 확인
+  const match = roomName.match(/^미팅\s*(\d+)$/)
+  return !!match
+}
+
+// 회의 제목 가져오기
+const loadRoomTitle = async () => {
+  if (!props.roomId) return
+  
+  const currentRoomName = meetingData.value?.roomName
+  // 기본값이 아니고 이미 실제 제목이 있으면 스킵
+  if (currentRoomName && !isDefaultRoomName(currentRoomName)) {
+    return
+  }
+  
+  try {
+    console.log('🔍 회의 제목 API 호출 시작:', props.roomId)
+    // 백엔드 API로 회의 상세 정보 가져오기 (파라미터 순서: roomSeq, memberSeq)
+    const response = await meetingApi.getRoomDetail(props.roomId, authStore.memberSeq)
+    console.log('📋 API 응답:', response)
+    
+    if (response?.data?.roomName) {
+      roomTitle.value = response.data.roomName
+      console.log('✅ 회의 제목 로드 완료:', roomTitle.value)
+      // meetingData는 computed이므로 직접 수정 불가, 대신 sessionStorage 업데이트
+      sessionStorage.setItem('meetingRoomName', roomTitle.value)
+    }
+  } catch (error) {
+    console.warn('⚠️ 회의 제목 로드 실패:', error)
+  }
+}
+
+// 회의 참가자 정보 가져오기 (이름 포함)
+const loadRoomParticipants = async () => {
+  if (!props.roomId) return
+  
+  try {
+    console.log('🔍 회의 참가자 정보 API 호출 시작:', props.roomId)
+    const response = await meetingApi.getRoomDetail(props.roomId, authStore.memberSeq)
+    console.log('📋 참가자 정보 API 응답:', response)
+    
+    if (response?.data?.participants && Array.isArray(response.data.participants)) {
+      roomParticipants.value = response.data.participants
+      console.log('✅ 참가자 정보 로드 완료:', roomParticipants.value.length, '명')
+    }
+  } catch (error) {
+    console.warn('⚠️ 참가자 정보 로드 실패:', error)
+  }
+}
+
+// participant identity로 이름 찾기
+const getParticipantName = (participantIdentity) => {
+  if (!participantIdentity) return null
+  
+  // 1. 로컬 참가자이면 authStore에서 가져오기
+  if (participantIdentity?.toString() === localParticipantIdentity.value?.toString() ||
+      participantIdentity?.toString() === authStore.memberSeq?.toString()) {
+    return authStore.user?.name || null
+  }
+  
+  // 2. roomParticipants에서 찾기
+  const participant = roomParticipants.value.find(
+    p => p.participantId?.toString() === participantIdentity?.toString()
+  )
+  
+  if (participant?.participantName) {
+    return participant.participantName
+  }
+  
+  // 3. remoteParticipants에서 찾기 (participant.name이 있는 경우)
+  const remoteParticipant = remoteParticipants.value.find(
+    p => p.identity?.toString() === participantIdentity?.toString()
+  )
+  
+  if (remoteParticipant?.name) {
+    return remoteParticipant.name
+  }
+  
+  return null
+}
+
+// 회의 제목 표시 (computed로 반응성 확보)
+const displayRoomName = computed(() => {
+  const currentRoomName = meetingData.value?.roomName
+  
+  // 1. 실제 제목이 있으면 사용 (기본값이 아닌 경우)
+  if (currentRoomName && !isDefaultRoomName(currentRoomName)) {
+    return currentRoomName
+  }
+  
+  // 2. API로 로드한 제목이 있으면 사용
+  if (roomTitle.value) {
+    return roomTitle.value
+  }
+  
+  // 3. Fallback: 기본값 또는 현재 값
+  return currentRoomName || '회의'
+})
+
 // 초기 트랙 붙이기 (connect 이후)
-const initializeExistingTracks = () => {
+const initializeExistingTracks = async () => {
   if (!room.value) return
 
   console.log('🔍 기존 참가자 수:', room.value.remoteParticipants.size)
 
+  // 참가자 정보 먼저 로드
+  await loadRoomParticipants()
+
   // 원격 참가자들
   room.value.remoteParticipants.forEach((participant) => {
     console.log('📹 기존 원격 참가자 추가:', participant.identity)
+    
+    // 참가자 이름 찾기
+    const participantName = getParticipantName(participant.identity)
+    
     // 참가자를 배열에 추가
     remoteParticipants.value.push({
       identity: participant.identity,
-      name: participant.name || participant.identity,
+      name: participantName || participant.name || participant.identity,
     })
     setupParticipantEvents(participant)
     participant.trackPublications.forEach((pub) => {
@@ -298,7 +413,7 @@ const initializeLiveKitRoom = async () => {
     setupRoomEventListeners()
 
     // 현재 방에 있는 참가자/트랙 DOM 부착
-    initializeExistingTracks()
+    await initializeExistingTracks()
 
     // 카메라와 마이크 트랙 생성 및 publish
     try {
@@ -347,11 +462,18 @@ const setupRoomEventListeners = () => {
   if (!room.value) return
 
   // 새 참가자 입장
-  room.value.on(RoomEvent.ParticipantConnected, (participant) => {
+  room.value.on(RoomEvent.ParticipantConnected, async (participant) => {
     console.log('참여자 연결:', participant.identity)
+    
+    // 참가자 정보 새로고침 (새 참가자가 추가되었을 수 있음)
+    await loadRoomParticipants()
+    
+    // 참가자 이름 찾기
+    const participantName = getParticipantName(participant.identity)
+    
     remoteParticipants.value.push({
       identity: participant.identity,
-      name: participant.name || participant.identity,
+      name: participantName || participant.name || participant.identity,
     })
     setupParticipantEvents(participant)
   })
@@ -516,14 +638,14 @@ const handleChatMessage = (data, participant) => {
   const senderId = participant?.identity || data?.senderId || 'unknown'
   const senderName =
     participant?.name ||
-    participant?.identity ||
     data?.name ||
+    participant?.identity ||
     '알 수 없음'
 
-  // senderId가 현재 사용자이면 "나"로 표시
+  // senderId가 현재 사용자이면 실제 이름 표시
   const displayName = 
     senderId?.toString() === authStore.memberSeq?.toString() 
-      ? '나' 
+      ? (authStore.user?.name || '알 수 없음')
       : senderName
 
   const message = {
@@ -703,11 +825,11 @@ const loadChatMessages = async () => {
     
     if (Array.isArray(messagesArray) && messagesArray.length > 0) {
       const messages = messagesArray.map((msg) => {
-        // senderId가 현재 사용자이면 "나"로 표시, 아니면 senderId 표시
+        // senderId가 현재 사용자이면 실제 이름 표시, 아니면 이름 또는 senderId 표시
         const displayName = 
           msg.senderId?.toString() === authStore.memberSeq?.toString() 
-            ? '나' 
-            : (msg.senderId?.toString() || '알 수 없음')
+            ? (authStore.user?.name || '알 수 없음')
+            : (msg.name || msg.senderId?.toString() || '알 수 없음')
         
         return {
           id: msg.id,
@@ -749,11 +871,14 @@ const sendMessage = async () => {
   const messageText = content
   
   try {
+    // 현재 사용자 이름
+    const userName = authStore.user?.name || '알 수 없음'
+    
     // 1. LiveKit으로 실시간 전송 (다른 참여자들에게 즉시 전달)
     const payload = {
       type: 'chat',
       senderId: authStore.memberSeq?.toString() || 'me',
-      name: authStore.memberName || '나',
+      name: userName,
       content: messageText,
     }
 
@@ -769,7 +894,7 @@ const sendMessage = async () => {
         props.roomId,
         {
           senderId: authStore.memberSeq?.toString(),
-          name: authStore.memberName || '나',
+          name: userName,
           content: messageText,
         }
       )
@@ -781,7 +906,7 @@ const sendMessage = async () => {
     const message = {
       id: Date.now(),
       senderId: authStore.memberSeq?.toString() || 'me',
-      name: authStore.memberName || '나',
+      name: userName,
       content: messageText,
       createdAt: new Date().toISOString(),
       timeOnly: new Date().toLocaleTimeString('ko-KR', {
@@ -820,11 +945,20 @@ const startCallTimer = () => {
 }
 
     // 라이프사이클
-onMounted(() => {
-  // isHost 정보를 sessionStorage에 저장 (페이지 새로고침 시 유지용)
+onMounted(async () => {
+  // isHost와 roomName 정보를 sessionStorage에 저장 (페이지 새로고침 시 유지용)
   if (meetingData.value?.isHost !== undefined) {
     sessionStorage.setItem('meetingIsHost', meetingData.value.isHost.toString())
   }
+  
+  // 실제 제목인 경우에만 sessionStorage에 저장
+  const currentRoomName = meetingData.value?.roomName
+  if (currentRoomName && !isDefaultRoomName(currentRoomName)) {
+    sessionStorage.setItem('meetingRoomName', currentRoomName)
+  }
+  
+  // 회의 제목이 기본값이면 API로 가져오기
+  await loadRoomTitle()
   
   initializeLiveKitRoom()
 })
