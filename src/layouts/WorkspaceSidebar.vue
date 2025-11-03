@@ -841,23 +841,17 @@ const getChannelMemberAuthority = (channelType, memberSeq) => {
 
 // 채널별 권한 확인 함수들
 const hasChannelManagePermission = (channelType) => {
-  const currentUserAuthority = getChannelMemberAuthority(
-    channelType,
-    authStore.memberSeq
-  );
-  // 모든 권한(SUPER, MANAGER, PARTICIPANT)에서 톱니바퀴 표시
-  return (
-    currentUserAuthority === "SUPER" ||
-    currentUserAuthority === "MANAGER" ||
-    currentUserAuthority === "PARTICIPANT"
-  );
-};
+  const currentUserAuthority = getChannelMemberAuthority(channelType, authStore.memberSeq)
+  // 관리자 이상만 관리 권한 노출
+  return currentUserAuthority === 'SUPER' || currentUserAuthority === 'MANAGER'
+}
 
 // 사용자 권한 확인 (Store 기반)
 const hasChannelPermission = (channelData) => {
-  if (!channelData) return false;
-  return hasChannelManagePermission("chat");
-};
+  if (!channelData) return false
+  // channelData가 있으면 채팅 하위 채널로 간주
+  return hasChannelManagePermission('chat')
+}
 
 // 일정관리 권한 확인 (Store 기반)
 const hasSchedulePermission = (scheduleData) => {

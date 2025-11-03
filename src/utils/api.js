@@ -3,7 +3,7 @@ import { useAuthStore } from '@/store/authStore'
 import { handleApiResponse } from '@/models/common/ApiResponse'
 
 // JWT 토큰에서 payload 추출 (디코딩)
-const decodeJWT = (token) => {
+export const decodeJWT = (token) => {
   try {
     const base64Url = token.split('.')[1]
     const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/')
@@ -35,6 +35,29 @@ const apiClient = axios.create({
 apiClient.interceptors.request.use((config) => {
   const authStore = useAuthStore()
   
+  // 인증 관련 엔드포인트는 토큰 주입 건너뛰기
+  // 로그인/토큰갱신/회원가입/비번찾기 등은 기존 만료 토큰이 개입되면 문제가 생길 수 있음
+  const url = String(config.url || '')
+  const isAuthEndpoint = [
+    '/workspace-service/member/doLogin',
+    '/workspace-service/member/refreshAt',
+    '/workspace-service/member/create',
+    '/workspace-service/member/findId',
+    '/workspace-service/member/findPassword',
+    '/workspace-service/member/changePassword'
+  ].some((path) => url.includes(path))
+
+  if (isAuthEndpoint) {
+    // 혹시 남아있을 수 있는 Authorization 헤더 제거
+    if (config.headers && 'Authorization' in config.headers) {
+      delete config.headers.Authorization
+    }
+    if (config.headers && 'X-Member-Seq' in config.headers) {
+      delete config.headers['X-Member-Seq']
+    }
+    return config
+  }
+
   // 액세스 토큰이 있으면 Authorization 헤더에 추가
   if (authStore.accessToken) {
     config.headers.Authorization = `Bearer ${authStore.accessToken}`
@@ -68,12 +91,11 @@ apiClient.interceptors.response.use(
     if (error.response?.status === 401 && !originalRequest._retry) {
       originalRequest._retry = true
       try {
-        const baseUrl = (import.meta.env.VITE_API_URL).replace(/\/+$/, '')
-        // ✅ RT는 Cookie로 자동 전송됨 (body 필요 없음)
-        const { data } = await axios.post(
-          `${baseUrl}/workspace-service/member/refreshAt`,
-          {}, // body 비움
-          { withCredentials: true } // 쿠키 전송
+        // ✅ 공통 apiClient를 사용해 상대 경로로 호출 (프록시/베이스URL 모두 호환)
+        const { data } = await apiClient.post(
+          '/workspace-service/member/refreshAt',
+          {},
+          { withCredentials: true }
         )
         // 백엔드 ResponseDto 구조: data.data.accessToken
         const newAccessToken = data?.data?.accessToken || data?.accessToken

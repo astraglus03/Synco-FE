@@ -7,46 +7,48 @@ import router from './router'
 import vuetify from './plugins/vuetify'
 import { useAuthStore } from './store/authStore'
 import axios from 'axios'
+import apiClient from '@/utils/api'
 
 // 전역 컴포넌트 import
 import GlobalSearch from '@/components/common/GlobalSearch.vue'
 
 // ===== 콘솔 로그 필터링 설정 =====
-// SSE 및 알림 관련 로그만 표시하고 나머지는 비활성화
+// NOTE: 로컬에서 전체 로그를 보려면 localStorage.setItem('DEBUG_LOGS','1')
 const originalConsoleLog = console.log
-console.log = function(...args) {
-  // 첫 번째 인자를 문자열로 변환하여 체크
-  const firstArg = String(args[0] || '')
-  
-  // SSE 또는 알림 관련 키워드가 있으면 로그 표시
-  const allowedKeywords = [
-    '[SSE]',
-    '[알림',
-    'SSE 연결',
-    'SSE 메시지',
-    '알림 수신',
-    '알림 Store',
-    '[App] 로그인',
-    '[App] 로그아웃'
-  ]
-  
-  const shouldLog = allowedKeywords.some(keyword => firstArg.includes(keyword))
-  
-  if (shouldLog) {
-    originalConsoleLog.apply(console, args)
+if (localStorage.getItem('DEBUG_LOGS') !== '1') {
+  // SSE 및 알림, 스케줄/워크스페이스 디버그 로그만 표시
+  console.log = function(...args) {
+    const firstArg = String(args[0] || '')
+    const allowedKeywords = [
+      '[SSE]',
+      '[알림',
+      'SSE 연결',
+      'SSE 메시지',
+      '알림 수신',
+      '알림 Store',
+      '[App] 로그인',
+      '[App] 로그아웃',
+      '[Schedule]',
+      '[WorkspaceMemberStore]',
+      '[Workspace]'
+    ]
+    const shouldLog = allowedKeywords.some(keyword => firstArg.includes(keyword))
+    if (shouldLog) {
+      originalConsoleLog.apply(console, args)
+    }
   }
 }
 
 // console.warn 비활성화 (임시)
 const originalConsoleWarn = console.warn
-console.warn = function(...args) {
-  const firstArg = String(args[0] || '')
-  
-  // SSE 관련 경고만 표시
-  if (firstArg.includes('[SSE]')) {
-    originalConsoleWarn.apply(console, args)
+if (localStorage.getItem('DEBUG_LOGS') !== '1') {
+  console.warn = function(...args) {
+    const firstArg = String(args[0] || '')
+    // SSE 및 스케줄/워크스페이스 관련 경고만 표시
+    if (firstArg.includes('[SSE]') || firstArg.includes('[Schedule]') || firstArg.includes('[Workspace')) {
+      originalConsoleWarn.apply(console, args)
+    }
   }
-  // 나머지 경고는 무시
 }
 
 const app = createApp(App)
@@ -87,9 +89,8 @@ const checkAndRefreshToken = async () => {
       
       // 이미 만료되었거나 5분 이내 만료 예정이면 갱신
       if (expiryTime <= currentTime || timeLeft < 300) {
-        const baseUrl = (import.meta.env.VITE_API_URL).replace(/\/+$/, '')
-        const { data } = await axios.post(
-          `${baseUrl}/workspace-service/member/refreshAt`,
+        const { data } = await apiClient.post(
+          '/workspace-service/member/refreshAt',
           {},
           { withCredentials: true }
         )

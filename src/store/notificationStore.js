@@ -94,6 +94,18 @@ export const useNotificationStore = defineStore('notification', () => {
 
   // ===== Actions =====
   
+  // 타입 표준화 헬퍼
+  const normalizeType = (rawType) => {
+    const t = String(rawType || '').toLowerCase()
+    if (!t) return 'UNKNOWN'
+    if (t.includes('friend')) return 'alarm-friend'
+    if (t.includes('project') || t.includes('invite')) return 'alarm-project'
+    if (t.includes('task') || t.includes('comment')) return 'alarm-task'
+    if (t.includes('meeting')) return 'alarm-meeting'
+    if (t.includes('drive')) return 'alarm-drive'
+    return rawType || 'UNKNOWN'
+  }
+
   /**
    * SSE 메시지 핸들러 (단일 인스턴스)
    */
@@ -195,8 +207,8 @@ export const useNotificationStore = defineStore('notification', () => {
 
     // 알림 객체 생성
     const notification = {
-      id: Date.now(),
-      type: data.alarmType || data.type || 'UNKNOWN',
+      id: String(data.alarmSeq || data.id || Date.now()),
+      type: normalizeType(data.alarmType || data.type || 'UNKNOWN'),
       message: data.message || '새로운 알림이 있습니다',
       time: '방금 전',
       read: false,
@@ -219,8 +231,24 @@ export const useNotificationStore = defineStore('notification', () => {
 
     console.log('[알림 Store] 📊 추가 전 알림 개수:', notifications.value.length)
 
-    // 알림 목록 맨 앞에 추가 (최신순)
-    notifications.value.unshift(notification)
+    // 중복 방지: 같은 alarmSeq가 이미 있으면 갱신만 수행
+    if (notification.alarmSeq) {
+      const existingIndex = notifications.value.findIndex(n => String(n.alarmSeq) === String(notification.alarmSeq))
+      if (existingIndex > -1) {
+        notifications.value[existingIndex] = {
+          ...notifications.value[existingIndex],
+          ...notification,
+          read: notifications.value[existingIndex].read && notification.read
+        }
+        console.log('[알림 Store] 🔁 기존 알림 갱신(alarmSeq 중복)')
+      } else {
+        // 알림 목록 맨 앞에 추가 (최신순)
+        notifications.value.unshift(notification)
+      }
+    } else {
+      // alarmSeq가 없으면 안전하게 추가만
+      notifications.value.unshift(notification)
+    }
 
     console.log('[알림 Store] ✅ 알림 추가 완료, 현재 개수:', notifications.value.length)
     console.log('[알림 Store] 📋 추가된 알림:', notification.message)
@@ -325,26 +353,30 @@ export const useNotificationStore = defineStore('notification', () => {
   /**
    * 전체 알림 읽음 처리 (API 연동)
    * 개인 페이지: 개인의 모든 알림 읽음
-   * 프로젝트 페이지: 해당 프로젝트의 모든 알림 읽음
+   * 프로젝트 페이지 - "모든 알림" 탭: 개인의 모든 알림 읽음 (개인과 동일)
+   * 프로젝트 페이지 - "프로젝트" 탭: 해당 프로젝트의 모든 알림 읽음
    */
   const markAllAsRead = async () => {
     try {
       // console.log('[알림 Store] 🔄 전체 알림 읽음 처리 시작...')
       console.log('  - 워크스페이스 타입:', currentWorkspaceType.value)
       console.log('  - 워크스페이스 번호:', currentWorkspaceSeq.value)
+      console.log('  - 활성 필터:', activeFilter.value)
       
-      // 개인/프로젝트 페이지에 따라 다른 API 엔드포인트 사용
-      const endpoint = currentWorkspaceType.value === 'personal' 
-        ? '/workspace-service/alarms/personal' 
-        : '/workspace-service/alarms/project'
+      // 프로젝트 페이지의 "모든 알림" 탭은 개인 전체 읽음과 동일
+      // 프로젝트 페이지의 "프로젝트" 탭만 해당 프로젝트 알림 읽음
+      const isProjectWorkspaceFilter = currentWorkspaceType.value === 'project' && activeFilter.value === 'workspace'
+      
+      const endpoint = isProjectWorkspaceFilter
+        ? '/workspace-service/alarms/project' 
+        : '/workspace-service/alarms/personal'
       
       // 요청 DTO
-      // 개인: DTO 없음 (null)
-      // 프로젝트: AlarmFindReqDto { workSpaceSeq }
+      // 개인 또는 "모든 알림" 탭: DTO 없음 (null)
+      // 프로젝트 "프로젝트" 탭: AlarmFindReqDto { workSpaceSeq }
       let requestDto = null
       
-      // 프로젝트 워크스페이스일 때만 DTO 생성
-      if (currentWorkspaceType.value === 'project') {
+      if (isProjectWorkspaceFilter) {
         requestDto = {
           workSpaceSeq: currentWorkspaceSeq.value
         }
@@ -423,93 +455,106 @@ export const useNotificationStore = defineStore('notification', () => {
    * 단건 알림 삭제 (API 연동)
    */
   const deleteNotification = async (notificationId) => {
+    const notification = notifications.value.find(n => n.id === notificationId)
+    if (!notification) {
+      return
+    }
+
+    const alarmSeq = notification.alarmSeq
+    if (!alarmSeq) {
+      const indexNoSeq = notifications.value.findIndex(n => n.id === notificationId)
+      if (indexNoSeq > -1) notifications.value.splice(indexNoSeq, 1)
+      return
+    }
+
+    // 기본 경로: DELETE /alarms/{alarmSeq}
+    const tryPrimary = async () => apiDelete(`/workspace-service/alarms/${alarmSeq}`)
+    // 대체 경로 1: DELETE /alarms (body 포함)
+    const tryAltBodyDelete = async () => apiDelete('/workspace-service/alarms', { alarmSeq })
+    // 대체 경로 2: PATCH /alarms/delete (body 포함)
+    const tryAltPatchDelete = async () => apiPatch('/workspace-service/alarms/delete', { alarmSeq })
+
+    let deleted = false
     try {
-      const notification = notifications.value.find(n => n.id === notificationId)
-      if (!notification) {
-        // console.warn('[알림 Store] 알림을 찾을 수 없습니다:', notificationId)
-        return
-      }
-
-      // alarmSeq 추출
-      const alarmSeq = notification.alarmSeq
-      if (!alarmSeq) {
-        // console.error('[알림 Store] alarmSeq가 없습니다:', notification)
-        // alarmSeq가 없어도 UI 업데이트는 진행
-        const index = notifications.value.findIndex(n => n.id === notificationId)
-        if (index > -1) {
-          notifications.value.splice(index, 1)
+      await tryPrimary()
+      deleted = true
+    } catch (e1) {
+      try {
+        await tryAltBodyDelete()
+        deleted = true
+      } catch (e2) {
+        try {
+          await tryAltPatchDelete()
+          deleted = true
+        } catch (e3) {
+          // 마지막 실패: 로그만 남기고 계속 진행(낙관적 UI)
+          // console.error('[알림 Store] 삭제 API 모두 실패:', e1?.response?.data || e1?.message, e2?.response?.data || e2?.message, e3?.response?.data || e3?.message)
         }
-        return
       }
+    }
 
-      // console.log('[알림 Store] 🔄 알림 삭제 시작:', alarmSeq)
-
-      // API 호출
-      await apiDelete(`/workspace-service/alarms/${alarmSeq}`)
-      
-      // console.log('[알림 Store] ✅ 알림 삭제 완료:', alarmSeq)
-      
-      // 삭제 후 알림 목록 다시 불러오기 (최신화)
-      // console.log('[알림 Store] 🔄 알림 목록 다시 불러오는 중...')
-      await fetchNotifications()
-      // console.log('[알림 Store] ✅ 알림 목록 최신화 완료, 현재 알림 개수:', notifications.value.length)
-    } catch (error) {
-      // console.error('[알림 Store] ❌ 알림 삭제 실패:', error)
-      // console.error('[알림 Store] ❌ 에러 상세:', error.response?.data || error.message)
-      
-      // 에러가 나도 UI는 업데이트 (낙관적 업데이트)
+    // 성공 여부와 상관없이 로컬에서도 즉시 제거하여 UX 보장
     const index = notifications.value.findIndex(n => n.id === notificationId)
-    if (index > -1) {
-      notifications.value.splice(index, 1)
-      }
+    if (index > -1) notifications.value.splice(index, 1)
+
+    // 서버 동기화를 위해 성공했을 때만 재조회 시도 (조용히 실패 허용)
+    if (deleted) {
+      fetchNotifications().catch(() => {})
     }
   }
   
   /**
    * 전체 알림 삭제 (API 연동)
    * 개인 페이지: 개인의 모든 알림 삭제
-   * 프로젝트 페이지: 해당 프로젝트의 모든 알림 삭제
+   * 프로젝트 페이지 - "모든 알림" 탭: 개인의 모든 알림 삭제 (개인과 동일)
+   * 프로젝트 페이지 - "프로젝트" 탭: 해당 프로젝트의 모든 알림 삭제
    */
   const clearAllNotifications = async () => {
     try {
-      // console.log('[알림 Store] 🔄 전체 알림 삭제 시작...')
       console.log('  - 워크스페이스 타입:', currentWorkspaceType.value)
       console.log('  - 워크스페이스 번호:', currentWorkspaceSeq.value)
+      console.log('  - 활성 필터:', activeFilter.value)
       
-      // 개인/프로젝트 페이지에 따라 다른 API 엔드포인트 사용
-      const endpoint = currentWorkspaceType.value === 'personal' 
-        ? '/workspace-service/alarms/personal' 
-        : '/workspace-service/alarms/project'
+      // 프로젝트 페이지의 "모든 알림" 탭은 개인 전체 삭제와 동일
+      // 프로젝트 페이지의 "프로젝트" 탭만 해당 프로젝트 알림 삭제
+      const isProjectWorkspaceFilter = currentWorkspaceType.value === 'project' && activeFilter.value === 'workspace'
       
-      // 요청 DTO
-      // 개인: DTO 없음 (null)
-      // 프로젝트: AlarmFindReqDto { workSpaceSeq }
+      const endpoint = isProjectWorkspaceFilter
+        ? '/workspace-service/alarms/project' 
+        : '/workspace-service/alarms/personal'
+      
       let requestDto = null
-      
-      // 프로젝트 워크스페이스일 때만 DTO 생성
-      if (currentWorkspaceType.value === 'project') {
-        requestDto = {
-          workSpaceSeq: currentWorkspaceSeq.value
-        }
+      if (isProjectWorkspaceFilter) {
+        requestDto = { workSpaceSeq: currentWorkspaceSeq.value }
       }
-      
       console.log('  - API 엔드포인트:', endpoint)
       console.log('  - 요청 데이터:', requestDto)
-      
-      // API 호출
-      await apiDelete(endpoint, requestDto)
-      
-      // console.log('[알림 Store] ✅ 전체 알림 삭제 완료')
-      
-      // 삭제 후 알림 목록 다시 불러오기 (최신화)
-      // console.log('[알림 Store] 🔄 알림 목록 다시 불러오는 중...')
-      await fetchNotifications()
-      // console.log('[알림 Store] ✅ 알림 목록 최신화 완료, 현재 알림 개수:', notifications.value.length)
+
+      let deleted = false
+      try {
+        await apiDelete(endpoint, requestDto)
+        deleted = true
+      } catch (e1) {
+        try {
+          await apiPatch(endpoint, requestDto)
+          deleted = true
+        } catch (e2) {
+          const clearEndpoint = endpoint + '/clear'
+          try {
+            await apiPatch(clearEndpoint, requestDto)
+            deleted = true
+          } catch (e3) {
+            // 마지막 실패는 무시
+          }
+        }
+      }
+
+      // 로컬 즉시 비우기
+      notifications.value = []
+      if (deleted) {
+        await fetchNotifications()
+      }
     } catch (error) {
-      // console.error('[알림 Store] ❌ 전체 알림 삭제 실패:', error)
-      // console.error('[알림 Store] ❌ 에러 상세:', error.response?.data || error.message)
-      
-      // 에러가 나도 로컬 상태는 업데이트 (낙관적 업데이트)
       notifications.value = []
     }
   }
@@ -520,44 +565,44 @@ export const useNotificationStore = defineStore('notification', () => {
    */
   const deleteFilterNotifications = async (alarmType) => {
     try {
-      // console.log('[알림 Store] 🔄 타입별 알림 삭제 시작')
       console.log('  - 알림 타입:', alarmType)
       console.log('  - 워크스페이스 타입:', currentWorkspaceType.value)
       console.log('  - 워크스페이스 번호:', currentWorkspaceSeq.value)
-      
-      // 개인/프로젝트 페이지에 따라 다른 API 엔드포인트 사용
       const endpoint = currentWorkspaceType.value === 'personal' 
         ? '/workspace-service/alarms/personal/type' 
         : '/workspace-service/alarms/project/type'
-      
-      // 요청 DTO (AlarmFindReqDto)
-      // 개인일 때는 workSpaceSeq 필드 없음, 프로젝트일 때만 포함
-      const requestDto = {
-        alarmType: alarmType
-      }
-      
-      // 프로젝트 워크스페이스일 때만 workSpaceSeq 추가
+      const requestDto = { alarmType }
       if (currentWorkspaceType.value === 'project') {
         requestDto.workSpaceSeq = currentWorkspaceSeq.value
       }
-      
       console.log('  - API 엔드포인트:', endpoint)
       console.log('  - 요청 데이터:', requestDto)
-      
-      // API 호출
-      await apiDelete(endpoint, requestDto)
-      
-      // console.log('[알림 Store] ✅ 타입별 알림 삭제 완료')
-      
-      // 삭제 후 알림 목록 다시 불러오기 (최신화)
-      // console.log('[알림 Store] 🔄 알림 목록 다시 불러오는 중...')
-      await fetchNotifications()
-      // console.log('[알림 Store] ✅ 알림 목록 최신화 완료, 현재 알림 개수:', notifications.value.length)
+
+      let deleted = false
+      try {
+        await apiDelete(endpoint, requestDto)
+        deleted = true
+      } catch (e1) {
+        try {
+          await apiPatch(endpoint, requestDto)
+          deleted = true
+        } catch (e2) {
+          const clearEndpoint = endpoint + '/clear'
+          try {
+            await apiPatch(clearEndpoint, requestDto)
+            deleted = true
+          } catch (e3) {
+            // 마지막 실패는 무시
+          }
+        }
+      }
+
+      // 로컬에서 해당 타입 제거
+      notifications.value = notifications.value.filter(n => n.type !== alarmType)
+      if (deleted) {
+        await fetchNotifications()
+      }
     } catch (error) {
-      // console.error('[알림 Store] ❌ 타입별 알림 삭제 실패:', error)
-      // console.error('[알림 Store] ❌ 에러 상세:', error.response?.data || error.message)
-      
-      // 에러가 나도 로컬 상태는 업데이트 (낙관적 업데이트)
       notifications.value = notifications.value.filter(n => n.type !== alarmType)
     }
   }
@@ -609,8 +654,8 @@ export const useNotificationStore = defineStore('notification', () => {
           }
           
           return {
-            id: `${alarm.receiverId}_${new Date(alarm.time).getTime()}_${index}`, // 고유 ID 생성
-            type: alarm.alarmType || 'UNKNOWN',
+            id: String(alarm.alarmSeq || `${alarm.receiverId}_${new Date(alarm.time).getTime()}_${index}`),
+            type: normalizeType(alarm.alarmType || alarm.type || 'UNKNOWN'),
             message: alarm.message || '새로운 알림이 있습니다',
             time: formatTime(alarm.time),
             read: alarm.ynRead === 'Y', // 읽음 여부 (Y/N)
