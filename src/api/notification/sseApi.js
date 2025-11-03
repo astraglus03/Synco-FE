@@ -144,12 +144,17 @@ class SSEConnection {
       // 멤버 상태 변경 이벤트 (event: member-status)
       this.eventSource.addEventListener('member-status', (event) => {
         console.log('[SSE] 👤 member-status 이벤트 수신')
+        console.log('[SSE] 📦 원본 event.data:', event.data)
         this.lastMessageTime = Date.now()
         try {
           const data = JSON.parse(event.data)
-          this.notifyCallbacks({ type: 'member-status', ...data })
+          console.log('[SSE] 📦 파싱된 데이터:', JSON.stringify(data, null, 2))
+          const callbackData = { type: 'member-status', ...data }
+          console.log('[SSE] 📤 콜백으로 전달할 데이터:', JSON.stringify(callbackData, null, 2))
+          this.notifyCallbacks(callbackData)
         } catch (error) {
           console.error('[SSE] ❌ member-status 파싱 실패:', error)
+          console.error('[SSE] ❌ 원본 데이터:', event.data)
         }
       })
 

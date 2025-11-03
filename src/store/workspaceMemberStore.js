@@ -3,8 +3,6 @@ import { ref, computed } from 'vue'
 import { 
   getWorkspaceMembers,
   getChatChannels,
-  getMeetingChannels,
-  getScheduleChannels,
   changeChatChannelAuthority,
   changeScheduleChannelAuthority,
   changeMeetingChannelAuthority
@@ -104,62 +102,27 @@ export const useWorkspaceMemberStore = defineStore('workspaceMember', () => {
       isLoading.value = true
       console.log('[WorkspaceMemberStore] loadChannels called with workSpaceSeq:', workSpaceSeq)
 
-      // 각 채널을 개별적으로 로드
-      const [chatData, meetingData, scheduleData] = await Promise.allSettled([
-        getChatChannels(workSpaceSeq),
-        getMeetingChannels(workSpaceSeq),
-        getScheduleChannels(workSpaceSeq)
-      ])
-
-      // 채널 데이터 업데이트
-      chatChannels.value = chatData.status === 'fulfilled' ? chatData.value : []
-      meetingChannels.value = meetingData.status === 'fulfilled' ? meetingData.value : []
-      scheduleChannels.value = scheduleData.status === 'fulfilled' ? scheduleData.value : []
-
-      // 디버그 로그: 일정관리 멤버 로드 결과
+      // chat 채널만 로드 (task/channels, virtual-meeting/channels는 호출하지 않음)
       try {
-        const count = Array.isArray(scheduleChannels.value) ? scheduleChannels.value.length : 0
-        const sample = scheduleChannels.value?.slice?.(0, 5)
-        console.log('[WorkspaceMemberStore] scheduleChannels loaded:', { count, sample })
-      } catch {}
-
-      // 디버그 로그: 채팅/회의 멤버 로드 결과
-      try {
-        const chatCount = Array.isArray(chatChannels.value) ? chatChannels.value.length : 0
+        const chatData = await getChatChannels(workSpaceSeq)
+        chatChannels.value = Array.isArray(chatData) ? chatData : []
+        
+        // 디버그 로그
+        const chatCount = chatChannels.value.length
         const chatMemberCount = chatChannels.value?.[0]?.channelMemberList?.length || 0
-        console.log('[WorkspaceMemberStore] chatChannels loaded:', { channels: chatCount, firstChannelMembers: chatMemberCount, sample: chatChannels.value?.slice?.(0, 2) })
-      } catch {}
-      try {
-        const meetingCount = Array.isArray(meetingChannels.value) ? meetingChannels.value.length : 0
-        const meetingMemberCount = meetingChannels.value?.[0]?.channelMemberList?.length || 0
-        console.log('[WorkspaceMemberStore] meetingChannels loaded:', { channels: meetingCount, firstChannelMembers: meetingMemberCount, sample: meetingChannels.value?.slice?.(0, 2) })
-      } catch {}
-
-      // 안전 폴백: 일정 채널 멤버가 비어 있으면, 워크스페이스 멤버 목록으로 대체 (권한 확인/표시용)
-      try {
-        const seq = currentWorkspaceSeq.value || workSpaceSeq
-        if ((Array.isArray(scheduleChannels.value) && scheduleChannels.value.length === 0) && seq) {
-          const wsMembers = await getWorkspaceMembers(seq)
-          if (Array.isArray(wsMembers) && wsMembers.length > 0) {
-            // ChannelMemberResDto 형태에 맞춰 매핑
-            scheduleChannels.value = wsMembers.map(m => ({
-              memberSeq: m.memberSeq,
-              authority: m.authority,
-              memberName: m.name,
-              memberProfileUrl: m.profileImageUrl
-            }))
-            console.log('[WorkspaceMemberStore] scheduleChannels fallback from workspace members:', {
-              count: scheduleChannels.value.length,
-              sample: scheduleChannels.value.slice(0, 5)
-            })
-          }
-        }
-      } catch (e) {
-        console.warn('[WorkspaceMemberStore] scheduleChannels fallback failed:', e?.message || e)
+        console.log('[WorkspaceMemberStore] chatChannels loaded:', { channels: chatCount, firstChannelMembers: chatMemberCount })
+      } catch (error) {
+        console.error('[WorkspaceMemberStore] chatChannels 로드 실패:', error)
+        chatChannels.value = []
       }
+
+      // meetingChannels와 scheduleChannels는 빈 배열로 유지 (API 호출하지 않음)
+      meetingChannels.value = []
+      scheduleChannels.value = []
 
     } catch (error) {
       console.error('채널 데이터 로드 실패:', error)
+      chatChannels.value = []
     } finally {
       isLoading.value = false
     }
@@ -215,6 +178,58 @@ export const useWorkspaceMemberStore = defineStore('workspaceMember', () => {
     currentWorkspaceSeq.value = null
   }
 
+  /**
+   * 멤버 상태 업데이트 (SSE member-status 이벤트에서 호출)
+   */
+  const updateMemberStatus = (memberSeq, activeStatus) => {
+    if (!Array.isArray(members.value)) return
+    
+    // 워크스페이스 멤버 목록에서 상태 업데이트
+    const member = members.value.find(m => 
+      Number(m.memberSeq) === Number(memberSeq)
+    )
+    
+    if (member) {
+      // activeStatus 직접 업데이트
+      member.activeStatus = activeStatus
+      
+      // uiStatus는 activeStatus를 소문자로 변환한 값 (MemberSidebar에서 사용)
+      member.uiStatus = activeStatus.toLowerCase()
+      
+      console.log('[WorkspaceMemberStore] ✅ 멤버 상태 업데이트:', {
+        memberSeq,
+        name: member.name,
+        activeStatus,
+        uiStatus: member.uiStatus
+      })
+    } else {
+      console.log('[WorkspaceMemberStore] ℹ️ 상태 변경된 멤버가 현재 워크스페이스에 없음:', memberSeq)
+    }
+    
+    // 채널 멤버 목록에서도 상태 업데이트 (chat 채널만 처리)
+    const updateChannelMemberStatus = (channelList) => {
+      if (!Array.isArray(channelList)) return
+      
+      channelList.forEach(channel => {
+        if (channel.channelMemberList && Array.isArray(channel.channelMemberList)) {
+          const channelMember = channel.channelMemberList.find(cm =>
+            Number(cm.memberSeq) === Number(memberSeq)
+          )
+          if (channelMember) {
+            channelMember.activeStatus = activeStatus
+            // participantStatus도 업데이트 (회의 등에서 사용)
+            if (channelMember.participantStatus !== undefined) {
+              channelMember.participantStatus = activeStatus
+            }
+          }
+        }
+      })
+    }
+    
+    // chat 채널만 업데이트 (meeting, schedule은 API 호출하지 않으므로 업데이트 안 함)
+    updateChannelMemberStatus(chatChannels.value)
+  }
+
   return {
     // State
     members,
@@ -243,6 +258,7 @@ export const useWorkspaceMemberStore = defineStore('workspaceMember', () => {
     loadChannels,
     updateMemberAuthority,
     updateChannelMemberAuthority,
-    clearMembers
+    clearMembers,
+    updateMemberStatus
   }
 })

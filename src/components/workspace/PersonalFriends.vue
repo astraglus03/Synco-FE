@@ -747,8 +747,51 @@ const startChatWithFriend = async (friend) => {
   }
 }
 
+// 멤버 상태 업데이트 이벤트 핸들러
+const handleMemberStatusUpdate = ({ memberSeq, activeStatus }) => {
+  console.log('[PersonalFriends] 👤 멤버 상태 업데이트 수신:', { memberSeq, activeStatus, 현재친구수: friends.value.length })
+  
+  if (!memberSeq || !activeStatus) {
+    console.warn('[PersonalFriends] ⚠️ 잘못된 데이터:', { memberSeq, activeStatus })
+    return
+  }
+  
+  // 타입 정규화
+  const targetMemberSeq = Number(memberSeq)
+  const normalizedStatus = String(activeStatus).toUpperCase()
+  
+  // 친구 목록에서 해당 멤버 상태 업데이트
+  const friendIndex = friends.value.findIndex(f => Number(f.memberSeq) === targetMemberSeq)
+  if (friendIndex > -1) {
+    const friend = friends.value[friendIndex]
+    console.log('[PersonalFriends] 🔄 상태 변경:', friend.name, friend.activeStatus, '→', normalizedStatus)
+    
+    // 반응성을 위해 새 객체로 교체 (Vue 반응성 보장)
+    friends.value = [
+      ...friends.value.slice(0, friendIndex),
+      {
+        ...friends.value[friendIndex],
+        activeStatus: normalizedStatus
+      },
+      ...friends.value.slice(friendIndex + 1)
+    ]
+    
+    console.log('[PersonalFriends] ✅ 친구 상태 업데이트 완료:', friends.value[friendIndex].name, friends.value[friendIndex].activeStatus)
+  } else {
+    // 친구 목록에 없는 경우, 친구 목록이 비어있으면 나중에 로드되면 최신 상태가 반영됨
+    console.log('[PersonalFriends] ℹ️ 해당 친구를 찾을 수 없음 (memberSeq:', targetMemberSeq, ', 현재 친구:', friends.value.map(f => ({ seq: f.memberSeq, name: f.name })), ')')
+    // 친구 목록이 비어있고 친구 목록 탭이 활성화되어 있으면 다시 로드 시도
+    if (friends.value.length === 0 && activeTab.value === 'friendList') {
+      console.log('[PersonalFriends] 🔄 친구 목록이 비어있어 다시 로드 시도')
+      loadFriendList()
+    }
+  }
+}
+
 onMounted(() => {
   document.addEventListener('keydown', handleKeydown)
+  // 멤버 상태 업데이트 이벤트 리스너 등록 (친구 목록 로드 전에 등록)
+  emitter.on('member-status-updated', handleMemberStatusUpdate)
   // 초기 데이터 로드
   loadFriendList()
   loadReceivedRequests()
@@ -757,6 +800,8 @@ onMounted(() => {
 
 onUnmounted(() => {
   document.removeEventListener('keydown', handleKeydown)
+  // 멤버 상태 업데이트 이벤트 리스너 제거
+  emitter.off('member-status-updated', handleMemberStatusUpdate)
   
   // 디바운스 타이머 정리
   if (searchDebounceTimer) {

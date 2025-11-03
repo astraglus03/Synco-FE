@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import sseConnection from '@/api/notification/sseApi'
 import { apiGet, apiPatch, apiDelete } from '@/utils/api'
+import { emitter } from '@/eventBus'
 
 export const useNotificationStore = defineStore('notification', () => {
   // ===== 상태 =====
@@ -135,7 +136,68 @@ export const useNotificationStore = defineStore('notification', () => {
    */
   const sseMessageHandler = (data) => {
     console.log('[알림 Store] 📬 메시지 수신:', data)
+    
+    // member-status 이벤트 처리 (즉시 처리, 비동기로 전파)
+    if (data.type === 'member-status') {
+      console.log('[알림 Store] 👤 멤버 상태 변경 이벤트 처리:', data)
+      // 동기적으로 이벤트 전파 (다음 틱까지 기다리지 않음)
+      handleMemberStatusUpdate(data).catch(error => {
+        console.error('[알림 Store] ❌ 멤버 상태 업데이트 처리 중 오류:', error)
+      })
+      return
+    }
+    
+    // 기타 알림 처리
     handleNotification(data)
+  }
+
+  /**
+   * 멤버 상태 업데이트 처리
+   */
+  const handleMemberStatusUpdate = async (data) => {
+    try {
+      console.log('[알림 Store] 🔍 멤버 상태 업데이트 원본 데이터:', JSON.stringify(data, null, 2))
+      
+      // MemberStatusResDto 구조에 맞춰 데이터 추출
+      // 백엔드에서 보내는 payload는 MemberStatusResDto 직렬화 결과
+      // 가능한 필드명: memberSeq, memberId, activeStatus, status 등
+      const memberSeq = data.memberSeq || data.data?.memberSeq || data.member?.memberSeq
+      const memberId = data.memberId || data.data?.memberId
+      const activeStatus = data.activeStatus || data.data?.activeStatus || data.member?.activeStatus || data.status
+      
+      // memberSeq가 없고 memberId만 있는 경우, memberId로 memberSeq 조회 필요할 수 있음
+      // 일단은 memberSeq 우선 사용
+      
+      console.log('[알림 Store] 🔍 추출된 값:', { memberSeq, activeStatus, 전체데이터: data })
+      
+      if (!memberSeq || !activeStatus) {
+        console.warn('[알림 Store] ⚠️ 멤버 상태 업데이트 데이터 불완전:', data)
+        return
+      }
+      
+      console.log('[알림 Store] 🔔 멤버 상태 업데이트 이벤트 전파:', { memberSeq, activeStatus })
+      
+      // eventBus로 이벤트 전파 (동기적으로 즉시 전파)
+      // nextTick을 사용하지 않고 바로 emit하여 즉시 처리되도록 함
+      emitter.emit('member-status-updated', {
+        memberSeq: Number(memberSeq), // 숫자로 변환하여 타입 일치
+        activeStatus: String(activeStatus).toUpperCase() // 대문자로 통일 (ONLINE, OFFLINE, AWAY)
+      })
+      
+      console.log('[알림 Store] ✅ 이벤트 전파 완료')
+      
+      // workspaceMemberStore에도 직접 업데이트 (비동기, 실패해도 무시)
+      try {
+        const { useWorkspaceMemberStore } = await import('@/store/workspaceMemberStore')
+        const workspaceMemberStore = useWorkspaceMemberStore()
+        workspaceMemberStore.updateMemberStatus(Number(memberSeq), String(activeStatus).toUpperCase())
+        console.log('[알림 Store] ✅ workspaceMemberStore 직접 업데이트 완료')
+      } catch (storeError) {
+        console.warn('[알림 Store] ⚠️ workspaceMemberStore 업데이트 실패 (무시됨):', storeError)
+      }
+    } catch (error) {
+      console.error('[알림 Store] ❌ 멤버 상태 업데이트 처리 실패:', error)
+    }
   }
 
   /**
