@@ -385,16 +385,6 @@ const connectWebsocket = () => {
               messages.value.push(formattedMessage);
               scrollToBottom();
 
-              // ✅ 1:1 채팅 목록의 unreadCount 실시간 업데이트를 위한 이벤트 발생
-              // 현재 채팅방이 아니면 unreadCount 증가
-              if (parsed.channelSeq && parsed.channelSeq !== channelSeq.value) {
-                emitter.emit('increment-direct-message-unread', {
-                  channelSeq: parsed.channelSeq
-                });
-              } else if (parsed.channelSeq === channelSeq.value) {
-                // 현재 채팅방이면 이미 읽은 것으로 간주하므로 이벤트 발생 안 함
-                // (채널 접속 시 이미 읽음 처리됨)
-              }
             }
           } catch (e) {
             console.error("메시지 파싱 실패:", e, message.body);
@@ -458,12 +448,22 @@ const disconnectWebsocket = async () => {
   }
 };
 
-// 스크롤을 맨 아래로
-const scrollToBottom = () => {
-  setTimeout(() => {
+// 스크롤을 맨 아래로 (부드럽게)
+const scrollToBottom = (smooth = false) => {
+  nextTick(() => {
     const chatBox = document.querySelector(".messages-container");
-    if (chatBox) chatBox.scrollTop = chatBox.scrollHeight;
-  }, 100);
+    if (chatBox) {
+      const isNearBottom = chatBox.scrollHeight - chatBox.scrollTop - chatBox.clientHeight < 100;
+      
+      // 하단 근처에 있거나 강제 스크롤 요청 시에만 스크롤
+      if (isNearBottom || smooth) {
+        chatBox.scrollTo({
+          top: chatBox.scrollHeight,
+          behavior: smooth ? 'smooth' : 'auto'
+        });
+      }
+    }
+  });
 };
 
 // ✅ 파일 업로드 (S3 REST API 호출)
@@ -611,7 +611,6 @@ const sendMessage = async () => {
       replyToSeq: replyToMessage.value?.id || null, // ✅ 답장 대상 메시지 ID 추가
     };
     messages.value.push(localMessage);
-    scrollToBottom();
 
     console.log("📤 보내는 메시지:", message);
 
@@ -648,7 +647,26 @@ const sendMessage = async () => {
       showReplyInput.value = false;
     }
 
-    scrollToBottom();
+    // 메시지 추가 후 DOM 업데이트를 기다린 후 스크롤 (자신이 보낸 메시지는 강제 스크롤)
+    scrollToBottom(true);
+
+    // ✅ 1:1 채팅 목록의 마지막 메시지 업데이트 이벤트 발생
+    if (channelSeq.value) {
+      // 백엔드 형식에 맞춰서: 파일이 있으면 "[파일]", 텍스트가 있으면 텍스트
+      let messageContent = "";
+      if (uploadedUrls.length > 0) {
+        messageContent = "[파일]"; // 백엔드와 동일한 형식
+      } else if (localMessage.content && localMessage.content.trim()) {
+        messageContent = localMessage.content;
+      }
+      
+      if (messageContent) {
+        emitter.emit("update-direct-message", {
+          channelSeq: channelSeq.value,
+          lastMessage: messageContent,
+        });
+      }
+    }
   } finally {
     // 전송 완료/실패 무관하게 플래그 해제
     isSending.value = false;
@@ -816,9 +834,11 @@ const loadMoreMessages = async (lastId = null) => {
         console.log("📍 스크롤 위치 복원 - 차이:", heightDifference);
       }
     } else {
-      // 처음 로드하는 경우 맨 아래로 스크롤
+      // 최초 접속 시: 맨 아래로 강제 스크롤 (구분선이 없을 때)
       await new Promise((resolve) => setTimeout(resolve, 50)); // DOM 업데이트 대기
-      scrollToBottom();
+      if (container) {
+        container.scrollTop = container.scrollHeight;
+      }
       console.log("📍 최초 접속 - 맨 아래로 스크롤");
     }
   } catch (e) {

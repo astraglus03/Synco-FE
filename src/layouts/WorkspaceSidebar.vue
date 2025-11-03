@@ -379,25 +379,34 @@ const connectPersonalChatWebSocket = () => {
                 return;
               }
 
-              // ✅ unreadCount 증가 (현재 채팅방이 아니면)
-              const currentChannelStr = props.currentChannel?.toString();
-              const channelSeqStr = parsed.channelSeq?.toString();
-
-              if (currentChannelStr !== channelSeqStr) {
-                incrementDirectMessageUnread(parsed.channelSeq);
-              }
 
               // ✅ 마지막 메시지 업데이트
               const dm = directMessages.value.find(
                 (d) => d.channelSeq === parsed.channelSeq
               );
-              if (dm && parsed.chatMessageText) {
-                // 메시지 텍스트가 50자 이상이면 잘라서 표시
-                const messageText =
-                  parsed.chatMessageText.length > 50
+              if (dm) {
+                // 파일이 있으면 "[파일]", 텍스트가 있으면 텍스트 (백엔드 형식)
+                let messageText = "";
+                if (parsed.chatMessageFileUrls && parsed.chatMessageFileUrls.trim()) {
+                  messageText = "[파일]";
+                } else if (parsed.chatMessageText) {
+                  messageText = parsed.chatMessageText.length > 50
                     ? parsed.chatMessageText.substring(0, 50) + "..."
                     : parsed.chatMessageText;
-                dm.lastMessage = messageText;
+                }
+                
+                if (messageText) {
+                  dm.lastMessage = messageText;
+                  
+                  // 목록에서 해당 항목을 맨 위로 이동 (최신 메시지가 위로)
+                  const index = directMessages.value.findIndex(
+                    (d) => d.channelSeq === parsed.channelSeq
+                  );
+                  if (index > 0) {
+                    const updatedDm = directMessages.value.splice(index, 1)[0];
+                    directMessages.value.unshift(updatedDm);
+                  }
+                }
               }
             } catch (e) {
               console.error("개인 채팅 WebSocket 메시지 파싱 실패:", e);
@@ -451,13 +460,21 @@ const loadDirectMessages = async () => {
     console.log("📦 1:1 채팅 목록 API 응답:", res);
 
     // res가 이미 배열이므로 (apiGet이 data 필드만 추출)
-    // 백엔드 MyChatListResDto 구조에 맞게 매핑
+    // 백엔드 MyChatListResDto 구조에 맞게 매핑 (lastMessage 포함)
     directMessages.value = Array.isArray(res) ? res : [];
+
+    // ✅ 마지막 메시지가 50자 이상이면 잘라서 표시
+    directMessages.value.forEach((dm) => {
+      if (dm.lastMessage && dm.lastMessage.length > 50) {
+        dm.lastMessage = dm.lastMessage.substring(0, 50) + "...";
+      }
+    });
 
     console.log(
       "✅ 1:1 채팅 목록 로드 완료:",
       directMessages.value.length,
-      "개"
+      "개",
+      "마지막 메시지 포함"
     );
   } catch (e) {
     // 500 에러는 백엔드 문제이지만, 목록이 없을 때도 발생할 수 있으므로 조용히 처리
@@ -1042,6 +1059,56 @@ onMounted(() => {
     console.log("📨 1:1 채팅 unreadCount 증가 이벤트 수신:", data);
     if (props.workspaceType === "personal") {
       incrementDirectMessageUnread(data.channelSeq);
+      
+      // 마지막 메시지도 함께 업데이트
+      if (data.lastMessage) {
+        const dm = directMessages.value.find(
+          (d) => d.channelSeq === data.channelSeq
+        );
+        if (dm) {
+          let messageText = data.lastMessage;
+          if (messageText !== "[파일]" && messageText.length > 50) {
+            messageText = messageText.substring(0, 50) + "...";
+          }
+          dm.lastMessage = messageText;
+          
+          // 목록에서 해당 항목을 맨 위로 이동
+          const index = directMessages.value.findIndex(
+            (d) => d.channelSeq === data.channelSeq
+          );
+          if (index > 0) {
+            const updatedDm = directMessages.value.splice(index, 1)[0];
+            directMessages.value.unshift(updatedDm);
+          }
+        }
+      }
+    }
+  });
+
+  // ✅ 1:1 채팅 마지막 메시지 업데이트 이벤트 리스너 추가
+  emitter.on("update-direct-message", (data) => {
+    console.log("💬 1:1 채팅 마지막 메시지 업데이트 이벤트 수신:", data);
+    if (props.workspaceType === "personal" && data.channelSeq) {
+      const dm = directMessages.value.find(
+        (d) => d.channelSeq === data.channelSeq
+      );
+      if (dm && data.lastMessage) {
+        // 백엔드 형식 유지 (파일은 "[파일]", 텍스트는 텍스트)
+        let messageText = data.lastMessage;
+        if (messageText !== "[파일]" && messageText.length > 50) {
+          messageText = messageText.substring(0, 50) + "...";
+        }
+        dm.lastMessage = messageText;
+        
+        // 목록에서 해당 항목을 맨 위로 이동 (최신 메시지가 위로)
+        const index = directMessages.value.findIndex(
+          (d) => d.channelSeq === data.channelSeq
+        );
+        if (index > 0) {
+          const updatedDm = directMessages.value.splice(index, 1)[0];
+          directMessages.value.unshift(updatedDm);
+        }
+      }
     }
   });
 
@@ -1073,6 +1140,7 @@ onUnmounted(() => {
   // 이벤트 리스너 제거
   emitter.off("refresh-direct-messages");
   emitter.off("increment-direct-message-unread");
+  emitter.off("update-direct-message");
 
   // ✅ 개인 채팅 WebSocket 해제
   disconnectPersonalChatWebSocket();
@@ -1555,6 +1623,11 @@ const getStatusColor = (status) => {
               @mouseenter="hoveredChannel = subChannel.id"
               @mouseleave="hoveredChannel = null"
             >
+              <!-- 디스코드 스타일 알림 인디케이터 -->
+              <div
+                v-if="subChannel.hasNotification"
+                class="channel-notification-indicator"
+              ></div>
               <v-icon class="subchannel-icon">
                 {{
                   subChannel.type === "video"
@@ -1685,17 +1758,10 @@ const getStatusColor = (status) => {
               class="dm-meta"
             >
               <div
-                v-if="
-                  dm.unreadCount > 0 ||
-                  notificationStore.getChannelNotificationCount(dm.channelSeq) >
-                    0
-                "
+                v-if="dm.unreadCount > 0"
                 class="unread-badge"
               >
-                {{
-                  dm.unreadCount +
-                  notificationStore.getChannelNotificationCount(dm.channelSeq)
-                }}
+                {{ dm.unreadCount }}
               </div>
             </div>
           </div>
@@ -2331,7 +2397,35 @@ const getStatusColor = (status) => {
 }
 
 .subchannel-name.bold {
-  font-weight: 700;
+  font-weight: 900; /* 더 강하게 */
+  opacity: 1 !important; /* 기본 흐린 상태에서 명료하게 */
+  color: rgb(var(--v-theme-on-surface)) !important; /* 색상 명확하게 */
+}
+
+/* 다크모드에서도 명료하게 */
+.v-theme--dark .subchannel-name.bold {
+  font-weight: 900;
+  opacity: 1 !important;
+  color: rgb(var(--v-theme-on-surface)) !important;
+}
+
+/* 디스코드 스타일 알림 인디케이터 */
+.channel-notification-indicator {
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 4px;
+  height: 12px; /* 디스코드 스타일 - 낮은 높이 */
+  background: rgb(var(--v-theme-primary));
+  border-radius: 0 2px 2px 0;
+  opacity: 1;
+}
+
+/* 다크모드 대응을 위한 인디케이터 */
+.v-theme--dark .channel-notification-indicator {
+  background: rgb(var(--v-theme-primary));
+  box-shadow: 0 0 3px rgba(var(--v-theme-primary), 0.8);
 }
 
 .unread-badge {

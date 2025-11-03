@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import sseConnection from '@/api/notification/sseApi'
 import { apiGet, apiPatch, apiDelete } from '@/utils/api'
+import { emitter } from '@/eventBus'
 
 export const useNotificationStore = defineStore('notification', () => {
   // ===== 상태 =====
@@ -236,10 +237,30 @@ export const useNotificationStore = defineStore('notification', () => {
     if (notificationType === 'alarm-chat') {
       const targetSeq = data.targetSeq || data.channelSeq || data.data?.targetSeq || data.data?.channelSeq
       if (targetSeq) {
-        const key = String(targetSeq)
-        // 채널별 알림 개수 증가
-        channelNotificationCounts.value[key] = (channelNotificationCounts.value[key] || 0) + 1
-        console.log('[알림 Store] 📢 alarm-chat 알림, 채널:', targetSeq, '개수:', channelNotificationCounts.value[key])
+        // ✅ 프로젝트 워크스페이스 채팅 채널: channelNotificationCounts 사용
+        // ✅ 1:1 채팅: dm.unreadCount 사용 (이벤트 발생)
+        // 워크스페이스 타입으로 구분
+        const isPersonalWorkspace = currentWorkspaceType.value === 'personal'
+        
+        if (isPersonalWorkspace) {
+          // 개인 워크스페이스: 1:1 채팅이므로 dm.unreadCount로만 관리
+          // channelNotificationCounts는 증가시키지 않음 (중복 방지)
+          
+          // ✅ 1:1 채팅 목록의 마지막 메시지 업데이트를 위한 이벤트 발생
+          const messageContent = data.message || data.content || data.chatMessageText || '';
+          if (messageContent) {
+            emitter.emit('increment-direct-message-unread', {
+              channelSeq: targetSeq,
+              lastMessage: messageContent
+            });
+          }
+        } else {
+          // 프로젝트 워크스페이스: 채팅 채널이므로 channelNotificationCounts 사용
+          const key = String(targetSeq)
+          channelNotificationCounts.value[key] = (channelNotificationCounts.value[key] || 0) + 1
+          console.log('[알림 Store] 📢 프로젝트 채팅 알림, 채널:', targetSeq, '개수:', channelNotificationCounts.value[key])
+        }
+        
         // alarm-chat은 알림 목록에 추가하지 않음
         return
       }
