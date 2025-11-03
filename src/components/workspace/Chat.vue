@@ -2638,7 +2638,7 @@ onUnmounted(() => {
 
 /* 파일/이미지가 있는 메시지는 버블 너비 제한 */
 .message-content.has-files-content {
-  max-width: 50%;
+  max-width: 35%;
 }
 
 .message-item.own-message .message-content {
@@ -3507,7 +3507,8 @@ onUnmounted(() => {
 .images-grid {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  gap: 8px;
+  gap: 6px;
+  max-width: 100%;
 }
 
 .image-grid-item {
@@ -3517,7 +3518,7 @@ onUnmounted(() => {
   position: relative;
   aspect-ratio: 1;
   overflow: hidden;
-  border-radius: 8px;
+  border-radius: 6px;
   background: rgba(var(--v-theme-on-surface), 0.05);
 }
 
@@ -3526,7 +3527,7 @@ onUnmounted(() => {
   height: 100%;
   position: relative;
   overflow: hidden;
-  border-radius: 8px;
+  border-radius: 6px;
   transition: transform 0.2s ease;
 }
 
@@ -3550,7 +3551,7 @@ onUnmounted(() => {
 }
 
 .image-grid-item:hover .image-thumb-grid {
-  transform: scale(1.1);
+  transform: scale(1.08);
 }
 
 .image-overlay-grid {
@@ -3686,18 +3687,18 @@ onUnmounted(() => {
   color: inherit;
   display: block;
   width: 100%;
-  max-width: 400px;
+  max-width: 100%;
 }
 
 /* 파일 카드 */
 .file-card {
   background: rgba(var(--v-theme-surface), 0.95);
   border: 1px solid rgba(var(--v-theme-on-surface), 0.12);
-  border-radius: 12px;
-  padding: 14px 16px;
+  border-radius: 10px;
+  padding: 10px 12px;
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: 10px;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   backdrop-filter: blur(10px);
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
@@ -3712,9 +3713,9 @@ onUnmounted(() => {
 }
 
 .file-icon-wrapper {
-  width: 48px;
-  height: 48px;
-  border-radius: 10px;
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -3723,7 +3724,7 @@ onUnmounted(() => {
 }
 
 .file-card:hover .file-icon-wrapper {
-  transform: scale(1.1);
+  transform: scale(1.05);
 }
 
 /* 파일 아이콘 색상 클래스 */
@@ -3764,7 +3765,7 @@ onUnmounted(() => {
 }
 
 .file-icon-wrapper .v-icon {
-  font-size: 28px;
+  font-size: 22px;
 }
 
 .file-info {
@@ -3776,7 +3777,7 @@ onUnmounted(() => {
 }
 
 .file-name-text {
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 600;
   color: rgb(var(--v-theme-on-surface));
   display: -webkit-box;
@@ -3787,7 +3788,7 @@ onUnmounted(() => {
 }
 
 .file-size-text {
-  font-size: 12px;
+  font-size: 11px;
   color: rgba(var(--v-theme-on-surface), 0.6);
   display: flex;
   align-items: center;
