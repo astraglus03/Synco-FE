@@ -23,6 +23,9 @@ export const useNotificationStore = defineStore('notification', () => {
   
   // 현재 워크스페이스 번호 (팀 프로젝트 필터링용)
   const currentWorkspaceSeq = ref(null)
+  
+  // 채널별 알림 개수 (channelSeq -> count)
+  const channelNotificationCounts = ref({})
 
   // ===== Computed =====
   
@@ -46,6 +49,9 @@ export const useNotificationStore = defineStore('notification', () => {
     // }
     
     let filtered = notifications.value
+    
+    // alarm-chat 타입은 알림 목록에서 제외 (채널별 알림 개수로만 표시)
+    filtered = filtered.filter(n => n.type !== 'alarm-chat')
     
     // 1. 워크스페이스 타입별 필터링
     if (currentWorkspaceType.value === 'project') {
@@ -87,6 +93,23 @@ export const useNotificationStore = defineStore('notification', () => {
     return filtered
   })
   
+  // 특정 채널의 알림 개수 가져오기
+  const getChannelNotificationCount = (channelSeq) => {
+    const key = String(channelSeq)
+    return channelNotificationCounts.value[key] || 0
+  }
+  
+  // 특정 채널의 알림 개수 초기화
+  const clearChannelNotificationCount = (channelSeq) => {
+    const key = String(channelSeq)
+    channelNotificationCounts.value[key] = 0
+  }
+  
+  // 특정 채널에 알림이 있는지 확인 (bold 처리용)
+  const hasChannelNotification = (channelSeq) => {
+    return getChannelNotificationCount(channelSeq) > 0
+  }
+  
   // 읽지 않은 알림 개수 (필터링된 알림 기준)
   const notificationCount = computed(() => {
     return filteredNotifications.value.filter(n => !n.read).length
@@ -103,6 +126,7 @@ export const useNotificationStore = defineStore('notification', () => {
     if (t.includes('task') || t.includes('comment')) return 'alarm-task'
     if (t.includes('meeting')) return 'alarm-meeting'
     if (t.includes('drive')) return 'alarm-drive'
+    if (t.includes('chat')) return 'alarm-chat'
     return rawType || 'UNKNOWN'
   }
 
@@ -205,10 +229,26 @@ export const useNotificationStore = defineStore('notification', () => {
     console.log('[알림 Store] 🔔 알림 추가 시작')
     console.log('[알림 Store] 📦 데이터:', data)
 
+    // 알림 타입 정규화
+    const notificationType = normalizeType(data.alarmType || data.type || 'UNKNOWN')
+
+    // alarm-chat 타입 특별 처리
+    if (notificationType === 'alarm-chat') {
+      const targetSeq = data.targetSeq || data.channelSeq || data.data?.targetSeq || data.data?.channelSeq
+      if (targetSeq) {
+        const key = String(targetSeq)
+        // 채널별 알림 개수 증가
+        channelNotificationCounts.value[key] = (channelNotificationCounts.value[key] || 0) + 1
+        console.log('[알림 Store] 📢 alarm-chat 알림, 채널:', targetSeq, '개수:', channelNotificationCounts.value[key])
+        // alarm-chat은 알림 목록에 추가하지 않음
+        return
+      }
+    }
+
     // 알림 객체 생성
     const notification = {
       id: String(data.alarmSeq || data.id || Date.now()),
-      type: normalizeType(data.alarmType || data.type || 'UNKNOWN'),
+      type: notificationType,
       message: data.message || '새로운 알림이 있습니다',
       time: '방금 전',
       read: false,
@@ -710,6 +750,7 @@ export const useNotificationStore = defineStore('notification', () => {
     sseConnected,
     currentWorkspaceType,
     currentWorkspaceSeq,
+    channelNotificationCounts,
     
     // Getters
     notificationCount,
@@ -730,6 +771,9 @@ export const useNotificationStore = defineStore('notification', () => {
     deleteNotification,
     clearAllNotifications,
     deleteFilterNotifications,
-    fetchNotifications
+    fetchNotifications,
+    getChannelNotificationCount,
+    clearChannelNotificationCount,
+    hasChannelNotification
   }
 })

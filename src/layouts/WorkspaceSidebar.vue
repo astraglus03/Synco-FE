@@ -17,6 +17,7 @@ import {
 import { useAuthStore } from '@/store/authStore'
 import { useWorkspaceStore } from '@/store/workspaceStore'
 import { useWorkspaceMemberStore } from '@/store/workspaceMemberStore'
+import { useNotificationStore } from '@/store/notificationStore'
 import { Authority } from '@/models/workspace/WorkspaceModels'
 import { emitter } from "@/eventBus"; // 채팅 채널 변경 이벤트 버스
 import { getIndividualChatChannels, leaveChannel } from "@/api/chat/chatApi"; // 1:1 채팅 관련 API
@@ -132,6 +133,7 @@ const hoveredChannel = ref(null);
 const authStore = useAuthStore()
 const workspaceStore = useWorkspaceStore()
 const workspaceMemberStore = useWorkspaceMemberStore()
+const notificationStore = useNotificationStore()
 
 // 워크스페이스에서 현재 사용자가 SUPER 권한인지 확인
 const isWorkspaceSuper = computed(() => {
@@ -339,6 +341,16 @@ const connectPersonalChatWebSocket = () => {
               if (currentChannelStr !== channelSeqStr) {
                 incrementDirectMessageUnread(parsed.channelSeq);
               }
+              
+              // ✅ 마지막 메시지 업데이트
+              const dm = directMessages.value.find(d => d.channelSeq === parsed.channelSeq);
+              if (dm && parsed.chatMessageText) {
+                // 메시지 텍스트가 50자 이상이면 잘라서 표시
+                const messageText = parsed.chatMessageText.length > 50 
+                  ? parsed.chatMessageText.substring(0, 50) + '...' 
+                  : parsed.chatMessageText;
+                dm.lastMessage = messageText;
+              }
             } catch (e) {
               console.error('개인 채팅 WebSocket 메시지 파싱 실패:', e);
             }
@@ -503,13 +515,17 @@ const currentChannels = computed(() => {
       type: "main",
       expanded: chatExpanded.value,
       subChannels:
-        workspaceMemberStore.chatChannels?.map((channel) => ({
-          id: `chat_${channel.channelSeq}`,
-          name: channel.channelName,
-          type: "text",
-          unread: 0,
-          channelData: channel,
-        })) || [],
+        workspaceMemberStore.chatChannels?.map((channel) => {
+          const notificationCount = notificationStore.getChannelNotificationCount(channel.channelSeq)
+          return {
+            id: `chat_${channel.channelSeq}`,
+            name: channel.channelName,
+            type: "text",
+            unread: notificationCount,
+            channelData: channel,
+            hasNotification: notificationStore.hasChannelNotification(channel.channelSeq)
+          }
+        }) || [],
     },
     {
       id: "schedule",
@@ -1107,6 +1123,12 @@ const selectSubChannel = (parentId, subChannelId) => {
     type: typeof subChannelId,
   });
 
+  // 채널 선택 시 해당 채널의 알림 개수 초기화
+  if (parentId === "chat" && subChannelId) {
+    const channelSeq = subChannelId.toString().replace('chat_', '')
+    notificationStore.clearChannelNotificationCount(channelSeq)
+  }
+
   // 항상 부모로 emit (URL 변경)
   emit("select-subchannel", parentId, subChannelId);
 
@@ -1119,6 +1141,8 @@ const selectSubChannel = (parentId, subChannelId) => {
 
 // 접힌 상태에서 채팅 채널 클릭 시 처리
 const handleCollapsedChannelClick = (chatChannel) => {
+  // ✅ 채널 선택 시 해당 채널의 알림 개수 초기화
+  notificationStore.clearChannelNotificationCount(chatChannel.channelSeq.toString());
   // 사이드바는 접힌 상태 유지, 채널만 선택
   selectSubChannel("chat", chatChannel.channelSeq.toString());
 };
@@ -1146,6 +1170,9 @@ const selectDirectMessage = (channelSeq) => {
     dm.unreadCount = 0;
     console.log(`✅ ${dm.channelName}의 unreadCount 초기화`);
   }
+
+  // ✅ 1:1 채팅 선택 시 알림 개수 초기화
+  notificationStore.clearChannelNotificationCount(parsedChannelSeq.toString())
 
   // 메인 채널을 'chat'으로 설정
   emit("select-channel", "chat"); // 탭 UI 상태 변경(chat 탭으로)
@@ -1388,7 +1415,7 @@ const getStatusColor = (status) => {
               <v-icon class="subchannel-icon">
                 {{ subChannel.type === 'video' ? 'mdi-video' : subChannel.type === 'schedule' ? 'mdi-pound' : 'mdi-pound' }}
               </v-icon>
-              <span class="subchannel-name">{{ subChannel.name }}</span>
+              <span class="subchannel-name" :class="{ 'bold': subChannel.hasNotification }">{{ subChannel.name }}</span>
 
               <!-- 채팅 채널: 메뉴 버튼 (이름 수정, 삭제) - MANAGER 또는 SUPER 권한일 때, 첫 번째 채널 제외 -->
               <v-menu
@@ -1481,23 +1508,22 @@ const getStatusColor = (status) => {
               </v-avatar>
             </div>
 
-            <div v-if="!isCollapsedView || workspaceType === 'personal'" class="dm-info">
-              <div class="dm-name">{{ dm.channelName }}</div>
+          <div v-if="!isCollapsedView || workspaceType === 'personal'" class="dm-info">
+            <div class="dm-name" :class="{ 'bold': notificationStore.hasChannelNotification(dm.channelSeq) }">
+              {{ dm.channelName }}
             </div>
+            <div v-if="dm.lastMessage" class="dm-last-message">
+              {{ dm.lastMessage }}
+            </div>
+          </div>
 
-            <div v-if="!isCollapsedView || workspaceType === 'personal'" class="dm-meta">
-              <div v-if="dm.unreadCount > 0" class="unread-badge">
-                {{ dm.unreadCount }}
-              </div>
+          <div v-if="!isCollapsedView || workspaceType === 'personal'" class="dm-meta">
+            <div v-if="dm.unreadCount > 0 || notificationStore.getChannelNotificationCount(dm.channelSeq) > 0" class="unread-badge">
+              {{ dm.unreadCount + notificationStore.getChannelNotificationCount(dm.channelSeq) }}
             </div>
+          </div>
         </div>
-
-        <v-divider
-          v-if="idx < directMessages.length - 1"
-          class="my-2"
-        />
       </div>
-    </div>
     </div>
   </div>
   
@@ -2122,6 +2148,10 @@ const getStatusColor = (status) => {
   font-size: 13px;
 }
 
+.subchannel-name.bold {
+  font-weight: 700;
+}
+
 .unread-badge {
   font-size: 10px;
   height: 16px;
@@ -2187,6 +2217,10 @@ const getStatusColor = (status) => {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.dm-name.bold {
+  font-weight: 700;
 }
 
 .dm-last-message {
