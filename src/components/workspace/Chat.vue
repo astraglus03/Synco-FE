@@ -2601,15 +2601,19 @@ onUnmounted(() => {
 </template>
 
 <style scoped>
+/* ============================================
+   레이아웃
+   ============================================ */
+
 .team-chat {
   height: calc(100vh - 60px);
   background: rgb(var(--v-theme-background));
-  display: flex; /* 사이드바를 위한 flex 레이아웃 추가 */
+  display: flex;
 }
 
 .chat-area {
-  flex: 1; /* width: 100% 대신 flex: 1 사용 */
-  min-width: 0; /* flex shrink 방지 */
+  flex: 1;
+  min-width: 0;
   height: 100%;
   display: flex;
   flex-direction: column;
@@ -2648,6 +2652,10 @@ onUnmounted(() => {
   color: rgb(var(--v-theme-on-surface));
 }
 
+/* ============================================
+   메시지 목록
+   ============================================ */
+
 .messages-container {
   flex: 1;
   overflow-y: auto;
@@ -2664,6 +2672,11 @@ onUnmounted(() => {
   display: flex;
   justify-content: flex-start;
   margin-bottom: 0;
+  cursor: context-menu;
+}
+
+.message-item:hover {
+  background: rgba(var(--v-theme-on-surface), 0.02);
 }
 
 .message-item.own-message {
@@ -2686,7 +2699,6 @@ onUnmounted(() => {
   gap: 8px;
 }
 
-/* 파일/이미지가 있는 메시지는 버블 너비 제한 */
 .message-content.has-files-content {
   max-width: 35%;
 }
@@ -2697,7 +2709,7 @@ onUnmounted(() => {
 
 .message-group {
   position: relative;
-  padding-right: 70px; /* 기본: 오른쪽에 공간 확보 (메타 폭 + 여유) */
+  padding-right: 70px;
 }
 
 .message-item.own-message .message-group {
@@ -2710,26 +2722,25 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 40px; /* 아바타 크기 고정 */
+  width: 40px;
   height: 40px;
-  border-radius: 50%; /* 동그라미 모양 */
-  overflow: hidden; /* 이미지를 원 안에 자름 */
-  background-color: #f2f2f2; /* 이미지 없을 때 배경색 */
-  flex-shrink: 0; /* 아바타 크기 고정 - 축소 방지 */
-  min-width: 40px; /* 최소 너비 보장 */
-  min-height: 40px; /* 최소 높이 보장 */
+  border-radius: 50%;
+  overflow: hidden;
+  background-color: #f2f2f2;
+  flex-shrink: 0;
+  min-width: 40px;
+  min-height: 40px;
 }
 
-/* ✅ 연속된 메시지에서 아바타 투명하게 */
 .message-avatar.avatar-hidden {
   opacity: 0;
   pointer-events: none;
 }
 
 .avatar-image {
-  width: 100%; /* 부모 영역에 맞춰 */
+  width: 100%;
   height: 100%;
-  object-fit: cover; /* 비율 유지하며 꽉 채움 */
+  object-fit: cover;
 }
 
 .message-bubble {
@@ -2748,25 +2759,18 @@ onUnmounted(() => {
   border-radius: 4px 18px 18px 18px;
 }
 
+/* 내가 보낸 메시지 버블 */
 .message-item.own-message .message-bubble {
   background: rgba(59, 130, 246, 0.15);
-  color: #000000 !important;
+  color: #000000;
   font-weight: 600;
   border: 1px solid rgba(59, 130, 246, 0.25);
   border-radius: 18px 18px 4px 18px;
   backdrop-filter: blur(10px);
 }
 
-/* 다크모드에서 내가 보낸 메시지 텍스트만 흰색 */
-@media (prefers-color-scheme: dark) {
-  .message-item.own-message .message-bubble {
-    color: #ffffff !important;
-  }
-}
-
-/* Vuetify 다크 테마 지원 */
 .v-theme--dark .message-item.own-message .message-bubble {
-  color: #ffffff !important;
+  color: #ffffff;
 }
 
 .message-item.own-message.consecutive .message-bubble {
@@ -2805,14 +2809,15 @@ onUnmounted(() => {
   padding: 0px 0px;
 }
 
-/* 메시지 입력 컨테이너 */
+/* ============================================
+   메시지 입력 영역
+   ============================================ */
+
 .message-input-container {
   position: relative;
   background: rgb(var(--v-theme-surface));
   border-top: 1px solid rgba(var(--v-theme-on-surface), 0.1);
 }
-
-/* 첨부파일 메뉴 */
 .attachment-menu {
   position: absolute;
   bottom: 100%;
@@ -2899,17 +2904,16 @@ onUnmounted(() => {
   background: rgba(var(--v-theme-primary), 0.05);
 }
 
-/* 입력 액션 버튼들 */
 .input-actions {
   display: flex;
   align-items: center;
 }
 
 .attachment-btn {
-  width: 52px !important;
-  height: 52px !important;
-  min-width: 52px !important;
-  min-height: 52px !important;
+  width: 52px;
+  height: 52px;
+  min-width: 52px;
+  min-height: 52px;
   border-radius: 12px;
   transition: all 0.2s ease;
   color: rgba(var(--v-theme-on-surface), 0.6);
@@ -2926,14 +2930,6 @@ onUnmounted(() => {
   background: rgb(var(--v-theme-primary));
   color: white;
   transform: rotate(45deg);
-}
-
-/* 입력 필드 */
-.input-field {
-  flex: 1;
-  position: relative;
-  cursor: text;
-  width: 100%;
 }
 
 /* 멘션 하이라이트 오버레이 */
@@ -2955,110 +2951,49 @@ onUnmounted(() => {
   box-sizing: border-box;
 }
 
-:deep(.mention-overlay .mention-highlight) {
-  color: #6366f1 !important;
-  background: rgba(99, 102, 241, 0.1) !important;
-  padding: 1px 4px !important;
-  border-radius: 6px !important;
-  font-weight: 500 !important;
-  display: inline !important;
-  border: none !important;
-  font-size: 0.95em !important;
+/* 멘션 하이라이트 공통 스타일 */
+.mention-highlight {
+  background: rgba(99, 102, 241, 0.1);
+  color: #6366f1;
+  padding: 1px 4px;
+  border-radius: 6px;
+  font-weight: 500;
+  display: inline;
+  border: none;
+  font-size: 0.95em;
 }
 
-/* 오버레이에서 멘션이 아닌 텍스트는 완전히 투명하게 */
+/* 멘션 오버레이 (입력 필드용) */
 .mention-overlay {
-  color: transparent !important;
+  color: transparent;
 }
 
 .mention-overlay * {
-  color: transparent !important;
+  color: transparent;
 }
 
 .mention-overlay .mention-highlight {
-  color: #6366f1 !important;
-}
-
-:deep(.mention-highlight) {
-  background: rgba(99, 102, 241, 0.1) !important;
-  color: #6366f1 !important;
-  padding: 1px 4px !important;
-  border-radius: 6px !important;
-  font-weight: 500 !important;
-  display: inline !important;
-  border: none !important;
-  font-size: 0.95em !important;
-}
-
-/* 전역 멘션 하이라이트 스타일 */
-.mention-highlight {
-  background: rgba(99, 102, 241, 0.1) !important;
-  color: #6366f1 !important;
-  padding: 1px 4px !important;
-  border-radius: 6px !important;
-  font-weight: 500 !important;
-  display: inline !important;
-  border: none !important;
-  font-size: 0.95em !important;
+  color: #6366f1;
 }
 
 /* 메시지 내 멘션 하이라이트 */
+.message-text .mention-highlight,
 :deep(.message-text .mention-highlight) {
-  background: #e0e7ff !important;
-  color: #4f46e5 !important;
-  padding: 1px 4px !important;
-  border-radius: 6px !important;
-  font-weight: 500 !important;
-  font-size: inherit !important;
-  display: inline !important;
-  border: none !important;
-}
-
-/* 더 강력한 선택자 */
-.team-chat .mention-highlight {
-  background: rgba(99, 102, 241, 0.1) !important;
-  color: #6366f1 !important;
-  padding: 1px 4px !important;
-  border-radius: 6px !important;
-  font-weight: 500 !important;
-  display: inline !important;
-  border: none !important;
-  font-size: 0.95em !important;
-}
-
-.team-chat .message-text .mention-highlight {
-  background: #e0e7ff !important;
-  color: #4f46e5 !important;
-  padding: 1px 4px !important;
-  border-radius: 6px !important;
-  font-weight: 500 !important;
-  display: inline !important;
-  border: none !important;
-  font-size: inherit !important;
-}
-
-.team-chat .mention-overlay .mention-highlight {
-  background: rgba(99, 102, 241, 0.1) !important;
-  color: #6366f1 !important;
-  padding: 1px 4px !important;
-  border-radius: 6px !important;
-  font-weight: 500 !important;
-  display: inline !important;
-  border: none !important;
-  font-size: 0.95em !important;
+  background: #e0e7ff;
+  color: #4f46e5;
+  font-size: inherit;
 }
 
 /* 답장 미리보기 내 멘션 하이라이트 */
+.reply-text .mention-highlight,
+.reply-preview-text .mention-highlight,
 :deep(.reply-text .mention-highlight),
 :deep(.reply-preview-text .mention-highlight) {
-  background: rgba(99, 102, 241, 0.08) !important;
-  color: #6366f1 !important;
-  padding: 1px 3px !important;
-  border-radius: 4px !important;
-  font-weight: 500 !important;
-  font-size: inherit !important;
-  display: inline !important;
-  border: none !important;
+  background: rgba(99, 102, 241, 0.08);
+  color: #6366f1;
+  padding: 1px 3px;
+  border-radius: 4px;
+  font-size: inherit;
 }
 
 .message-textarea {
@@ -3078,26 +3013,24 @@ onUnmounted(() => {
   overflow: hidden;
 }
 
-/* Vuetify textarea의 기본 하이라이트 비활성화 */
+/* Vuetify textarea 스타일 */
 .message-textarea :deep(.v-field__input) {
-  background: transparent !important;
-  color: rgb(var(--v-theme-on-surface)) !important;
-  caret-color: rgb(var(--v-theme-on-surface)) !important;
+  background: transparent;
+  color: rgb(var(--v-theme-on-surface));
+  caret-color: rgb(var(--v-theme-on-surface));
   position: relative;
   z-index: 1;
 }
 
 .message-textarea :deep(.v-field__input::selection) {
-  background: rgba(var(--v-theme-primary), 0.2) !important;
-  color: rgb(var(--v-theme-on-surface)) !important;
+  background: rgba(var(--v-theme-primary), 0.2);
+  color: rgb(var(--v-theme-on-surface));
 }
 
 .message-textarea :deep(.v-field__input::-moz-selection) {
-  background: rgba(var(--v-theme-primary), 0.2) !important;
-  color: rgb(var(--v-theme-on-surface)) !important;
+  background: rgba(var(--v-theme-primary), 0.2);
+  color: rgb(var(--v-theme-on-surface));
 }
-
-/* 멘션 부분만 textarea에서 숨기기 - 정규식으로 멘션 부분을 공백으로 대체 */
 
 .message-textarea:focus {
   background: white;
@@ -3111,17 +3044,16 @@ onUnmounted(() => {
   line-height: 1.4;
 }
 
-/* 전송 액션 버튼들 */
 .send-actions {
   display: flex;
   align-items: center;
 }
 
 .send-btn {
-  width: 52px !important;
-  height: 52px !important;
-  min-width: 52px !important;
-  min-height: 52px !important;
+  width: 52px;
+  height: 52px;
+  min-width: 52px;
+  min-height: 52px;
   border-radius: 8px;
   transition: all 0.2s ease;
   background: rgb(var(--v-theme-primary));
@@ -3307,7 +3239,7 @@ onUnmounted(() => {
 }
 
 .icon-circle .v-icon {
-  color: white !important;
+  color: white;
   z-index: 1;
 }
 
@@ -3406,8 +3338,8 @@ onUnmounted(() => {
   height: 52px;
   font-size: 16px;
   letter-spacing: -0.2px;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
-  color: white !important;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
   box-shadow: 0 4px 16px rgba(102, 126, 234, 0.3);
   transition: all 0.3s ease;
   position: relative;
@@ -4165,7 +4097,7 @@ onUnmounted(() => {
 }
 
 .mention-item-selected {
-  background: rgba(var(--v-theme-primary), 0.15) !important;
+  background: rgba(var(--v-theme-primary), 0.15);
 }
 
 .mention-info {
@@ -4186,75 +4118,46 @@ onUnmounted(() => {
   color: rgba(var(--v-theme-on-surface), 0.6);
 }
 
-/* 메시지 우클릭 호버 효과 */
-.message-item {
-  cursor: context-menu;
-}
 
-.message-item:hover {
-  background: rgba(var(--v-theme-on-surface), 0.02);
-}
-
-.message-textarea :deep(.v-field) {
-  width: 100% !important;
-  max-width: 100% !important;
-}
-
-.message-textarea :deep(.v-field__input) {
-  width: 100% !important;
-  max-width: 100% !important;
-  display: block !important;
-  white-space: pre-wrap !important;
-  word-break: break-word !important;
-  box-sizing: border-box !important;
-}
-
-.message-textarea :deep(textarea) {
-  width: 100% !important;
-  max-width: 100% !important;
-  resize: none !important;
-  line-height: 52px !important;
-  overflow-x: hidden !important;
-  box-sizing: border-box !important;
-  padding-top: 16px !important;
-  padding-bottom: 16px !important;
-}
-
+/* Vuetify 입력 필드 레이아웃 */
 .input-field {
-  flex: 1 1 auto !important;
-  min-width: 0 !important;
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
-/* 🚨 Vuetify 내부 display 강제 덮어쓰기 */
 .message-textarea :deep(.v-input),
 .message-textarea :deep(.v-input__control),
 .message-textarea :deep(.v-field),
 .message-textarea :deep(.v-field__input),
 .message-textarea :deep(textarea) {
-  width: 100% !important;
-  max-width: 100% !important;
-  min-width: 100% !important;
-  flex: 1 1 auto !important;
-  display: block !important;
-  box-sizing: border-box !important;
-  white-space: pre-wrap !important;
-  word-break: break-word !important;
-  overflow-wrap: break-word !important;
+  width: 100%;
+  max-width: 100%;
+  min-width: 100%;
+  flex: 1 1 auto;
+  display: block;
+  box-sizing: border-box;
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-wrap: break-word;
 }
 
-/* ✅ 내가 멘션된 메시지 배경 하이라이트 (강조 버전) */
+.message-textarea :deep(textarea) {
+  resize: none;
+  line-height: 52px;
+  overflow-x: hidden;
+  padding-top: 16px;
+  padding-bottom: 16px;
+}
+
+/* 멘션된 메시지 배경 하이라이트 */
 .message-bubble.mentioned {
-  background: linear-gradient(
-    135deg,
-    #ede9fe,
-    #ddd6fe
-  ) !important; /* 보라빛 그라데이션 */
-  box-shadow: 0 0 10px rgba(124, 58, 237, 0.5) !important; /* 외곽광 */
+  background: linear-gradient(135deg, #ede9fe, #ddd6fe);
+  box-shadow: 0 0 10px rgba(124, 58, 237, 0.5);
   animation: mentionGlow 2s ease-in-out infinite alternate;
   transition: all 0.3s ease;
 }
 
-/* 💡 하이라이트 애니메이션 */
+/* 멘션 하이라이트 애니메이션 */
 @keyframes mentionGlow {
   0% {
     box-shadow: 0 0 8px rgba(124, 58, 237, 0.3);
@@ -4267,13 +4170,13 @@ onUnmounted(() => {
   }
 }
 
-/* 🟣 메시지 텍스트 색도 살짝 강조 */
+/* 멘션된 메시지 텍스트 강조 */
 .message-bubble.mentioned .message-text {
-  color: #4c1d95 !important;
+  color: #4c1d95;
   font-weight: 600;
 }
 
-/* ✅ 구분선 스타일 */
+/* 구분선 */
 .message-divider {
   display: flex;
   align-items: center;
