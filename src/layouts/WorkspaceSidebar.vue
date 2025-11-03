@@ -33,6 +33,11 @@ const handleResize = () => {
   windowWidth.value = window.innerWidth;
 };
 
+// 반응형 여부 확인 (화면 크기가 1024px 이하인지)
+const isResponsiveView = computed(() => {
+  return windowWidth.value <= 1024;
+});
+
 // 반응형 collapsed 상태 (화면 크기에 따라 자동 결정)
 const isCollapsedView = computed(() => {
   return (
@@ -1299,7 +1304,11 @@ const getStatusColor = (status) => {
         v-if="workspaceType === 'project' && currentWorkspaceData"
         class="project-info"
       >
-        <div class="toggle-button" @click="emit('toggle')">
+        <div 
+          v-if="!isResponsiveView" 
+          class="toggle-button" 
+          @click="emit('toggle')"
+        >
           <v-icon>{{
             collapsed ? "mdi-chevron-right" : "mdi-chevron-left"
           }}</v-icon>
@@ -2080,7 +2089,7 @@ const getStatusColor = (status) => {
   backdrop-filter: blur(6px);
   border-right: 1px solid rgba(var(--v-theme-on-surface), 0.08);
   box-shadow: 1px 0 0 rgba(var(--v-theme-on-surface), 0.04);
-  padding: 24px 0 80px 0;
+  padding: 8px 0 80px 0;
   padding-bottom: 80px;
   margin-left: 72px;
   position: fixed;
@@ -2574,7 +2583,7 @@ const getStatusColor = (status) => {
     width: 60px !important;
     margin-left: 60px !important;
     top: 56px;
-    padding: 16px 0 80px 0 !important;
+    padding: 8px 0 80px 0 !important;
   }
   
   /* collapsed 상태일 때도 반응형에서는 최소 너비 유지 (아이콘만 표시) */
@@ -2639,7 +2648,7 @@ const getStatusColor = (status) => {
     width: 56px !important;
     margin-left: 56px !important;
     top: 56px;
-    padding: 12px 0 80px 0 !important;
+    padding: 8px 0 80px 0 !important;
   }
   
   /* collapsed 상태일 때도 반응형에서는 최소 너비 유지 */
@@ -2664,7 +2673,7 @@ const getStatusColor = (status) => {
     width: 52px !important;
     margin-left: 52px !important;
     top: 56px;
-    padding: 10px 0 80px 0 !important;
+    padding: 8px 0 80px 0 !important;
   }
   
   /* collapsed 상태일 때도 반응형에서는 최소 너비 유지 */
@@ -3534,14 +3543,14 @@ const getStatusColor = (status) => {
   .workspace-sidebar {
     width: 60px !important;
     min-width: 60px !important;
-    padding: 16px 0 0 0 !important;
+    padding: 8px 0 0 0 !important;
   }
 
+  /* 반응형일 때는 collapsed 상태여도 최소 너비 유지 (아이콘만 표시) */
   .workspace-sidebar.collapsed {
-    width: 0 !important;
-    min-width: 0 !important;
-    padding: 0 !important;
-    overflow: hidden !important;
+    width: 60px !important;
+    min-width: 60px !important;
+    padding: 8px 0 0 0 !important;
   }
 
   /* 프로젝트 정보 숨기기 */
@@ -3677,11 +3686,13 @@ const getStatusColor = (status) => {
   .workspace-sidebar {
     width: 56px !important;
     min-width: 56px !important;
-    padding: 12px 0 0 0 !important;
+    padding: 8px 0 0 0 !important;
   }
 
+  /* 반응형일 때는 collapsed 상태여도 최소 너비 유지 */
   .workspace-sidebar.collapsed {
-    width: 0 !important;
+    width: 56px !important;
+    min-width: 56px !important;
   }
 
   .channel-item,
@@ -3706,7 +3717,13 @@ const getStatusColor = (status) => {
   .workspace-sidebar {
     width: 52px !important;
     min-width: 52px !important;
-    padding: 10px 0 0 0 !important;
+    padding: 8px 0 0 0 !important;
+  }
+
+  /* 반응형일 때는 collapsed 상태여도 최소 너비 유지 */
+  .workspace-sidebar.collapsed {
+    width: 52px !important;
+    min-width: 52px !important;
   }
 
   .channel-item,

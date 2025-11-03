@@ -311,16 +311,17 @@ const connectWebsocket = () => {
 
               if (tempMsgIndex !== -1) {
                 // 🟩 temp_ 메시지 → 실제 chatMessageSeq로 교체
+                const createdAt = parsed.createdAt ? new Date(parsed.createdAt) : messages.value[tempMsgIndex].createdAt || new Date();
                 messages.value[tempMsgIndex].id = parsed.chatMessageSeq;
                 messages.value[tempMsgIndex].replyToSeq =
                   parsed.replyToSeq || null;
                 messages.value[tempMsgIndex].profileImageUrl =
                   parsed.senderProfileImageUrl || null;
-                messages.value[tempMsgIndex].time =
-                  new Date().toLocaleTimeString("ko-KR", {
-                    hour: "2-digit",
-                    minute: "2-digit",
-                  });
+                messages.value[tempMsgIndex].createdAt = createdAt; // ✅ createdAt 업데이트
+                messages.value[tempMsgIndex].time = createdAt.toLocaleTimeString("ko-KR", {
+                  hour: "2-digit",
+                  minute: "2-digit",
+                });
 
                 // 🟩 교체했으면 새로 push하지 않도록 return
                 return;
@@ -340,14 +341,16 @@ const connectWebsocket = () => {
             }));
 
             // 💬 메시지 구조 변환 (사용자 정보 포함)
+            const createdAt = parsed.createdAt ? new Date(parsed.createdAt) : new Date();
             const formattedMessage = {
               id: parsed.chatMessageSeq || Date.now(), // ✅ 백엔드에서 받은 실제 chatMessageSeq 사용
               user: parsed.senderName || parsed.senderSeq, // ✅ 백엔드에서 받은 실제 senderName 사용
               content: parsed.chatMessageText,
-              time: new Date().toLocaleTimeString("ko-KR", {
+              time: createdAt.toLocaleTimeString("ko-KR", {
                 hour: "2-digit",
                 minute: "2-digit",
               }),
+              createdAt: createdAt, // ✅ 시간 비교를 위한 원본 Date 객체
               avatar:
                 parsed.senderProfileImageUrl &&
                 parsed.senderProfileImageUrl.trim() !== ""
@@ -584,14 +587,16 @@ const sendMessage = async () => {
     };
 
     // 2️⃣ 즉시 화면에 표시 (로컬 메시지)
+    const now = new Date();
     const localMessage = {
       id: `temp_${Date.now()}`, // ✅ 임시 ID 사용 (백엔드에서 실제 ID로 업데이트됨)
       user: currentUserName,
       content: newMessage.value,
-      time: new Date().toLocaleTimeString("ko-KR", {
+      time: now.toLocaleTimeString("ko-KR", {
         hour: "2-digit",
         minute: "2-digit",
       }),
+      createdAt: now, // ✅ 시간 비교를 위한 원본 Date 객체
       avatar: currentUserName.charAt(0),
       profileImageUrl: currentUserProfileImage,
       senderSeq: memberSeq.value,
@@ -737,26 +742,30 @@ const loadMoreMessages = async (lastId = null) => {
     console.log("📨 로드된 메시지 개수:", loadedMessages.length);
 
     // 메시지 맵핑 → WebSocket 수신 형식과 동일하게 변환
-    const formatted = loadedMessages.map((m) => ({
-      id: m.chatMessageSeq,
-      user: m.senderName,
-      content: m.chatMessageText,
-      time: new Date(m.createdAt).toLocaleTimeString("ko-KR", {
-        hour: "2-digit",
-        minute: "2-digit",
-      }),
-      profileImageUrl: m.senderProfileImageUrl || null,
-      senderSeq: m.senderSeq,
-      isOwn: Number(m.senderSeq) === Number(memberSeq.value), // ✅ 타입 변환 후 비교
-      unread: 0,
-      files: (m.chatMessageFileUrls || "")
-        .split(",")
-        .filter(Boolean)
-        .map((url) => ({ name: url.split("/").pop(), url, type: "file" })),
-      messageType: m.messageType || "TEXT",
-      replyToSeq: m.replyToSeq || null,
-      isNewMessage: false, // ✅ 이전 메시지는 false
-    }));
+    const formatted = loadedMessages.map((m) => {
+      const createdAt = new Date(m.createdAt);
+      return {
+        id: m.chatMessageSeq,
+        user: m.senderName,
+        content: m.chatMessageText,
+        time: createdAt.toLocaleTimeString("ko-KR", {
+          hour: "2-digit",
+          minute: "2-digit",
+        }),
+        createdAt: createdAt, // ✅ 시간 비교를 위한 원본 Date 객체
+        profileImageUrl: m.senderProfileImageUrl || null,
+        senderSeq: m.senderSeq,
+        isOwn: Number(m.senderSeq) === Number(memberSeq.value), // ✅ 타입 변환 후 비교
+        unread: 0,
+        files: (m.chatMessageFileUrls || "")
+          .split(",")
+          .filter(Boolean)
+          .map((url) => ({ name: url.split("/").pop(), url, type: "file" })),
+        messageType: m.messageType || "TEXT",
+        replyToSeq: m.replyToSeq || null,
+        isNewMessage: false, // ✅ 이전 메시지는 false
+      };
+    });
 
     // ✅ 스크롤 위치 저장
     const container = document.querySelector(".messages-container");
@@ -1670,6 +1679,42 @@ const shouldShowDivider = (message, index) => {
   return false;
 };
 
+// ✅ 시간 표시 여부 판단 (카카오톡 방식: 같은 시간대의 연속 메시지는 마지막에만 표시)
+const shouldShowTime = (message, index) => {
+  // 마지막 메시지면 항상 시간 표시
+  if (index === messages.value.length - 1) {
+    return true;
+  }
+
+  const nextMessage = messages.value[index + 1];
+  if (!nextMessage || !message.createdAt || !nextMessage.createdAt) {
+    return true;
+  }
+
+  // 시간 비교 (같은 시:분인지 확인)
+  const currentTime = message.createdAt;
+  const nextTime = nextMessage.createdAt;
+  
+  const currentMinutes = currentTime.getHours() * 60 + currentTime.getMinutes();
+  const nextMinutes = nextTime.getHours() * 60 + nextTime.getMinutes();
+
+  // 다음 메시지와 시간이 다르면 표시
+  if (currentMinutes !== nextMinutes) {
+    return true;
+  }
+
+  // 다음 메시지가 다른 사용자거나, 내 메시지 <-> 상대방 메시지 전환 시 표시
+  if (
+    message.user !== nextMessage.user ||
+    message.isOwn !== nextMessage.isOwn
+  ) {
+    return true;
+  }
+
+  // 같은 시간대의 연속 메시지는 표시하지 않음
+  return false;
+};
+
 // 1:1 채팅 상대방 정보 가져오기 
 const loadChatUserInfo = async () => {
   if (!isPersonalChat.value || !props.selectedChannel) return;
@@ -2230,7 +2275,12 @@ onUnmounted(() => {
                     >
                       <!-- {{ message.unread }} -->
                     </div>
-                    <div class="message-time">{{ message.time }}</div>
+                    <div 
+                      v-if="shouldShowTime(message, index)"
+                      class="message-time"
+                    >
+                      {{ message.time }}
+                    </div>
                   </div>
                 </div>
               </div>
