@@ -20,6 +20,8 @@ import { useWorkspaceMemberStore } from '@/store/workspaceMemberStore'
 import { Authority } from '@/models/workspace/WorkspaceModels'
 import { emitter } from "@/eventBus"; // 채팅 채널 변경 이벤트 버스
 import { getIndividualChatChannels, leaveChannel } from "@/api/chat/chatApi"; // 1:1 채팅 관련 API
+import SockJS from "sockjs-client";
+import Stomp from "webstomp-client";
 
 const router = useRouter()
 
@@ -276,6 +278,108 @@ const directMessages = ref([]);
 const showDmContextMenu = ref(false);
 const dmContextMenuPosition = ref({ x: 0, y: 0 });
 const selectedDm = ref(null);
+
+// ✅ WebSocket 관련 변수 (개인 워크스페이스용)
+const personalWsClient = ref(null);
+const personalWsSubscriptions = ref([]); // 각 채널별 구독 리스트
+
+// ✅ 개인 워크스페이스: 모든 1:1 채팅 채널에 대한 WebSocket 구독
+const connectPersonalChatWebSocket = () => {
+  if (props.workspaceType !== 'personal') return;
+  
+  const token = localStorage.getItem('token');
+  if (!token) {
+    console.warn('⚠️ 토큰이 없어 WebSocket 연결 불가');
+    return;
+  }
+
+  // 이미 연결되어 있으면 return
+  if (personalWsClient.value && personalWsClient.value.connected) {
+    console.log('✅ 개인 채팅 WebSocket 이미 연결됨');
+    return;
+  }
+
+  // directMessages가 비어있으면 연결하지 않음
+  if (!directMessages.value || directMessages.value.length === 0) {
+    console.log('ℹ️ 1:1 채팅 목록이 비어있어 WebSocket 연결 안 함');
+    return;
+  }
+
+  const sockJs = new SockJS(`${import.meta.env.VITE_API_URL}/chat-service/connect`);
+  personalWsClient.value = Stomp.over(sockJs);
+
+  personalWsClient.value.connect(
+    { Authorization: `Bearer ${token}` },
+    () => {
+      console.log('✅ 개인 채팅 WebSocket 연결 성공');
+      
+      // 모든 1:1 채팅 채널에 구독
+      directMessages.value.forEach((dm) => {
+        const subscription = personalWsClient.value.subscribe(
+          `/topic/${dm.channelSeq}`,
+          (message) => {
+            try {
+              const parsed = JSON.parse(message.body);
+              
+              // TYPING 이벤트는 무시
+              if (parsed.action === "TYPING" || parsed.action === "DELETE") {
+                return;
+              }
+
+              // 자신이 보낸 메시지는 무시
+              const memberSeq = Number(localStorage.getItem('memberSeq'));
+              if (Number(parsed.senderSeq) === memberSeq) {
+                return;
+              }
+
+              // ✅ unreadCount 증가 (현재 채팅방이 아니면)
+              const currentChannelStr = props.currentChannel?.toString();
+              const channelSeqStr = parsed.channelSeq?.toString();
+              
+              if (currentChannelStr !== channelSeqStr) {
+                incrementDirectMessageUnread(parsed.channelSeq);
+              }
+            } catch (e) {
+              console.error('개인 채팅 WebSocket 메시지 파싱 실패:', e);
+            }
+          },
+          { Authorization: `Bearer ${token}` }
+        );
+        
+        personalWsSubscriptions.value.push({
+          channelSeq: dm.channelSeq,
+          subscription: subscription
+        });
+      });
+      
+      console.log(`✅ ${personalWsSubscriptions.value.length}개 채널 구독 완료`);
+    },
+    (error) => {
+      console.error('❌ 개인 채팅 WebSocket 연결 실패:', error);
+    }
+  );
+};
+
+// ✅ 개인 채팅 WebSocket 해제
+const disconnectPersonalChatWebSocket = () => {
+  if (personalWsSubscriptions.value.length > 0) {
+    personalWsSubscriptions.value.forEach(({ subscription }) => {
+      try {
+        subscription.unsubscribe();
+      } catch (e) {
+        console.warn('구독 해제 중 오류:', e);
+      }
+    });
+    personalWsSubscriptions.value = [];
+  }
+
+  if (personalWsClient.value && personalWsClient.value.connected) {
+    personalWsClient.value.disconnect(() => {
+      console.log('✅ 개인 채팅 WebSocket 연결 해제 완료');
+    });
+  }
+  personalWsClient.value = null;
+};
 
 // 1:1 채팅 목록 로드
 const loadDirectMessages = async () => {
@@ -766,6 +870,7 @@ const hasMeetingPermission = (meetingData) => {
   return hasChannelManagePermission("meeting");
 };
 
+
 watch(
   () => [props.workspaceType, props.currentWorkspaceData],
   ([newType, newWorkspace]) => {
@@ -799,6 +904,24 @@ const incrementDirectMessageUnread = (channelSeq) => {
     console.warn(`⚠️ 채널을 찾을 수 없음: channelSeq=${channelSeq}`);
   }
 };
+
+// ✅ directMessages가 변경될 때마다 WebSocket 재구독
+watch(
+  () => directMessages.value,
+  (newDms) => {
+    if (props.workspaceType === 'personal') {
+      // 기존 구독 해제
+      disconnectPersonalChatWebSocket();
+      // 새로 구독 (directMessages가 있을 때만)
+      if (newDms && newDms.length > 0) {
+        setTimeout(() => {
+          connectPersonalChatWebSocket();
+        }, 300);
+      }
+    }
+  },
+  { deep: true }
+);
 
 // 컴포넌트 마운트 시 채널 데이터 로드 (resize 리스너와 함께)
 onMounted(() => {
@@ -840,6 +963,10 @@ onMounted(() => {
     loadChannels();
   } else if (props.workspaceType === 'personal') { 
     loadDirectMessages();
+    // ✅ 개인 워크스페이스일 때 WebSocket 연결 (directMessages 로드 후)
+    setTimeout(() => {
+      connectPersonalChatWebSocket();
+    }, 500);
   }
 
    console.log("📢 현재 workspaceType:", props.workspaceType);
@@ -855,7 +982,10 @@ onUnmounted(() => {
 
   // 이벤트 리스너 제거
   emitter.off('refresh-direct-messages')
-  emitter.off('increment-direct-message-unread'); // ✅ 추가
+  emitter.off('increment-direct-message-unread');
+
+  // ✅ 개인 채팅 WebSocket 해제
+  disconnectPersonalChatWebSocket();
 })
 
 // 워크스페이스 변경 시 채널 데이터 다시 로드

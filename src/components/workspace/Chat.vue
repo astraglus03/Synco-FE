@@ -2084,7 +2084,7 @@ onUnmounted(() => {
                       v-if="!message.isOwn && message.unread"
                       class="unread-count"
                     >
-                      {{ message.unread }}
+                      <!-- {{ message.unread }} -->
                     </div>
                     <div class="message-time">{{ message.time }}</div>
                   </div>
@@ -2582,20 +2582,6 @@ onUnmounted(() => {
   color: rgba(var(--v-theme-on-surface), 0.6);
   white-space: nowrap;
   padding: 0px 0px;
-}
-
-.unread-count {
-  background: rgb(var(--v-theme-primary));
-  color: #ffffff;
-  font-size: 10px;
-  font-weight: 600;
-  min-width: 16px;
-  height: 16px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  line-height: 1;
 }
 
 /* 메시지 입력 컨테이너 */
