@@ -46,24 +46,82 @@
     <!-- 메인 컨테이너 -->
     <div class="main-container">
       <!-- 비디오 영역 -->
-      <div class="video-container" :class="{ 'full-width': !showChat }">
-        <div class="participants-video">
-          <!-- 내 비디오 -->
-          <div v-if="localParticipantIdentity" class="participant-video my-video">
-            <video :id="`video-${localParticipantIdentity}`" autoplay muted playsinline class="video-element"></video>
-            <div class="video-label">{{ getParticipantName(localParticipantIdentity) || authStore.user?.name || localParticipantIdentity }}</div>
+      <div class="video-container" :class="{ 'full-width': !showChat, 'screen-share-mode': activeScreenShare }">
+        <!-- 화면 공유 모드: 메인 영역 + 서브 영역 -->
+        <template v-if="activeScreenShare">
+          <!-- 메인 화면 공유 영역 -->
+          <div class="main-screen-share-area">
+            <div 
+              class="screen-share-video-wrapper"
+              @click="expandVideo(activeScreenShare.identity, 'screen-share')"
+            >
+              <video 
+                :id="`screen-share-${activeScreenShare.identity}`" 
+                autoplay 
+                playsinline 
+                class="screen-share-element"
+              ></video>
+              <div class="screen-share-label">
+                <v-icon size="16">mdi-monitor</v-icon>
+                {{ getParticipantName(activeScreenShare.identity) || activeScreenShare.name || activeScreenShare.identity }}의 화면
+              </div>
+              <div class="expand-hint">
+                <v-icon size="20">mdi-fullscreen</v-icon>
+                <span>클릭하여 확대</span>
+              </div>
+            </div>
           </div>
           
-          <!-- 원격 참여자들 -->
-          <div
-            v-for="participant in remoteParticipants"
-            :key="participant.identity"
-            class="participant-video"
-          >
-            <video :id="`video-${participant.identity}`" autoplay playsinline class="video-element"></video>
-            <div class="video-label">{{ getParticipantName(participant.identity) || participant.name || participant.identity }}</div>
+          <!-- 참가자 카메라 서브 영역 -->
+          <div class="participants-sidebar">
+            <!-- 내 비디오 -->
+            <div 
+              v-if="localParticipantIdentity" 
+              class="participant-video-small my-video"
+              @click="expandVideo(localParticipantIdentity, 'camera')"
+            >
+              <video :id="`video-${localParticipantIdentity}`" autoplay muted playsinline class="video-element"></video>
+              <div class="video-label">{{ getParticipantName(localParticipantIdentity) || authStore.user?.name || localParticipantIdentity }}</div>
+            </div>
+            
+            <!-- 원격 참여자들 -->
+            <div
+              v-for="participant in remoteParticipants"
+              :key="participant.identity"
+              class="participant-video-small"
+              @click="expandVideo(participant.identity, 'camera')"
+            >
+              <video :id="`video-${participant.identity}`" autoplay playsinline class="video-element"></video>
+              <div class="video-label">{{ getParticipantName(participant.identity) || participant.name || participant.identity }}</div>
+            </div>
           </div>
-        </div>
+        </template>
+        
+        <!-- 일반 모드: 그리드 레이아웃 -->
+        <template v-else>
+          <div class="participants-video">
+            <!-- 내 비디오 -->
+            <div 
+              v-if="localParticipantIdentity" 
+              class="participant-video my-video"
+              @click="expandVideo(localParticipantIdentity, 'camera')"
+            >
+              <video :id="`video-${localParticipantIdentity}`" autoplay muted playsinline class="video-element"></video>
+              <div class="video-label">{{ getParticipantName(localParticipantIdentity) || authStore.user?.name || localParticipantIdentity }}</div>
+            </div>
+            
+            <!-- 원격 참여자들 -->
+            <div
+              v-for="participant in remoteParticipants"
+              :key="participant.identity"
+              class="participant-video"
+              @click="expandVideo(participant.identity, 'camera')"
+            >
+              <video :id="`video-${participant.identity}`" autoplay playsinline class="video-element"></video>
+              <div class="video-label">{{ getParticipantName(participant.identity) || participant.name || participant.identity }}</div>
+            </div>
+          </div>
+        </template>
       </div>
 
       <!-- 채팅 토글 버튼 -->
@@ -116,11 +174,53 @@
         </div>
       </div>
     </div>
+
+    <!-- 확대된 비디오 모달 (풀스크린) -->
+    <div 
+      v-if="expandedVideo" 
+      class="expanded-video-overlay"
+      @click="closeExpandedVideo"
+    >
+      <div class="expanded-video-container" @click.stop>
+        <div class="expanded-video-header">
+          <div class="expanded-video-info">
+            <v-icon v-if="expandedVideo.type === 'screen-share'" size="20">mdi-monitor</v-icon>
+            <v-icon v-else size="20">mdi-video</v-icon>
+            <span>{{ expandedVideo.name }}의 {{ expandedVideo.type === 'screen-share' ? '화면' : '비디오' }}</span>
+          </div>
+          <v-btn
+            icon="mdi-close"
+            variant="text"
+            size="small"
+            class="close-expanded-btn"
+            @click="closeExpandedVideo"
+          />
+        </div>
+        <div class="expanded-video-content">
+          <video 
+            :id="`expanded-${expandedVideo.id}-${expandedVideo.type}`" 
+            autoplay 
+            :muted="expandedVideo.id === localParticipantIdentity"
+            playsinline 
+            class="expanded-video-element"
+          ></video>
+        </div>
+        <div class="expanded-video-footer">
+          <v-btn
+            icon="mdi-fullscreen-exit"
+            variant="text"
+            @click="closeExpandedVideo"
+          >
+            전체화면 종료 (ESC)
+          </v-btn>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import { useRoute } from 'vue-router'
 import { useMeetingStore } from '@/store/meetingStore'
 import { useAuthStore } from '@/store/authStore'
@@ -164,6 +264,9 @@ const callTimer = ref(null)
 const remoteParticipants = ref([])
 const localParticipantIdentity = ref(null)
 const roomParticipants = ref([]) // API로 가져온 참가자 정보 (이름 포함)
+const activeScreenShare = ref(null) // 현재 화면 공유 중인 참가자 정보 { identity, name }
+const expandedVideo = ref(null) // 확대된 비디오 정보 { id, name, type }
+const screenShareTracks = ref(new Map()) // 화면 공유 트랙 저장 (identity -> track)
 
 // meetingData
 const meetingData = computed(() => {
@@ -349,7 +452,7 @@ const initializeExistingTracks = async () => {
     setupParticipantEvents(participant)
     participant.trackPublications.forEach((pub) => {
       if (pub.track) {
-        attachTrack(pub.track, participant)
+        attachTrack(pub.track, participant, pub)
       }
     })
   })
@@ -357,7 +460,7 @@ const initializeExistingTracks = async () => {
   // 로컬 참가자 (지금은 카메라/마이크 안 켠 상태일 수 있음)
   room.value.localParticipant.trackPublications.forEach((pub) => {
     if (pub.track) {
-      attachTrack(pub.track, room.value.localParticipant)
+      attachTrack(pub.track, room.value.localParticipant, pub)
     }
   })
   
@@ -492,8 +595,8 @@ const setupRoomEventListeners = () => {
   room.value.on(
     RoomEvent.TrackSubscribed,
     (track, publication, participant) => {
-      console.log('트랙 구독:', track.kind, participant.identity)
-      attachTrack(track, participant)
+      console.log('트랙 구독:', track.kind, participant.identity, 'source:', publication?.source)
+      attachTrack(track, participant, publication)
     },
   )
 
@@ -501,8 +604,8 @@ const setupRoomEventListeners = () => {
   room.value.on(
     RoomEvent.TrackUnsubscribed,
     (track, publication, participant) => {
-      console.log('트랙 구독 해제:', track.kind, participant.identity)
-      detachTrack(track, participant)
+      console.log('트랙 구독 해제:', track.kind, participant.identity, 'source:', publication?.source)
+      detachTrack(track, participant, publication)
     },
   )
 
@@ -533,15 +636,15 @@ const setupParticipantEvents = (participant) => {
   })
 
   // 참가자의 트랙 구독
-  participant.on(RoomEvent.TrackSubscribed, (track) => {
-    console.log('참여자 트랙 구독:', track.kind, participant.identity)
-    attachTrack(track, participant)
+  participant.on(RoomEvent.TrackSubscribed, (track, publication) => {
+    console.log('참여자 트랙 구독:', track.kind, participant.identity, 'source:', publication?.source)
+    attachTrack(track, participant, publication)
   })
 
   // 참가자의 트랙 구독 해제
-  participant.on(RoomEvent.TrackUnsubscribed, (track) => {
-    console.log('참여자 트랙 구독 해제:', track.kind, participant.identity)
-    detachTrack(track, participant)
+  participant.on(RoomEvent.TrackUnsubscribed, (track, publication) => {
+    console.log('참여자 트랙 구독 해제:', track.kind, participant.identity, 'source:', publication?.source)
+    detachTrack(track, participant, publication)
   })
 }
 
@@ -557,26 +660,83 @@ const detachAllTracksOfParticipant = (participant) => {
 }
 
 // 트랙을 DOM에 붙이기
-const attachTrack = (track, participant) => {
+const attachTrack = (track, participant, publication = null) => {
   const pid = participant.identity || 'unknown'
 
   if (track.kind === Track.Kind.Video) {
-    const videoElement = document.getElementById(`video-${pid}`)
-    if (videoElement) {
-      track.attach(videoElement)
-      console.log('✅ 비디오 트랙 attach됨:', pid)
-    } else {
-      console.warn('⚠️ 비디오 element 찾을 수 없음, 재시도:', `video-${pid}`)
-      // Vue의 반응형 시스템이 DOM을 업데이트할 때까지 기다림
+    // 화면 공유 트랙인지 확인
+    const isScreenShare = publication?.source === Track.Source.ScreenShare || 
+                         publication?.source === Track.Source.ScreenShareAudio ||
+                         track.source === Track.Source.ScreenShare ||
+                         track.source === Track.Source.ScreenShareAudio
+
+    if (isScreenShare) {
+      console.log('🖥️ 화면 공유 트랙 감지:', pid)
+      
+      // 화면 공유 트랙 저장
+      screenShareTracks.value.set(pid, { track, participant })
+      
+      // 화면 공유 참가자 정보 업데이트
+      const participantName = getParticipantName(pid)
+      activeScreenShare.value = {
+        identity: pid,
+        name: participantName || participant.name || pid
+      }
+      
+      // 화면 공유 전용 비디오 요소에 attach
       setTimeout(() => {
-        const retryElement = document.getElementById(`video-${pid}`)
-        if (retryElement) {
-          track.attach(retryElement)
-          console.log('✅ 재시도 성공 - 비디오 트랙 attach됨:', pid)
+        const screenShareElement = document.getElementById(`screen-share-${pid}`)
+        if (screenShareElement) {
+          track.attach(screenShareElement)
+          console.log('✅ 화면 공유 트랙 attach됨:', pid)
         } else {
-          console.error('❌ 재시도 실패 - 여전히 element 못 찾음:', `video-${pid}`)
+          console.warn('⚠️ 화면 공유 element 찾을 수 없음, 재시도:', `screen-share-${pid}`)
+          setTimeout(() => {
+            const retryElement = document.getElementById(`screen-share-${pid}`)
+            if (retryElement) {
+              track.attach(retryElement)
+              console.log('✅ 재시도 성공 - 화면 공유 트랙 attach됨:', pid)
+            }
+          }, 200)
         }
       }, 100)
+    } else {
+      // 일반 카메라 트랙
+      // 화면 공유 모드에서는 participants-sidebar 안의 요소에 attach
+      // 일반 모드에서는 participants-video 안의 요소에 attach
+      const attachCameraTrack = (elementId) => {
+        const videoElement = document.getElementById(elementId)
+        if (videoElement) {
+          // 기존 트랙이 있으면 먼저 detach
+          if (videoElement.srcObject) {
+            const existingTracks = videoElement.srcObject.getVideoTracks()
+            existingTracks.forEach(t => {
+              if (t !== track.mediaStreamTrack) {
+                t.stop()
+              }
+            })
+          }
+          track.attach(videoElement)
+          console.log('✅ 비디오 트랙 attach됨:', pid, 'to', elementId)
+          return true
+        }
+        return false
+      }
+      
+      // 먼저 직접 요소 찾기 시도
+      if (!attachCameraTrack(`video-${pid}`)) {
+        console.warn('⚠️ 비디오 element 찾을 수 없음, 재시도:', `video-${pid}`)
+        // Vue의 반응형 시스템이 DOM을 업데이트할 때까지 기다림
+        setTimeout(() => {
+          if (!attachCameraTrack(`video-${pid}`)) {
+            console.error('❌ 재시도 실패 - 여전히 element 못 찾음:', `video-${pid}`)
+            // 추가 재시도 (화면 공유 모드 전환 시 DOM이 늦게 업데이트될 수 있음)
+            setTimeout(() => {
+              attachCameraTrack(`video-${pid}`)
+            }, 300)
+          }
+        }, 100)
+      }
     }
   } else if (track.kind === Track.Kind.Audio) {
     let audioElement = document.getElementById(`audio-${pid}`)
@@ -589,14 +749,49 @@ const attachTrack = (track, participant) => {
 }
 
 // 트랙을 DOM에서 떼기
-const detachTrack = (track, participant) => {
-  const pid = participant.identity || 'unknown'
+const detachTrack = (track, participant, publication = null) => {
+  const pid = participant.identity
 
   if (track.kind === Track.Kind.Video) {
-    const videoElement = document.getElementById(`video-${pid}`)
-    if (videoElement) {
-      track.detach(videoElement)
-      // template에 있는 요소는 remove하지 않음
+    // 화면 공유 트랙인지 확인
+    const isScreenShare = publication?.source === Track.Source.ScreenShare || 
+                         publication?.source === Track.Source.ScreenShareAudio ||
+                         track.source === Track.Source.ScreenShare ||
+                         track.source === Track.Source.ScreenShareAudio
+
+    if (isScreenShare) {
+      console.log('🖥️ 화면 공유 트랙 해제:', pid)
+      
+      // 화면 공유 트랙 제거
+      screenShareTracks.value.delete(pid)
+      
+      // 화면 공유 상태 업데이트
+      if (activeScreenShare.value?.identity === pid) {
+        activeScreenShare.value = null
+      }
+      
+      // 화면 공유 비디오 요소에서 detach
+      const screenShareElement = document.getElementById(`screen-share-${pid}`)
+      if (screenShareElement) {
+        track.detach(screenShareElement)
+      }
+      
+      // 확대된 화면이 화면 공유였다면 닫기
+      if (expandedVideo.value?.id === pid && expandedVideo.value?.type === 'screen-share') {
+        closeExpandedVideo()
+      }
+    } else {
+      // 일반 카메라 트랙
+      const videoElement = document.getElementById(`video-${pid}`)
+      if (videoElement) {
+        track.detach(videoElement)
+        // template에 있는 요소는 remove하지 않음
+      }
+      
+      // 확대된 화면이 카메라였다면 닫기
+      if (expandedVideo.value?.id === pid && expandedVideo.value?.type === 'camera') {
+        closeExpandedVideo()
+      }
     }
   } else if (track.kind === Track.Kind.Audio) {
     const audioElement = document.getElementById(`audio-${pid}`)
@@ -799,10 +994,164 @@ const toggleScreenShare = async () => {
   }
 }
 
+// 비디오 확대 (풀스크린)
+const expandVideo = (participantId, type) => {
+  if (!participantId) return
+  
+  const participantName = type === 'screen-share' 
+    ? (getParticipantName(activeScreenShare.value?.identity) || activeScreenShare.value?.name || participantId)
+    : (getParticipantName(participantId) || 
+       remoteParticipants.value.find(p => p.identity === participantId)?.name || 
+       (participantId === localParticipantIdentity.value ? authStore.user?.name : null) ||
+       participantId)
+  
+  expandedVideo.value = {
+    id: participantId,
+    name: participantName,
+    type: type
+  }
+  
+  // 다음 틱에서 트랙을 확대된 비디오 요소에 attach
+  setTimeout(() => {
+    const expandedElement = document.getElementById(`expanded-${participantId}-${type}`)
+    if (!expandedElement) return
+    
+    if (type === 'screen-share') {
+      const screenShareData = screenShareTracks.value.get(participantId)
+      if (screenShareData?.track) {
+        screenShareData.track.attach(expandedElement)
+        console.log('✅ 확대된 화면 공유 트랙 attach됨')
+      }
+    } else {
+      // 카메라 트랙 찾기
+      const participant = participantId === localParticipantIdentity.value
+        ? room.value?.localParticipant
+        : Array.from(room.value?.remoteParticipants.values()).find(p => p.identity === participantId)
+      
+      if (participant) {
+        participant.trackPublications.forEach((pub) => {
+          if (pub.track && pub.track.kind === Track.Kind.Video && 
+              pub.source !== Track.Source.ScreenShare && 
+              pub.source !== Track.Source.ScreenShareAudio) {
+            pub.track.attach(expandedElement)
+            console.log('✅ 확대된 카메라 트랙 attach됨')
+          }
+        })
+      }
+    }
+  }, 100)
+  
+  // ESC 키로 닫기
+  document.addEventListener('keydown', handleEscKey)
+}
+
+// 확대된 비디오 닫기
+const closeExpandedVideo = () => {
+  if (!expandedVideo.value) return
+  
+  const { id, type } = expandedVideo.value
+  
+  // 트랙을 원래 위치로 다시 attach
+  setTimeout(() => {
+    const expandedElement = document.getElementById(`expanded-${id}-${type}`)
+    if (expandedElement) {
+      // 모든 트랙 detach
+      if (expandedElement.srcObject) {
+        const tracks = expandedElement.srcObject.getTracks()
+        tracks.forEach(track => track.stop())
+      }
+    }
+    
+    // 원래 위치의 비디오 요소에 다시 attach
+    if (type === 'screen-share') {
+      const screenShareElement = document.getElementById(`screen-share-${id}`)
+      const screenShareData = screenShareTracks.value.get(id)
+      if (screenShareElement && screenShareData?.track) {
+        screenShareData.track.attach(screenShareElement)
+      }
+    } else {
+      const videoElement = document.getElementById(`video-${id}`)
+      if (videoElement) {
+        const participant = id === localParticipantIdentity.value
+          ? room.value?.localParticipant
+          : Array.from(room.value?.remoteParticipants.values()).find(p => p.identity === id)
+        
+        if (participant) {
+          participant.trackPublications.forEach((pub) => {
+            if (pub.track && pub.track.kind === Track.Kind.Video && 
+                pub.source !== Track.Source.ScreenShare && 
+                pub.source !== Track.Source.ScreenShareAudio) {
+              pub.track.attach(videoElement)
+            }
+          })
+        }
+      }
+    }
+  }, 100)
+  
+  expandedVideo.value = null
+  document.removeEventListener('keydown', handleEscKey)
+}
+
+// ESC 키 핸들러
+const handleEscKey = (e) => {
+  if (e.key === 'Escape' && expandedVideo.value) {
+    closeExpandedVideo()
+  }
+}
+
 // 채팅 패널 토글
 const toggleChat = () => {
   showChat.value = !showChat.value
 }
+
+// 모든 카메라 트랙을 다시 attach하는 함수
+const reattachAllCameraTracks = async () => {
+  if (!room.value) return
+  
+  await nextTick() // DOM 업데이트 대기
+  
+  // 로컬 참가자 카메라 트랙 재attach
+  if (localParticipantIdentity.value) {
+    const localVideoElement = document.getElementById(`video-${localParticipantIdentity.value}`)
+    if (localVideoElement) {
+      room.value.localParticipant.trackPublications.forEach((pub) => {
+        if (pub.track && pub.track.kind === Track.Kind.Video && 
+            pub.source !== Track.Source.ScreenShare && 
+            pub.source !== Track.Source.ScreenShareAudio) {
+          pub.track.attach(localVideoElement)
+          console.log('✅ 로컬 카메라 트랙 재attach:', localParticipantIdentity.value)
+        }
+      })
+    }
+  }
+  
+  // 원격 참가자 카메라 트랙 재attach
+  room.value.remoteParticipants.forEach((participant) => {
+    const videoElement = document.getElementById(`video-${participant.identity}`)
+    if (videoElement) {
+      participant.trackPublications.forEach((pub) => {
+        if (pub.track && pub.track.kind === Track.Kind.Video && 
+            pub.source !== Track.Source.ScreenShare && 
+            pub.source !== Track.Source.ScreenShareAudio) {
+          pub.track.attach(videoElement)
+          console.log('✅ 원격 카메라 트랙 재attach:', participant.identity)
+        }
+      })
+    }
+  })
+}
+
+// 화면 공유 모드 변경 감지
+watch(activeScreenShare, async (newVal, oldVal) => {
+  // 화면 공유가 시작되거나 종료될 때
+  if (newVal !== oldVal) {
+    console.log('🔄 화면 공유 모드 변경 감지:', newVal ? '시작' : '종료')
+    // DOM 업데이트 후 카메라 트랙 재attach
+    await nextTick()
+    await reattachAllCameraTracks()
+  }
+}, { immediate: false })
 
 // 채팅 메시지 불러오기
 const loadChatMessages = async () => {
@@ -1114,8 +1463,210 @@ onUnmounted(() => {
   font-weight: 500;
 }
 
+/* 화면 공유 모드 스타일 */
+.video-container.screen-share-mode {
+  flex-direction: row;
+  gap: 12px;
+}
+
+.main-screen-share-area {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #000;
+  position: relative;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.screen-share-video-wrapper {
+  width: 100%;
+  height: 100%;
+  position: relative;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.screen-share-video-wrapper:hover {
+  opacity: 0.95;
+}
+
+.screen-share-video-wrapper:hover .expand-hint {
+  opacity: 1;
+}
+
+.screen-share-element {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background: #000;
+}
+
+.screen-share-label {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  background: rgba(0, 0, 0, 0.8);
+  color: white;
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  z-index: 10;
+}
+
+.expand-hint {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: rgba(0, 0, 0, 0.8);
+  color: white;
+  padding: 12px 20px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+  pointer-events: none;
+  z-index: 10;
+}
+
+.participants-sidebar {
+  width: 240px;
+  min-width: 240px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px;
+  overflow-y: auto;
+  background: rgba(0, 0, 0, 0.5);
+  border-radius: 8px;
+}
+
+.participant-video-small {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16/9;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #333;
+  border: 2px solid rgba(255, 255, 255, 0.2);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.participant-video-small:hover {
+  border-color: rgba(255, 255, 255, 0.4);
+  transform: scale(1.02);
+}
+
+.participant-video-small.my-video {
+  border: 2px solid rgba(25, 118, 210, 0.5);
+}
+
+.participant-video {
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.participant-video:hover {
+  border-color: rgba(255, 255, 255, 0.4);
+  transform: scale(1.02);
+}
+
 .participant-audio {
   display: none;
+}
+
+/* 확대된 비디오 모달 */
+.expanded-video-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.95);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: fadeIn 0.3s ease;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.expanded-video-container {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: #000;
+}
+
+.expanded-video-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 24px;
+  background: rgba(0, 0, 0, 0.8);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.expanded-video-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: white;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.close-expanded-btn {
+  color: white !important;
+}
+
+.expanded-video-content {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  overflow: hidden;
+}
+
+.expanded-video-element {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background: #000;
+}
+
+.expanded-video-footer {
+  padding: 16px 24px;
+  background: rgba(0, 0, 0, 0.8);
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.expanded-video-footer :deep(.v-btn) {
+  color: white !important;
 }
 
 /* 채팅 토글 버튼 */

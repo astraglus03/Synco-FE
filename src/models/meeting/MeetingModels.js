@@ -138,7 +138,8 @@ export class RoomEndedListDto {
     this.roomDescription = data.roomDescription
     this.activeUserCount = data.activeUserCount
     this.hostId = data.hostId
-    this.createdAt = data.createdAt
+    // 백엔드에서 LocalDateTime으로 전달되는 createdAt 필드
+    this.createdAt = data.createdAt || null
   }
 
   get formattedDescription() {
@@ -146,8 +147,32 @@ export class RoomEndedListDto {
   }
 
   get formattedCreatedAt() {
-    if (!this.createdAt) return ''
-    return new Date(this.createdAt).toLocaleString('ko-KR')
+    if (!this.createdAt) {
+      return ''
+    }
+    
+    try {
+      // LocalDateTime 형식 (예: "2024-01-15T14:30:00")
+      const date = new Date(this.createdAt)
+      
+      // 유효한 날짜인지 확인
+      if (isNaN(date.getTime())) {
+        console.warn('RoomEndedListDto: 유효하지 않은 날짜', this.createdAt)
+        return ''
+      }
+      
+      // 한국어 형식으로 포맷팅 (YYYY. MM. DD. HH:mm)
+      const year = date.getFullYear()
+      const month = String(date.getMonth() + 1).padStart(2, '0')
+      const day = String(date.getDate()).padStart(2, '0')
+      const hours = String(date.getHours()).padStart(2, '0')
+      const minutes = String(date.getMinutes()).padStart(2, '0')
+      
+      return `${year}. ${month}. ${day}. ${hours}:${minutes}`
+    } catch (error) {
+      console.error('RoomEndedListDto: 날짜 포맷팅 오류', error)
+      return ''
+    }
   }
 }
 

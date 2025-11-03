@@ -29,6 +29,20 @@ export const useMeetingStore = defineStore('meeting', () => {
   const chatMessages = ref([])
   const currentRoomDetail = ref(null)
   
+  // 페이지네이션 정보
+  const activeRoomsPagination = ref({
+    page: 0,
+    size: 10,
+    totalElements: 0,
+    totalPages: 0
+  })
+  const endedRoomsPagination = ref({
+    page: 0,
+    size: 10,
+    totalElements: 0,
+    totalPages: 0
+  })
+  
   // 현재 미팅 상태
   const isCurrentlyInMeeting = ref(false)
   const currentMeetingData = ref(null)
@@ -106,7 +120,7 @@ export const useMeetingStore = defineStore('meeting', () => {
     }
   }
 
-  const loadActiveRooms = async (workSpaceSeq) => {
+  const loadActiveRooms = async (workSpaceSeq, page = 0, size = 10) => {
     try {
       isLoading.value = true
       error.value = null
@@ -114,11 +128,23 @@ export const useMeetingStore = defineStore('meeting', () => {
       console.log('📋 loadActiveRooms 호출:')
       console.log('  - workSpaceSeq:', workSpaceSeq)
       console.log('  - currentMemberSeq.value:', currentMemberSeq.value)
+      console.log('  - page:', page, 'size:', size)
       
-      const response = await meetingApi.getActiveRooms(workSpaceSeq, currentMemberSeq.value)
-      activeRooms.value = response.data.content.map(room => new RoomActiveListDto(room))
+      const response = await meetingApi.getActiveRooms(workSpaceSeq, currentMemberSeq.value, page, size)
+      const pageData = response.data || response
       
-      console.log('📋 활성 회의 목록 업데이트:', activeRooms.value)
+      activeRooms.value = pageData.content.map(room => new RoomActiveListDto(room))
+      
+      // 페이지네이션 정보 업데이트
+      activeRoomsPagination.value = {
+        page: pageData.number || page,
+        size: pageData.size || size,
+        totalElements: pageData.totalElements || 0,
+        totalPages: pageData.totalPages || 0
+      }
+      
+      console.log('📋 활성 회의 목록 업데이트:', activeRooms.value.length, '개')
+      console.log('📋 페이지네이션 정보:', activeRoomsPagination.value)
       return activeRooms.value
     } catch (err) {
       console.error('📋 loadActiveRooms 실패:', err)
@@ -432,10 +458,25 @@ export const useMeetingStore = defineStore('meeting', () => {
       isLoading.value = true
       error.value = null
       
-      const response = await meetingApi.getEndedRooms(workSpaceSeq, currentMemberSeq.value, page, size)
-      endedRooms.value = response.data.content.map(room => new RoomEndedListDto(room))
+      console.log('📋 loadEndedRooms 호출:')
+      console.log('  - workSpaceSeq:', workSpaceSeq)
+      console.log('  - page:', page, 'size:', size)
       
-      console.log('📋 종료된 회의 목록 업데이트:', endedRooms.value)
+      const response = await meetingApi.getEndedRooms(workSpaceSeq, currentMemberSeq.value, page, size)
+      const pageData = response.data || response
+      
+      endedRooms.value = pageData.content.map(room => new RoomEndedListDto(room))
+      
+      // 페이지네이션 정보 업데이트
+      endedRoomsPagination.value = {
+        page: pageData.number || page,
+        size: pageData.size || size,
+        totalElements: pageData.totalElements || 0,
+        totalPages: pageData.totalPages || 0
+      }
+      
+      console.log('📋 종료된 회의 목록 업데이트:', endedRooms.value.length, '개')
+      console.log('📋 페이지네이션 정보:', endedRoomsPagination.value)
       return endedRooms.value
     } catch (err) {
       console.error('📋 loadEndedRooms 실패:', err)
@@ -487,6 +528,18 @@ export const useMeetingStore = defineStore('meeting', () => {
     channels.value = []
     activeRooms.value = []
     endedRooms.value = []
+    activeRoomsPagination.value = {
+      page: 0,
+      size: 10,
+      totalElements: 0,
+      totalPages: 0
+    }
+    endedRoomsPagination.value = {
+      page: 0,
+      size: 10,
+      totalElements: 0,
+      totalPages: 0
+    }
     currentChannel.value = null
     currentRoom.value = null
     channelMembers.value = []
@@ -511,6 +564,8 @@ export const useMeetingStore = defineStore('meeting', () => {
     channels,
     activeRooms,
     endedRooms,
+    activeRoomsPagination,
+    endedRoomsPagination,
     currentChannel,
     currentRoom,
     channelMembers,

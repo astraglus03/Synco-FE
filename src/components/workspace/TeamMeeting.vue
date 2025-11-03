@@ -79,10 +79,10 @@
         @update:model-value="onTabChange"
       >
         <v-tab value="active" prepend-icon="mdi-video">
-          진행 중 ({{ activeRooms.length }})
+          진행 중 ({{ meetingStore.activeRoomsPagination.totalElements }})
         </v-tab>
         <v-tab value="ended" prepend-icon="mdi-history">
-          종료된 회의 ({{ meetingStore.endedRooms.length }})
+          종료된 회의 ({{ meetingStore.endedRoomsPagination.totalElements }})
         </v-tab>
       </v-tabs>
 
@@ -159,6 +159,17 @@
           <p v-else>회의가 시작되면 알림을 받을 수 있습니다.</p>
         </div>
           </div>
+          
+          <!-- 페이지네이션 -->
+          <div v-if="meetingStore.activeRoomsPagination.totalPages > 1" class="pagination-wrapper">
+            <v-pagination
+              v-model="currentActivePage"
+              :length="meetingStore.activeRoomsPagination.totalPages"
+              :total-visible="7"
+              color="primary"
+              @update:model-value="onActivePageChange"
+            />
+          </div>
         </v-window-item>
 
         <!-- 종료된 회의 -->
@@ -210,6 +221,17 @@
               <v-icon color="grey" size="48">mdi-history</v-icon>
               <h4>종료된 회의가 없습니다</h4>
             </div>
+          </div>
+          
+          <!-- 페이지네이션 -->
+          <div v-if="meetingStore.endedRoomsPagination.totalPages > 1" class="pagination-wrapper">
+            <v-pagination
+              v-model="currentEndedPage"
+              :length="meetingStore.endedRoomsPagination.totalPages"
+              :total-visible="7"
+              color="primary"
+              @update:model-value="onEndedPageChange"
+            />
           </div>
         </v-window-item>
       </v-window>
@@ -517,6 +539,8 @@ const newRoomDescription = ref('')
 const selectedMembers = ref([])
 const showError = ref(false)
 const activeTab = ref('active') // 'active' or 'ended'
+const currentActivePage = ref(1) // 1-based page number for active rooms
+const currentEndedPage = ref(1) // 1-based page number for ended rooms
 
 // 워크스페이스 멤버 목록 (현재 사용자 제외)
 const workspaceMembers = computed(() => {
@@ -559,6 +583,19 @@ const activeRooms = computed(() => {
   return meetingStore.activeRoomsInCurrentChannel
 })
 
+// 페이지네이션 정보 동기화 (store의 0-based를 1-based로 변환)
+watch(() => meetingStore.activeRoomsPagination.page, (newPage) => {
+  if (newPage !== undefined) {
+    currentActivePage.value = newPage + 1
+  }
+}, { immediate: true })
+
+watch(() => meetingStore.endedRoomsPagination.page, (newPage) => {
+  if (newPage !== undefined) {
+    currentEndedPage.value = newPage + 1
+  }
+}, { immediate: true })
+
 // 미팅 참여 상태
 const isCurrentlyInMeeting = computed(() => {
   return meetingStore.isCurrentlyInMeeting
@@ -574,9 +611,19 @@ const refreshMeetings = async () => {
   try {
     if (currentWorkSpaceSeq.value) {
       if (activeTab.value === 'active') {
-        await meetingStore.loadActiveRooms(currentWorkSpaceSeq.value)
+        // 현재 페이지로 다시 로드
+        await meetingStore.loadActiveRooms(
+          currentWorkSpaceSeq.value,
+          currentActivePage.value - 1, // 0-based page
+          10
+        )
       } else {
-        await meetingStore.loadEndedRooms(currentWorkSpaceSeq.value)
+        // 현재 페이지로 다시 로드
+        await meetingStore.loadEndedRooms(
+          currentWorkSpaceSeq.value,
+          currentEndedPage.value - 1, // 0-based page
+          10
+        )
       }
     }
   } catch (error) {
@@ -589,11 +636,51 @@ const onTabChange = async (tab) => {
   try {
     if (currentWorkSpaceSeq.value) {
       if (tab === 'ended' && meetingStore.endedRooms.length === 0) {
-        await meetingStore.loadEndedRooms(currentWorkSpaceSeq.value)
+        await meetingStore.loadEndedRooms(currentWorkSpaceSeq.value, 0, 10)
+        currentEndedPage.value = 1
+      } else if (tab === 'active' && meetingStore.activeRooms.length === 0) {
+        await meetingStore.loadActiveRooms(currentWorkSpaceSeq.value, 0, 10)
+        currentActivePage.value = 1
       }
     }
   } catch (error) {
     console.error('회의 목록 로드 실패:', error)
+  }
+}
+
+// 활성 회의 페이지 변경 핸들러
+const onActivePageChange = async (page) => {
+  try {
+    if (currentWorkSpaceSeq.value) {
+      currentActivePage.value = page
+      await meetingStore.loadActiveRooms(
+        currentWorkSpaceSeq.value,
+        page - 1, // 0-based page
+        10
+      )
+      // 페이지 변경 시 스크롤 맨 위로
+      window.scrollTo({ top: 0, behavior: 'smooth' })
+    }
+  } catch (error) {
+    console.error('활성 회의 페이지 변경 실패:', error)
+  }
+}
+
+// 종료된 회의 페이지 변경 핸들러
+const onEndedPageChange = async (page) => {
+  try {
+    if (currentWorkSpaceSeq.value) {
+      currentEndedPage.value = page
+      await meetingStore.loadEndedRooms(
+        currentWorkSpaceSeq.value,
+        page - 1, // 0-based page
+        10
+      )
+      // 페이지 변경 시 스크롤 맨 위로
+      window.scrollTo({ top: 0, behavior: 'smooth' })
+    }
+  } catch (error) {
+    console.error('종료된 회의 페이지 변경 실패:', error)
   }
 }
 
@@ -760,11 +847,14 @@ const initialize = async () => {
       const defaultChannel = meetingStore.channels[0]
       meetingStore.selectChannel(defaultChannel)
       
-      // 활성 회의 목록과 종료된 회의 목록 동시에 로드
+      // 활성 회의 목록과 종료된 회의 목록 동시에 로드 (첫 페이지)
       await Promise.all([
-        meetingStore.loadActiveRooms(currentWorkSpaceSeq.value),
-        meetingStore.loadEndedRooms(currentWorkSpaceSeq.value)
+        meetingStore.loadActiveRooms(currentWorkSpaceSeq.value, 0, 10),
+        meetingStore.loadEndedRooms(currentWorkSpaceSeq.value, 0, 10)
       ])
+      // 페이지 번호 초기화
+      currentActivePage.value = 1
+      currentEndedPage.value = 1
     }
   } catch (error) {
     console.error('초기화 실패:', error)
@@ -1469,6 +1559,15 @@ onUnmounted(() => {
 
 .download-action-btn {
   margin-right: 8px;
+}
+
+/* 페이지네이션 스타일 */
+.pagination-wrapper {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 24px 0;
+  margin-top: 16px;
 }
 
 /* 반응형 디자인 */
