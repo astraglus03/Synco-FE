@@ -2757,6 +2757,18 @@ onUnmounted(() => {
   backdrop-filter: blur(10px);
 }
 
+/* 다크모드에서 내가 보낸 메시지 텍스트만 흰색 */
+@media (prefers-color-scheme: dark) {
+  .message-item.own-message .message-bubble {
+    color: #ffffff !important;
+  }
+}
+
+/* Vuetify 다크 테마 지원 */
+.v-theme--dark .message-item.own-message .message-bubble {
+  color: #ffffff !important;
+}
+
 .message-item.own-message.consecutive .message-bubble {
   border-radius: 18px 4px 18px 18px;
 }
