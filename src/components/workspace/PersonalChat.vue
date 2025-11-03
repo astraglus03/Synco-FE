@@ -581,6 +581,9 @@ const showFileModal = ref(false);
 // 첨부된 파일들
 const attachedFiles = ref([]);
 
+// 이미지 확장 상태 관리 (메시지 ID별로)
+const expandedImages = ref({});
+
 // 검색 쿼리
 const searchQuery = ref("");
 
@@ -799,6 +802,90 @@ const getFileIcon = (fileType) => {
   return "mdi-file";
 };
 
+// URL 확장자로 이미지 여부 판단
+const isImageUrl = (url) => {
+  if (!url) return false;
+  try {
+    const lower = url.split("?")[0].toLowerCase();
+    return /(\.png|\.jpg|\.jpeg|\.gif|\.webp|\.bmp|\.svg)$/.test(lower);
+  } catch (e) {
+    return false;
+  }
+};
+
+// URL에서 파일 확장자로 아이콘 결정
+const getFileIconFromUrl = (url) => {
+  if (!url) return "mdi-file";
+  try {
+    const lower = url.split("?")[0].toLowerCase();
+    if (lower.includes(".pdf")) return "mdi-file-pdf-box";
+    if (lower.includes(".doc") || lower.includes(".docx")) return "mdi-file-word-box";
+    if (lower.includes(".xls") || lower.includes(".xlsx") || lower.includes(".csv")) return "mdi-file-excel-box";
+    if (lower.includes(".ppt") || lower.includes(".pptx")) return "mdi-file-powerpoint-box";
+    if (lower.includes(".zip") || lower.includes(".rar") || lower.includes(".7z")) return "mdi-folder-zip";
+    if (lower.includes(".txt")) return "mdi-file-document-outline";
+    if (lower.includes(".mp4") || lower.includes(".avi") || lower.includes(".mov") || lower.includes(".mkv")) return "mdi-file-video";
+    if (lower.includes(".mp3") || lower.includes(".wav") || lower.includes(".flac")) return "mdi-file-music";
+    return "mdi-file";
+  } catch (e) {
+    return "mdi-file";
+  }
+};
+
+// 파일 타입에 따른 아이콘 색상 클래스
+const getFileIconClass = (url) => {
+  if (!url) return "file-icon-default";
+  try {
+    const lower = url.split("?")[0].toLowerCase();
+    if (lower.includes(".pdf")) return "file-icon-pdf";
+    if (lower.includes(".doc") || lower.includes(".docx")) return "file-icon-word";
+    if (lower.includes(".xls") || lower.includes(".xlsx") || lower.includes(".csv")) return "file-icon-excel";
+    if (lower.includes(".ppt") || lower.includes(".pptx")) return "file-icon-ppt";
+    if (lower.includes(".zip") || lower.includes(".rar") || lower.includes(".7z")) return "file-icon-zip";
+    if (lower.includes(".txt")) return "file-icon-text";
+    if (lower.includes(".mp4") || lower.includes(".avi") || lower.includes(".mov") || lower.includes(".mkv")) return "file-icon-video";
+    if (lower.includes(".mp3") || lower.includes(".wav") || lower.includes(".flac")) return "file-icon-audio";
+    return "file-icon-default";
+  } catch (e) {
+    return "file-icon-default";
+  }
+};
+
+// 이미지 파일만 필터링
+const getImageFiles = (files) => {
+  if (!Array.isArray(files)) return [];
+  return files.filter((file) => isImageUrl(file.url));
+};
+
+// 일반 파일만 필터링
+const getFileFiles = (files) => {
+  if (!Array.isArray(files)) return [];
+  return files.filter((file) => !isImageUrl(file.url));
+};
+
+// 표시할 이미지 목록 (20개 제한 또는 모두)
+const getVisibleImages = (message) => {
+  const imageFiles = getImageFiles(message.files);
+  if (imageFiles.length <= 20) return imageFiles;
+  if (getExpandedImages(message.id)) return imageFiles;
+  return imageFiles.slice(0, 20);
+};
+
+// 이미지 확장 상태 확인
+const getExpandedImages = (messageId) => {
+  return expandedImages.value[messageId] || false;
+};
+
+// 이미지 확장
+const expandImages = (messageId) => {
+  expandedImages.value[messageId] = true;
+};
+
+// 이미지 접기
+const collapseImages = (messageId) => {
+  expandedImages.value[messageId] = false;
+};
+
 const removeAttachedFile = (index) => {
   attachedFiles.value.splice(index, 1);
 };
@@ -898,7 +985,12 @@ const chatPartner = computed(() => {
                   messages[index - 1].isOwn),
             }"
           >
-            <div class="message-content">
+            <div 
+              class="message-content"
+              :class="{
+                'has-files-content': Array.isArray(message.files) && message.files.length > 0,
+              }"
+            >
               <!-- 프로필 아바타 (상대방 메시지의 첫 번째만) -->
               <div
                 v-if="
@@ -926,8 +1018,97 @@ const chatPartner = computed(() => {
                   {{ message.sender }}
                 </div>
 
-                <div class="message-bubble">
-                  <div class="message-text">{{ message.content }}</div>
+                <div 
+                  class="message-bubble"
+                  :class="{
+                    'has-files': Array.isArray(message.files) && message.files.length > 0,
+                  }"
+                >
+                  <div v-if="message.content" class="message-text">{{ message.content }}</div>
+                  
+                  <!-- 첨부된 파일들 표시 -->
+                  <div
+                    v-if="
+                      Array.isArray(message.files) && message.files.length
+                    "
+                    class="message-files"
+                  >
+                    <!-- 이미지 파일들을 그리드로 표시 -->
+                    <template v-if="getImageFiles(message.files).length > 0">
+                      <div class="images-grid-container">
+                        <div class="images-grid">
+                          <a
+                            v-for="(file, i) in getVisibleImages(message)"
+                            :key="i"
+                            :href="file.url"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            class="image-grid-item"
+                          >
+                            <div class="image-card-grid">
+                              <div class="image-wrapper-grid">
+                                <img
+                                  :src="file.url"
+                                  :alt="file.name"
+                                  class="image-thumb-grid"
+                                  @error="$event.target.style.display='none'"
+                                />
+                                <div class="image-overlay-grid">
+                                  <v-icon color="white" size="20">mdi-magnify-plus</v-icon>
+                                </div>
+                              </div>
+                            </div>
+                          </a>
+                        </div>
+                        <!-- 더보기 버튼 -->
+                        <div 
+                          v-if="getImageFiles(message.files).length > 20 && !getExpandedImages(message.id)"
+                          class="show-more-images"
+                          @click="expandImages(message.id)"
+                        >
+                          <v-icon>mdi-chevron-down</v-icon>
+                          <span>더보기 ({{ getImageFiles(message.files).length - 20 }}개)</span>
+                        </div>
+                        <!-- 접기 버튼 -->
+                        <div 
+                          v-if="getImageFiles(message.files).length > 20 && getExpandedImages(message.id)"
+                          class="show-more-images"
+                          @click="collapseImages(message.id)"
+                        >
+                          <v-icon>mdi-chevron-up</v-icon>
+                          <span>접기</span>
+                        </div>
+                      </div>
+                    </template>
+                    
+                    <!-- 일반 파일들을 리스트로 표시 -->
+                    <template v-for="(file, i) in getFileFiles(message.files)" :key="`file-${i}`">
+                      <div class="message-file-item">
+                        <a
+                          :href="file.url"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          class="file-card-link"
+                        >
+                          <div class="file-card">
+                            <div class="file-icon-wrapper">
+                              <v-icon :class="getFileIconClass(file.url)">
+                                {{ getFileIconFromUrl(file.url) }}
+                              </v-icon>
+                            </div>
+                            <div class="file-info">
+                              <div class="file-name-text">{{ file.name }}</div>
+                              <div class="file-size-text">
+                                <v-icon size="12" class="file-size-icon">mdi-download</v-icon>
+                                파일 다운로드
+                              </div>
+                            </div>
+                            <v-icon size="20" class="file-action-icon">mdi-open-in-new</v-icon>
+                          </div>
+                        </a>
+                      </div>
+                    </template>
+                  </div>
                 </div>
 
                 <!-- 메시지 메타 정보 (시간, 안읽음수) -->
@@ -1406,6 +1587,11 @@ const chatPartner = computed(() => {
   gap: 8px;
 }
 
+/* 파일/이미지가 있는 메시지는 버블 너비 제한 */
+.message-content.has-files-content {
+  max-width: 50%;
+}
+
 .message-item.own-message .message-content {
   flex-direction: row-reverse;
 }
@@ -1453,11 +1639,12 @@ const chatPartner = computed(() => {
 }
 
 .message-item.own-message .message-bubble {
-  background: rgb(var(--v-theme-primary));
-  color: #ffffff !important;
+  background: rgba(59, 130, 246, 0.15);
+  color: #000000 !important;
   font-weight: 600;
-  border: 1px solid rgba(var(--v-theme-primary), 0.3);
+  border: 1px solid rgba(59, 130, 246, 0.25);
   border-radius: 18px 18px 4px 18px;
+  backdrop-filter: blur(10px);
 }
 
 .message-item.own-message.consecutive .message-bubble {
@@ -1794,6 +1981,18 @@ const chatPartner = computed(() => {
     max-width: 85%;
   }
 
+  .images-grid {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 6px;
+  }
+}
+
+@media (max-width: 480px) {
+  .images-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 4px;
+  }
+
   .attachment-menu {
     left: 8px;
     right: 8px;
@@ -1807,5 +2006,349 @@ const chatPartner = computed(() => {
   .message-textarea {
     font-size: 16px; /* iOS 줌 방지 */
   }
+}
+
+/* 메시지 내 파일 표시 */
+.message-files {
+  margin-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.message-file-item {
+  display: flex;
+  width: 100%;
+}
+
+/* 이미지 그리드 컨테이너 */
+.images-grid-container {
+  width: 100%;
+  margin-bottom: 8px;
+}
+
+.images-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+}
+
+.image-grid-item {
+  text-decoration: none;
+  color: inherit;
+  display: block;
+  position: relative;
+  aspect-ratio: 1;
+  overflow: hidden;
+  border-radius: 8px;
+  background: rgba(var(--v-theme-on-surface), 0.05);
+}
+
+.image-card-grid {
+  width: 100%;
+  height: 100%;
+  position: relative;
+  overflow: hidden;
+  border-radius: 8px;
+  transition: transform 0.2s ease;
+}
+
+.image-grid-item:hover .image-card-grid {
+  transform: scale(1.02);
+}
+
+.image-wrapper-grid {
+  width: 100%;
+  height: 100%;
+  position: relative;
+  overflow: hidden;
+}
+
+.image-thumb-grid {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  transition: transform 0.3s ease;
+}
+
+.image-grid-item:hover .image-thumb-grid {
+  transform: scale(1.1);
+}
+
+.image-overlay-grid {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.image-grid-item:hover .image-overlay-grid {
+  opacity: 1;
+}
+
+/* 더보기 버튼 */
+.show-more-images {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 10px 16px;
+  margin-top: 8px;
+  background: rgba(var(--v-theme-primary), 0.08);
+  border: 1px solid rgba(var(--v-theme-primary), 0.2);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-size: 13px;
+  font-weight: 500;
+  color: rgb(var(--v-theme-primary));
+  user-select: none;
+}
+
+.show-more-images:hover {
+  background: rgba(var(--v-theme-primary), 0.12);
+  border-color: rgba(var(--v-theme-primary), 0.3);
+  transform: translateY(-1px);
+}
+
+.show-more-images .v-icon {
+  font-size: 18px;
+}
+
+/* 이미지 카드 링크 */
+.image-card-link {
+  text-decoration: none;
+  color: inherit;
+  display: block;
+  width: 100%;
+  max-width: 320px;
+}
+
+/* 이미지 카드 */
+.image-card {
+  background: rgba(var(--v-theme-surface), 0.8);
+  border: 1px solid rgba(var(--v-theme-on-surface), 0.12);
+  border-radius: 12px;
+  overflow: hidden;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  backdrop-filter: blur(10px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.image-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+  border-color: rgba(var(--v-theme-primary), 0.3);
+}
+
+.image-wrapper {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  background: rgba(var(--v-theme-on-surface), 0.05);
+}
+
+.image-thumb {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.image-card:hover .image-thumb {
+  transform: scale(1.05);
+}
+
+.image-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.image-card:hover .image-overlay {
+  opacity: 1;
+}
+
+.image-info {
+  padding: 10px 14px;
+  background: rgba(var(--v-theme-surface), 0.95);
+}
+
+.image-name {
+  font-size: 13px;
+  font-weight: 500;
+  color: rgba(var(--v-theme-on-surface), 0.8);
+  display: -webkit-box;
+  -webkit-line-clamp: 1;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 파일 카드 링크 */
+.file-card-link {
+  text-decoration: none;
+  color: inherit;
+  display: block;
+  width: 100%;
+  max-width: 400px;
+}
+
+/* 파일 카드 */
+.file-card {
+  background: rgba(var(--v-theme-surface), 0.95);
+  border: 1px solid rgba(var(--v-theme-on-surface), 0.12);
+  border-radius: 12px;
+  padding: 14px 16px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  backdrop-filter: blur(10px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+  cursor: pointer;
+}
+
+.file-card:hover {
+  transform: translateX(4px);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+  border-color: rgba(var(--v-theme-primary), 0.3);
+  background: rgba(var(--v-theme-surface), 1);
+}
+
+.file-icon-wrapper {
+  width: 48px;
+  height: 48px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: transform 0.2s ease;
+}
+
+.file-card:hover .file-icon-wrapper {
+  transform: scale(1.1);
+}
+
+/* 파일 아이콘 색상 클래스 */
+.file-icon-pdf .v-icon {
+  color: #dc2626;
+}
+
+.file-icon-word .v-icon {
+  color: #2563eb;
+}
+
+.file-icon-excel .v-icon {
+  color: #16a34a;
+}
+
+.file-icon-ppt .v-icon {
+  color: #ea580c;
+}
+
+.file-icon-zip .v-icon {
+  color: #9333ea;
+}
+
+.file-icon-text .v-icon {
+  color: #64748b;
+}
+
+.file-icon-video .v-icon {
+  color: #e11d48;
+}
+
+.file-icon-audio .v-icon {
+  color: #7c3aed;
+}
+
+.file-icon-default .v-icon {
+  color: rgba(var(--v-theme-on-surface), 0.6);
+}
+
+.file-icon-wrapper .v-icon {
+  font-size: 28px;
+}
+
+.file-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.file-name-text {
+  font-size: 14px;
+  font-weight: 600;
+  color: rgb(var(--v-theme-on-surface));
+  display: -webkit-box;
+  -webkit-line-clamp: 1;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.file-size-text {
+  font-size: 12px;
+  color: rgba(var(--v-theme-on-surface), 0.6);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.file-size-icon {
+  font-size: 14px;
+}
+
+.file-action-icon {
+  color: rgba(var(--v-theme-on-surface), 0.4);
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+}
+
+.file-card:hover .file-action-icon {
+  color: rgb(var(--v-theme-primary));
+  transform: translateX(2px);
+}
+
+.message-file-item:last-child {
+  margin-bottom: 0;
+}
+
+/* 자신의 메시지에서 파일 카드 색상 조정 */
+.message-item.own-message .file-card {
+  background: rgba(var(--v-theme-primary), 0.08);
+  border-color: rgba(var(--v-theme-primary), 0.2);
+}
+
+.message-item.own-message .file-card:hover {
+  background: rgba(var(--v-theme-primary), 0.12);
+  border-color: rgba(var(--v-theme-primary), 0.35);
+}
+
+.message-item.own-message .image-card {
+  background: rgba(var(--v-theme-primary), 0.08);
+  border-color: rgba(var(--v-theme-primary), 0.2);
 }
 </style>
