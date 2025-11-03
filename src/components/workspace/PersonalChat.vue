@@ -1377,13 +1377,13 @@ const chatPartner = computed(() => {
 .messages-list {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 4px;
 }
 
 .message-item {
   display: flex;
   justify-content: flex-start;
-  margin-bottom: 8px;
+  margin-bottom: 0;
 }
 
 .message-item.own-message {
@@ -1395,7 +1395,7 @@ const chatPartner = computed(() => {
 }
 
 .message-item.first-in-group {
-  margin-top: 16px;
+  margin-top: 8px;
 }
 
 .message-content {
