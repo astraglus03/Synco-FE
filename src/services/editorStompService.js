@@ -29,8 +29,8 @@ export const connectStomp = (documentId, onMessageCallback, onConnectCallback) =
   
   client = new Client({
     webSocketFactory: () => {
-      
-      return new SockJS(import.meta.env.VITE_API_URL+'/drive-service/connect');
+      // 상대 경로로 프록시를 통과하도록 설정 (개발/운영 모두 호환)
+      return new SockJS('/drive-service/connect');
     },
     reconnectDelay: 5000,
     heartbeatIncoming: 4000,

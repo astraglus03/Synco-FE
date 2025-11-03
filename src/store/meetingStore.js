@@ -94,7 +94,8 @@ export const useMeetingStore = defineStore('meeting', () => {
       error.value = null
       
       const response = await meetingApi.getChannels(workSpaceSeq)
-      channels.value = response.data.map(channel => new ChannelInfoResDto(channel))
+      const list = Array.isArray(response) ? response : (response?.data || [])
+      channels.value = list.map(channel => new ChannelInfoResDto(channel))
       
       return channels.value
     } catch (err) {

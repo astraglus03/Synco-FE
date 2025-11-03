@@ -167,19 +167,36 @@ export const delegateSuperAuthority = async (delegateMemberSeq, workSpaceSeq) =>
 // 주의: 기본 채널(첫 번째 채널)만 멤버 리스트를 포함하여 반환
 // 나머지 채널은 channelMemberList가 빈 배열이거나 없음
 export const getChatChannels = async (workSpaceSeq) => {
-  const res = await apiGet(`/chat-service/chat/channels/${workSpaceSeq}`)
-  return res.map(channel => ChannelInfoResDto.fromJson(channel))
+  const endpoint = `/chat-service/chat/channels/${workSpaceSeq}`
+  const res = await apiGet(endpoint)
+  try {
+    const count = Array.isArray(res) ? res.length : 0
+    const firstMembers = res?.[0]?.channelMemberList?.length || 0
+    console.log('[WorkspaceAPI] chat channels resp:', { endpoint, workSpaceSeq, count, firstMembers, sample: res?.slice?.(0, 2) })
+  } catch {}
+  return Array.isArray(res) ? res.map(channel => ChannelInfoResDto.fromJson(channel)) : []
 }
 
 export const getMeetingChannels = async (workSpaceSeq) => {
-  const res = await apiGet(`/task-service/virtual-meeting/channels/${workSpaceSeq}`)
-  return res.map(channel => ChannelInfoResDto.fromJson(channel))
+  const endpoint = `/task-service/virtual-meeting/channels/${workSpaceSeq}`
+  const res = await apiGet(endpoint)
+  try {
+    const count = Array.isArray(res) ? res.length : 0
+    const firstMembers = res?.[0]?.channelMemberList?.length || 0
+    console.log('[WorkspaceAPI] meeting channels resp:', { endpoint, workSpaceSeq, count, firstMembers, sample: res?.slice?.(0, 2) })
+  } catch {}
+  return Array.isArray(res) ? res.map(channel => ChannelInfoResDto.fromJson(channel)) : []
 }
 
 export const getScheduleChannels = async (workSpaceSeq) => {
-  const res = await apiGet(`/task-service/task/channels/${workSpaceSeq}`)
-  // 일정관리는 List<ChannelMemberResDto>만 반환하므로 바로 반환
-  return res.map(member => ChannelMemberResDto.fromJson(member))
+  const endpoint = `/task-service/task/channels/${workSpaceSeq}`
+  const res = await apiGet(endpoint)
+  try {
+    const count = Array.isArray(res) ? res.length : 0
+    console.log('[WorkspaceAPI] schedule channels resp:', { endpoint, workSpaceSeq, count, sample: res?.slice?.(0, 3) })
+  } catch {}
+  // 일정관리는 List<ChannelMemberResDto>만 반환한다고 가정
+  return Array.isArray(res) ? res.map(member => ChannelMemberResDto.fromJson(member)) : []
 }
 
 // ----------------------

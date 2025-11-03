@@ -254,14 +254,31 @@
             class="task-card"
             @click="handleTaskClick(task.taskSeq || task.id)"
           >
+            <div class="task-marker" :style="{ backgroundColor: getAssigneeTaskMarkerColor(task.status, task.isOverdue) }"></div>
             <div class="task-content">
-              <div class="task-title" :class="{ completed: task.status === 'COMPLETED' }">
-                {{ task.title }}
+              <div class="task-title-section">
+                <div class="task-title" :class="{ completed: task.status === 'COMPLETED' }">
+                  {{ task.title }}
+                </div>
+                <div class="task-chips">
+                  <v-chip
+                    v-if="task.isOverdue && !isTaskCompleted(task.status)"
+                    color="error"
+                    size="x-small"
+                    class="overdue-chip"
+                  >
+                    기한이 지났습니다
+                  </v-chip>
+                  <v-chip
+                    :color="getTaskStatusColor(task.status)"
+                    size="x-small"
+                    class="status-chip"
+                  >
+                    {{ getTaskStatusText(task.status) }}
+                  </v-chip>
+                </div>
               </div>
               <div class="task-meta">
-                <v-chip size="x-small" :color="getPriorityColor(task.priority)">
-                  {{ getPriorityText(task.priority) }}
-                </v-chip>
                 <span class="meta-item">
                   <v-icon size="14">mdi-folder</v-icon>
                   {{ task.projectName }}
@@ -999,18 +1016,42 @@ const urgentTasks = computed(() => {
 })
 
 const displayedTasks = computed(() => {
+  const now = new Date()
+  now.setHours(0, 0, 0, 0)
+  
+  let tasks = []
   switch (taskTab.value) {
     case 'urgent':
-      return urgentTasks.value
+      tasks = urgentTasks.value
+      break
     case 'in-progress':
-      return inProgressTasks.value
+      tasks = inProgressTasks.value
+      break
     case 'todo':
-      return todoTasks.value
+      tasks = todoTasks.value
+      break
     case 'completed':
-      return completedTasks.value
+      tasks = completedTasks.value
+      break
     default:
-      return filteredTasks.value
+      tasks = filteredTasks.value
   }
+  
+  // 기한 지남 여부 계산 및 추가
+  return tasks.map(task => {
+    const endDate = task.dueDate ? new Date(task.dueDate) : null
+    let isOverdue = false
+    if (endDate) {
+      endDate.setHours(0, 0, 0, 0)
+      const daysRemaining = Math.ceil((endDate - now) / (24 * 60 * 60 * 1000))
+      isOverdue = daysRemaining < 0
+    }
+    
+    return {
+      ...task,
+      isOverdue: isOverdue
+    }
+  })
 })
 
 // 친구 목록 데이터
@@ -1057,22 +1098,35 @@ const updateDateTime = () => {
   currentTime.value = `${hours}:${minutes}`
 }
 
-const getPriorityColor = (priority) => {
-  const colors = {
-    high: 'error',
-    medium: 'warning',
-    low: 'success'
-  }
-  return colors[priority] || 'grey'
+// 업무 완료 여부 확인
+const isTaskCompleted = (status) => {
+  const statusValue = status || ''
+  return statusValue === 'COMPLETED' || statusValue === '완료' || statusValue === 'DONE' || statusValue === 'FINISHED' || statusValue === 'completed'
 }
 
-const getPriorityText = (priority) => {
-  const texts = {
-    high: '높음',
-    medium: '보통',
-    low: '낮음'
+// 담당자별 업무 현황 마커 색상 (기한 만료 우선, 그 다음 상태)
+const getAssigneeTaskMarkerColor = (status, isOverdue) => {
+  // 완료된 업무는 기한 만료와 관계없이 녹색
+  const statusValue = status || ''
+  if (isTaskCompleted(status)) {
+    return '#22c55e' // 녹색
   }
-  return texts[priority] || priority
+  
+  // 기한 만료는 우선순위가 가장 높음 (빨간색)
+  if (isOverdue) {
+    return '#ef4444' // 빨간색
+  }
+  
+  // 상태에 따른 색상
+  if (statusValue === 'IN_PROGRESS' || statusValue === '진행중' || statusValue === 'PROGRESS' || statusValue === 'DOING' || statusValue === 'in-progress') {
+    return '#f59e0b' // 노란색
+  }
+  if (statusValue === 'TODO' || statusValue === '할일' || statusValue === 'PENDING' || statusValue === 'pending') {
+    return '#3b82f6' // 파란색
+  }
+  
+  // 기본값 (파란색)
+  return '#3b82f6'
 }
 
 // openTaskDetail 함수는 하단의 handleTaskClick으로 대체됨
@@ -2337,7 +2391,6 @@ const closeErrorModal = () => {
 .task-card {
   display: flex;
   align-items: flex-start;
-  justify-content: space-between;
   gap: 12px;
   padding: 16px;
   border-radius: 12px;
@@ -2354,21 +2407,43 @@ const closeErrorModal = () => {
   background: rgba(var(--v-theme-on-surface), 0.04);
 }
 
+.task-marker {
+  width: 4px;
+  border-radius: 2px;
+  flex-shrink: 0;
+  min-height: 60px;
+}
+
 .task-content {
   flex: 1;
   min-width: 0;
+}
+
+.task-title-section {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
 }
 
 .task-title {
   font-size: 15px;
   font-weight: 600;
   color: rgb(var(--v-theme-on-surface));
-  margin-bottom: 8px;
+  flex: 1;
 }
 
 .task-title.completed {
   text-decoration: line-through;
   color: rgba(var(--v-theme-on-surface), 0.6);
+}
+
+.task-chips {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
 }
 
 .task-meta {
