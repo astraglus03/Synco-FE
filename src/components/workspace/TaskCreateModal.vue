@@ -1,5 +1,10 @@
 <template>
-  <v-dialog v-model="isOpen" max-width="900px" persistent class="no-scroll-dialog">
+  <v-dialog 
+    v-model="isOpen" 
+    max-width="900px" 
+    persistent 
+    class="no-scroll-dialog task-create-dialog"
+  >
     <v-card class="task-create-modal fixed-modal-create">
       <!-- 모달 헤더 -->
       <div class="modal-header">
@@ -435,6 +440,177 @@ onMounted(() => {
 .fixed-modal-create {
   width: 900px !important;
   max-height: 800px !important;
+}
+
+/* 반응형 디자인 */
+@media (max-width: 1024px) {
+  .task-create-dialog :deep(.v-overlay__content) {
+    max-width: 90vw !important;
+    width: 700px !important;
+  }
+  
+  .fixed-modal-create {
+    width: 90vw !important;
+    max-width: 700px !important;
+  }
+  
+  .modal-header {
+    padding: 16px 20px;
+  }
+  
+  .modal-content {
+    padding: 20px;
+  }
+  
+  .v-card-text {
+    padding: 20px;
+  }
+  
+  .v-card-actions {
+    padding: 16px 20px;
+  }
+}
+
+@media (max-width: 768px) {
+  .task-create-dialog :deep(.v-overlay__content) {
+    max-width: 95vw !important;
+    width: 95vw !important;
+    margin: 0 auto !important;
+  }
+  
+  .fixed-modal-create {
+    width: 95vw !important;
+    max-width: 500px !important;
+    max-height: 90vh !important;
+  }
+  
+  .modal-header {
+    padding: 14px 16px;
+  }
+  
+  .modal-header-content {
+    gap: 10px;
+  }
+  
+  .modal-icon {
+    width: 28px;
+    height: 28px;
+  }
+  
+  .modal-icon .v-icon {
+    font-size: 18px;
+  }
+  
+  .modal-title {
+    font-size: 16px;
+  }
+  
+  .modal-content {
+    padding: 16px;
+  }
+  
+  .v-card-text {
+    padding: 16px;
+  }
+  
+  .v-card-actions {
+    padding: 14px 16px;
+    flex-direction: column;
+    gap: 8px;
+  }
+  
+  .v-card-actions .v-btn {
+    width: 100%;
+    margin: 0 !important;
+  }
+  
+  /* 컬럼을 세로로 배치 */
+  .v-row {
+    margin: 0 !important;
+  }
+  
+  .v-col {
+    padding: 0 !important;
+    margin-bottom: 16px;
+  }
+  
+  .v-col:last-child {
+    margin-bottom: 0;
+  }
+}
+
+@media (max-width: 480px) {
+  .task-create-dialog :deep(.v-overlay__content) {
+    max-width: 100vw !important;
+    width: 100vw !important;
+    margin: 0 !important;
+    top: auto !important;
+    bottom: 0 !important;
+    transform: none !important;
+  }
+  
+  .fixed-modal-create {
+    width: 100vw !important;
+    max-width: 100vw !important;
+    max-height: 90vh !important;
+    border-radius: 16px 16px 0 0 !important;
+  }
+  
+  .modal-header {
+    padding: 12px 16px;
+  }
+  
+  .modal-header-content {
+    gap: 8px;
+  }
+  
+  .modal-icon {
+    width: 24px;
+    height: 24px;
+  }
+  
+  .modal-icon .v-icon {
+    font-size: 16px;
+  }
+  
+  .modal-title {
+    font-size: 14px;
+  }
+  
+  .modal-content {
+    padding: 12px;
+    max-height: calc(90vh - 120px);
+    overflow-y: auto;
+  }
+  
+  .v-card-text {
+    padding: 12px;
+  }
+  
+  .v-card-actions {
+    padding: 12px 16px;
+    gap: 8px;
+  }
+  
+  .v-card-actions .v-btn {
+    height: 36px;
+    font-size: 14px;
+  }
+  
+  /* 라벨 크기 조정 */
+  .v-card-text label.text-subtitle-1 {
+    font-size: 11px;
+    margin-bottom: 4px;
+  }
+  
+  /* 입력 필드 크기 조정 */
+  .v-card-text :deep(.v-field) {
+    min-height: 40px;
+  }
+  
+  .v-textarea :deep(.v-field__input) {
+    min-height: 80px;
+  }
 }
 
 /* v-dialog 스크롤바 숨김 */

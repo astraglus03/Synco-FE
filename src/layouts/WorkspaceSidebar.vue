@@ -1910,10 +1910,127 @@ const getStatusColor = (status) => {
 }
 
 /* 반응형 디자인 */
+@media (max-width: 1024px) {
+  .workspace-sidebar {
+    width: 60px !important;
+    margin-left: 60px !important;
+    top: 56px;
+    padding: 16px 0 80px 0 !important;
+  }
+  
+  /* collapsed 상태일 때도 반응형에서는 최소 너비 유지 (아이콘만 표시) */
+  .workspace-sidebar.collapsed {
+    width: 60px !important;
+    margin-left: 60px !important;
+  }
+  
+  .project-info {
+    padding: 8px 0 !important;
+    justify-content: center !important;
+  }
+  
+  .project-name,
+  .leave-button {
+    display: none !important;
+  }
+  
+  .section-title {
+    padding: 0 !important;
+  }
+  
+  .section-title span {
+    display: none !important;
+  }
+  
+  .channel-item,
+  .dm-item {
+    padding: 10px 0 !important;
+    justify-content: center !important;
+    margin: 4px 0 !important;
+    gap: 0 !important;
+  }
+  
+  .channel-name,
+  .dm-name,
+  .dm-info,
+  .dm-meta {
+    display: none !important;
+  }
+  
+  .subchannel-list {
+    margin-left: 0 !important;
+  }
+  
+  .subchannel-item {
+    padding: 8px 0 !important;
+    justify-content: center !important;
+  }
+  
+  .subchannel-name {
+    display: none !important;
+  }
+  
+  .direct-messages-section {
+    display: none !important;
+  }
+}
+
 @media (max-width: 768px) {
   .workspace-sidebar {
-    width: 200px;
-    margin-left: 60px;
+    width: 56px !important;
+    margin-left: 56px !important;
+    top: 56px;
+    padding: 12px 0 80px 0 !important;
+  }
+  
+  /* collapsed 상태일 때도 반응형에서는 최소 너비 유지 */
+  .workspace-sidebar.collapsed {
+    width: 56px !important;
+    margin-left: 56px !important;
+  }
+  
+  .channel-item,
+  .dm-item {
+    padding: 8px 0 !important;
+  }
+  
+  .channel-item .v-icon,
+  .dm-item .v-icon {
+    font-size: 20px !important;
+  }
+}
+
+@media (max-width: 480px) {
+  .workspace-sidebar {
+    width: 52px !important;
+    margin-left: 52px !important;
+    top: 56px;
+    padding: 10px 0 80px 0 !important;
+  }
+  
+  /* collapsed 상태일 때도 반응형에서는 최소 너비 유지 */
+  .workspace-sidebar.collapsed {
+    width: 52px !important;
+    margin-left: 52px !important;
+  }
+  
+  .channel-item,
+  .dm-item {
+    padding: 6px 0 !important;
+  }
+  
+  .channel-item .v-icon,
+  .dm-item .v-icon {
+    font-size: 18px !important;
+  }
+  
+  .toggle-button {
+    width: 20px !important;
+    height: 20px !important;
+  }
+  
+  .toggle-button .v-icon {
+    font-size: 14px !important;
   }
 }
 
@@ -2733,180 +2850,4 @@ const getStatusColor = (status) => {
   }
 }
 
-/* 반응형 디자인 - 태블릿 이하에서는 아이콘만 표시 */
-@media (max-width: 1024px) {
-  .workspace-sidebar {
-    width: 60px !important;
-    min-width: 60px !important;
-    padding: 16px 0 0 0 !important;
-  }
-  
-  .workspace-sidebar.collapsed {
-    width: 0 !important;
-    min-width: 0 !important;
-    padding: 0 !important;
-    overflow: hidden !important;
-  }
-  
-  /* 프로젝트 정보 숨기기 */
-  .project-info {
-    padding: 8px 0 !important;
-    justify-content: center !important;
-  }
-  
-  .project-name,
-  .leave-button {
-    display: none !important;
-  }
-  
-  .toggle-button {
-    margin: 0 auto !important;
-  }
-  
-  /* 섹션 타이틀 숨기기 */
-  .section-title {
-    padding: 0 !important;
-  }
-  
-  .section-title span {
-    display: none !important;
-  }
-  
-  /* 채널 아이템 - 아이콘만 표시 */
-  .channel-item,
-  .dm-item {
-    padding: 10px 0 !important;
-    justify-content: center !important;
-    margin: 4px 0 !important;
-    gap: 0 !important;
-  }
-  
-  .channel-item .v-icon {
-    margin: 0 !important;
-  }
-  
-  .channel-name,
-  .dm-name,
-  .channel-item-actions,
-  .channel-actions,
-  .add-channel-btn,
-  .channel-status {
-    display: none !important;
-  }
-  
-  /* 하위 채널 들여쓰기 제거 */
-  .sub-channels {
-    padding-left: 0 !important;
-  }
-  
-  .sub-channel-item {
-    padding: 8px 0 !important;
-    padding-left: 0 !important;
-    justify-content: center !important;
-    margin: 2px 0 !important;
-  }
-  
-  .sub-channel-name,
-  .sub-channel-actions {
-    display: none !important;
-  }
-  
-  /* 직접 메시지 섹션 완전히 숨기기 */
-  .direct-messages-section {
-    display: none !important;
-  }
-  
-  .dm-item .v-avatar {
-    margin: 0 !important;
-  }
-  
-  .dm-user-info {
-    display: none !important;
-  }
-  
-  /* 채널 그룹 조정 */
-  .channel-group {
-    margin-bottom: 2px !important;
-  }
-  
-  /* 채널 헤더 조정 */
-  .channel-header {
-    padding: 8px 0 !important;
-    justify-content: center !important;
-  }
-  
-  .channel-header-content {
-    width: 100% !important;
-    justify-content: center !important;
-  }
-  
-  .channel-header-content h3,
-  .channel-header-content .channel-count,
-  .header-actions {
-    display: none !important;
-  }
-}
-
-@media (max-width: 768px) {
-  .workspace-sidebar {
-    width: 56px !important;
-    min-width: 56px !important;
-    padding: 12px 0 0 0 !important;
-  }
-  
-  .workspace-sidebar.collapsed {
-    width: 0 !important;
-  }
-  
-  .channel-item,
-  .dm-item,
-  .sub-channel-item {
-    padding: 8px 0 !important;
-  }
-  
-  .channel-item .v-icon,
-  .sub-channel-item .v-icon,
-  .dm-item .v-icon {
-    font-size: 20px !important;
-  }
-  
-  .dm-item .v-avatar {
-    width: 32px !important;
-    height: 32px !important;
-  }
-}
-
-@media (max-width: 480px) {
-  .workspace-sidebar {
-    width: 52px !important;
-    min-width: 52px !important;
-    padding: 10px 0 0 0 !important;
-  }
-  
-  .channel-item,
-  .dm-item,
-  .sub-channel-item {
-    padding: 6px 0 !important;
-  }
-  
-  .channel-item .v-icon,
-  .sub-channel-item .v-icon,
-  .dm-item .v-icon {
-    font-size: 18px !important;
-  }
-  
-  .dm-item .v-avatar {
-    width: 28px !important;
-    height: 28px !important;
-  }
-  
-  .toggle-button {
-    width: 20px !important;
-    height: 20px !important;
-  }
-  
-  .toggle-button .v-icon {
-    font-size: 14px !important;
-  }
-}
 </style>

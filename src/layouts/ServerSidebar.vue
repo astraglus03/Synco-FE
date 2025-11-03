@@ -749,15 +749,57 @@ onMounted(() => {
 }
 
 /* 반응형 디자인 */
+@media (max-width: 1024px) {
+  .server-sidebar {
+    width: 60px !important;
+    top: 56px;
+  }
+  
+  .server-icon {
+    width: 44px;
+    height: 44px;
+    font-size: 16px;
+    margin-left: 6px;
+  }
+  
+  .server-icon .v-icon {
+    font-size: 20px;
+  }
+}
+
 @media (max-width: 768px) {
   .server-sidebar {
-    width: 60px;
+    width: 56px !important;
+    top: 56px;
   }
   
   .server-icon {
     width: 40px;
     height: 40px;
     font-size: 14px;
+    margin-left: 6px;
+  }
+  
+  .server-icon .v-icon {
+    font-size: 18px;
+  }
+}
+
+@media (max-width: 480px) {
+  .server-sidebar {
+    width: 52px !important;
+    top: 56px;
+  }
+  
+  .server-icon {
+    width: 36px;
+    height: 36px;
+    font-size: 12px;
+    margin-left: 6px;
+  }
+  
+  .server-icon .v-icon {
+    font-size: 16px;
   }
 }
 
@@ -1202,60 +1244,5 @@ onMounted(() => {
   font-size: 14px;
 }
 
-/* 반응형 디자인 - 태블릿 이하에서는 항상 아이콘만 표시 */
-@media (max-width: 1024px) {
-  .server-sidebar {
-    width: 60px !important;
-  }
-  
-  .server-icon {
-    width: 44px;
-    height: 44px;
-  }
-  
-  .server-icon .v-icon {
-    font-size: 22px;
-  }
-}
-
-@media (max-width: 768px) {
-  .server-sidebar {
-    width: 56px !important;
-  }
-  
-  .server-icon {
-    width: 40px;
-    height: 40px;
-  }
-  
-  .server-icon .v-icon {
-    font-size: 20px;
-  }
-  
-  .workspace-thumbnail {
-    width: 40px;
-    height: 40px;
-  }
-}
-
-@media (max-width: 480px) {
-  .server-sidebar {
-    width: 52px !important;
-  }
-  
-  .server-icon {
-    width: 36px;
-    height: 36px;
-  }
-  
-  .server-icon .v-icon {
-    font-size: 18px;
-  }
-  
-  .workspace-thumbnail {
-    width: 36px;
-    height: 36px;
-  }
-}
 
 </style>
