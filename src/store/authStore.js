@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
+import sseConnection from '@/api/notification/sseApi'
 
 export const useAuthStore = defineStore('auth', () => {
   // 토큰 (AT만 localStorage)
@@ -63,7 +64,18 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   // 로그아웃
-  const logout = () => {
+  const logout = async () => {
+    // SSE 서버 disconnect 요청 (인증 정보가 있을 때만)
+    try {
+      await sseConnection.disconnectFromServer()
+    } catch (error) {
+      console.error('SSE disconnect 실패:', error)
+      // 로그아웃 흐름을 방해하지 않도록 에러를 무시
+    }
+    
+    // SSE 클라이언트 연결 종료
+    sseConnection.disconnect()
+    
     setAccessToken(null)
     setUser(null)
     setMemberSeq(null)

@@ -1334,15 +1334,15 @@ const logout = async () => {
   try {
     await authApi.logout()
     
-    // authStore 초기화
-    authStore.logout()
+    // authStore 초기화 (SSE disconnect 포함)
+    await authStore.logout()
     
     // 랜딩 페이지로 이동
     window.location.href = '/'
   } catch (error) {
     console.error('로그아웃 실패:', error)
     // 실패해도 로컬 로그아웃 처리
-    authStore.logout()
+    await authStore.logout()
     window.location.href = '/'
   }
 }

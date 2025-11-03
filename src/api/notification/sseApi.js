@@ -293,15 +293,49 @@ class SSEConnection {
     console.log('[SSE] 🎉 모든 콜백 실행 완료')
   }
 
-  /**
-   * SSE 연결 종료
-   */
-  disconnect() {
-    console.log('[SSE] 🔌 연결 종료 요청')
-    this.isManualDisconnect = true
-    this.cleanup()
-    console.log('[SSE] ✅ 연결 종료 완료')
+/**
+ * SSE 연결 종료
+ */
+disconnect() {
+  console.log('[SSE] 🔌 연결 종료 요청')
+  this.isManualDisconnect = true
+  this.cleanup()
+  console.log('[SSE] ✅ 연결 종료 완료')
+}
+
+/**
+ * 서버에 SSE 연결 종료 알림 (로그아웃 시 호출)
+ */
+async disconnectFromServer() {
+  const authStore = useAuthStore()
+  
+  // 인증 정보가 없으면 서버 호출 불필요
+  if (!authStore.memberSeq || !authStore.accessToken) {
+    console.log('[SSE] 인증 정보 없음, 서버 disconnect 건너뜀')
+    return
   }
+
+  try {
+    console.log('[SSE] 🔌 서버에 disconnect 요청 전송')
+    const response = await fetch('/workspace-service/alarms/sse/disconnect', {
+      method: 'GET',
+      headers: {
+        'X-Member-Seq': authStore.memberSeq.toString(),
+        'Authorization': `Bearer ${authStore.accessToken}`
+      },
+      credentials: 'include'
+    })
+    
+    if (response.ok) {
+      console.log('[SSE] ✅ 서버 disconnect 성공')
+    } else {
+      console.warn('[SSE] ⚠️ 서버 disconnect 응답 실패:', response.status)
+    }
+  } catch (error) {
+    console.error('[SSE] ❌ 서버 disconnect 요청 실패:', error)
+    // 로그아웃 흐름을 방해하지 않도록 에러를 무시
+  }
+}
 
   /**
    * 리소스 정리
