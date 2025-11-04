@@ -3,6 +3,7 @@ import { ref, computed, onMounted, onUnmounted, nextTick, watch } from "vue";
 import { usePermissions, PERMISSIONS } from "@/composables/usePermissions";
 import { useWorkspaceStore } from "@/store/workspaceStore";
 import { useWorkspaceMemberStore } from "@/store/workspaceMemberStore";
+import { useNotificationStore } from "@/store/notificationStore";
 import { emitter } from "@/eventBus";
 import { useRoute } from "vue-router";
 // import PollModal from "./PollModal.vue";
@@ -56,6 +57,7 @@ const { hasPermission, isManager, isSuper } = usePermissions();
 const workspaceStore = useWorkspaceStore();
 const route = useRoute();
 const workspaceMemberStore = useWorkspaceMemberStore();
+const notificationStore = useNotificationStore();
 
 // Store 초기화 대기 함수
 const waitForStore = () => {
@@ -385,6 +387,16 @@ const connectWebsocket = () => {
               messages.value.push(formattedMessage);
               scrollToBottom();
 
+              // ✅ 현재 채널을 보고 있을 때 메시지를 받으면 알림 초기화
+              // (Chat.vue가 현재 보고 있는 채널이므로 알림이 있으면 안됨)
+              if (channelSeq.value && parsed.channelSeq && 
+                  Number(channelSeq.value) === Number(parsed.channelSeq)) {
+                const channelSeqStr = String(channelSeq.value);
+                if (notificationStore.getChannelNotificationCount(channelSeqStr) > 0) {
+                  notificationStore.clearChannelNotificationCount(channelSeqStr);
+                  console.log(`✅ Chat.vue: 현재 채널(${channelSeqStr}) 메시지 수신, 알림 초기화`);
+                }
+              }
             }
           } catch (e) {
             console.error("메시지 파싱 실패:", e, message.body);
