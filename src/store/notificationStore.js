@@ -58,11 +58,7 @@ export const useNotificationStore = defineStore('notification', () => {
         // 여기서는 별도 workspaceSeq 필터링은 하지 않음
       }
     } else {
-      // 개인 워크스페이스: 프로젝트 전용 알림 제외
-      // alarm-drive(공유문서/파일 공유)와 alarm-meeting(화상회의)는 프로젝트에서만 사용
-      filtered = filtered.filter(n => 
-        n.type !== 'alarm-drive' && n.type !== 'alarm-meeting'
-      )
+      // 개인 워크스페이스: 필터링 없음 (전체 알림 표시)
     }
     
     // 2. 필터 타입별 필터링
@@ -305,11 +301,17 @@ export const useNotificationStore = defineStore('notification', () => {
       return
     }
 
+    // message 필드가 없거나 비어있으면 알림을 표시하지 않음
+    const message = data.message ? String(data.message).trim() : ''
+    if (!message || message.length === 0) {
+      return
+    }
+
     // 알림 객체 생성
     const notification = {
       id: String(data.alarmSeq || data.id || Date.now()),
       type: notificationType,
-      message: data.message || '새로운 알림이 있습니다',
+      message: message,
       time: '방금 전',
       read: false,
       priority: data.priority || 'normal',
@@ -321,7 +323,6 @@ export const useNotificationStore = defineStore('notification', () => {
 
     // 친구 요청 알림 특별 처리
     if (data.type === 'FRIEND_REQUEST' || data.alarmType === 'alarm-friend') {
-      notification.message = data.message || `${data.sender || '누군가'}가 친구 요청을 보냈습니다`
       notification.user = {
         name: data.sender || '알 수 없음',
         avatar: data.sender?.charAt(0) || '?',
@@ -713,27 +714,34 @@ export const useNotificationStore = defineStore('notification', () => {
         })
         
         // 알림 변환 (AlarmResDto 기준)
-        notifications.value = sortedNotifications.map((alarm, index) => {
-          // 디버깅: ynRead 값 확인
-          if (index === 0) {
-            // console.log('[알림 Store] 🔍 첫 번째 알림 원본 데이터:', alarm)
-            // console.log('[알림 Store] 🔍 ynRead 값:', alarm.ynRead)
-            // console.log('[알림 Store] 🔍 read 변환 결과:', alarm.ynRead === 'Y')
-          }
-          
-          return {
-            id: String(alarm.alarmSeq || `${alarm.receiverId}_${new Date(alarm.time).getTime()}_${index}`),
-            type: normalizeType(alarm.alarmType || alarm.type || 'UNKNOWN'),
-            message: alarm.message || '새로운 알림이 있습니다',
-            time: formatTime(alarm.time),
-            read: alarm.ynRead === 'Y', // 읽음 여부 (Y/N)
-            priority: 'normal',
-            sender: alarm.sender,
-            workSpaceSeq: alarm.workSpaceSeq,
-            alarmSeq: alarm.alarmSeq, // 읽음 처리 API 호출을 위해 필요
-            data: alarm // 원본 데이터 보관
-          }
-        })
+        notifications.value = sortedNotifications
+          .map((alarm, index) => {
+            // 디버깅: ynRead 값 확인
+            if (index === 0) {
+              // console.log('[알림 Store] 🔍 첫 번째 알림 원본 데이터:', alarm)
+              // console.log('[알림 Store] 🔍 ynRead 값:', alarm.ynRead)
+              // console.log('[알림 Store] 🔍 read 변환 결과:', alarm.ynRead === 'Y')
+            }
+            
+            // message가 없으면 알림을 생성하지 않음
+            if (!alarm.message || String(alarm.message).trim().length === 0) {
+              return null
+            }
+            
+            return {
+              id: String(alarm.alarmSeq || `${alarm.receiverId}_${new Date(alarm.time).getTime()}_${index}`),
+              type: normalizeType(alarm.alarmType || alarm.type || 'UNKNOWN'),
+              message: String(alarm.message).trim(),
+              time: formatTime(alarm.time),
+              read: alarm.ynRead === 'Y', // 읽음 여부 (Y/N)
+              priority: 'normal',
+              sender: alarm.sender,
+              workSpaceSeq: alarm.workSpaceSeq,
+              alarmSeq: alarm.alarmSeq, // 읽음 처리 API 호출을 위해 필요
+              data: alarm // 원본 데이터 보관
+            }
+          })
+          .filter(n => n !== null) // null 제거
         
         // console.log('[알림 Store] ✅ 알림 목록 불러오기 성공:', notifications.value.length, '개')
         // console.log('[알림 Store] 📋 변환된 알림 샘플:', notifications.value[0])
