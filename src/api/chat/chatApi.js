@@ -1,5 +1,4 @@
 import { apiGet, apiPost, apiPatch, apiDelete } from "@/utils/api";
-import axios from "axios";
 
 // ----------------------
 // 1:1 채팅 채널 생성 API

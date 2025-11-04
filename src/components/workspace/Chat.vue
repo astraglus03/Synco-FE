@@ -9,7 +9,7 @@ import { useRoute } from "vue-router";
 import FileAttachmentModal from "./FileAttachmentModal.vue";
 import SockJS from "sockjs-client";
 import Stomp from "webstomp-client";
-import axios from "axios";
+import apiClient from "@/utils/api";
 import { getChannelMembers, updateLastRead } from "@/api/chat/chatApi";
 
 // ✅ 현재 사용자가 멘션된 메시지인지 확인
@@ -406,19 +406,11 @@ const connectWebsocket = () => {
 // ✅ WebSocket 연결 해제
 const disconnectWebsocket = async () => {
   try {
-    // 🟡 읽음 처리 API 호출
+    // 🟡 읽음 처리 API 호출 (인터셉터가 자동으로 토큰 추가)
     if (channelSeq.value && !isNaN(channelSeq.value) && channelSeq.value > 0) {
-      await axios.post(
-        `${import.meta.env.VITE_API_URL}/chat-service/chat/channels/${
-          channelSeq.value
-        }/read`,
-        {},
-        {
-          headers: {
-            "X-Member-Seq": memberSeq.value,
-            Authorization: `Bearer ${token.value}`,
-          },
-        }
+      await apiClient.post(
+        `/chat-service/chat/channels/${channelSeq.value}/read`,
+        {}
       );
       console.log("✅ 마지막 읽은 메시지 업데이트 완료");
     } else {
@@ -473,17 +465,16 @@ const uploadFilesToS3 = async () => {
   const formData = new FormData();
   attachedFiles.value.forEach((file) => formData.append("files", file));
 
-  const url = `${import.meta.env.VITE_API_URL}/chat-service/chat/files/upload/${
-    channelSeq.value
-  }`;
-
   try {
-    const res = await axios.post(url, formData, {
-      headers: {
-        "Content-Type": "multipart/form-data",
-        Authorization: `Bearer ${token.value}`,
-      },
-    });
+    const res = await apiClient.post(
+      `/chat-service/chat/files/upload/${channelSeq.value}`,
+      formData,
+      {
+        headers: {
+          "Content-Type": "multipart/form-data",
+        },
+      }
+    );
 
     console.log("✅ 파일 업로드 성공:", res.data);
 
@@ -676,15 +667,9 @@ const sendMessage = async () => {
 // ✅ 메시지 삭제 (하드 삭제)
 const deleteMessage = async (message) => {
   try {
-    const url = `${import.meta.env.VITE_API_URL}/chat-service/chat/messages/${
-      message.id
-    }`;
-    const res = await axios.delete(url, {
-      headers: {
-        "X-Member-Seq": memberSeq.value,
-        Authorization: `Bearer ${token.value}`,
-      },
-    });
+    const res = await apiClient.delete(
+      `/chat-service/chat/messages/${message.id}`
+    );
 
     console.log("✅ 메시지 삭제 성공:", res.data);
 
@@ -722,16 +707,9 @@ const loadMoreMessages = async (lastId = null) => {
   try {
     console.log("📥 이전 메시지 로드 시작 - lastId:", lastId);
 
-    const url = `${import.meta.env.VITE_API_URL}/chat-service/chat/channels/${
-      channelSeq.value
-    }/messages${lastId ? `?lastId=${lastId}` : ""}`;
+    const url = `/chat-service/chat/channels/${channelSeq.value}/messages${lastId ? `?lastId=${lastId}` : ""}`;
 
-    const res = await axios.get(url, {
-      headers: {
-        Authorization: `Bearer ${token.value}`,
-        "X-Member-Seq": memberSeq.value,
-      },
-    });
+    const res = await apiClient.get(url);
 
     // 백엔드는 ResponseDto로 감싸져 있지 않을 수 있으므로 직접 배열인지 확인
     let loadedMessages = res.data;
@@ -866,16 +844,9 @@ const loadMessagesAfterLastRead = async () => {
   try {
     console.log("📥 새 메시지 로드 시작 (마지막 읽은 메시지 이후)");
 
-    const url = `${import.meta.env.VITE_API_URL}/chat-service/chat/channels/${
-      channelSeq.value
-    }/messages/after-last-read`;
+    const url = `/chat-service/chat/channels/${channelSeq.value}/messages/after-last-read`;
 
-    const res = await axios.get(url, {
-      headers: {
-        Authorization: `Bearer ${token.value}`,
-        "X-Member-Seq": memberSeq.value,
-      },
-    });
+    const res = await apiClient.get(url);
 
     let loadedMessages = res.data;
 
