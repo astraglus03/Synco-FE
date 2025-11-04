@@ -381,13 +381,29 @@ const connectWebsocket = () => {
               messages.value.push(formattedMessage);
               scrollToBottom();
 
-              // ✅ 현재 채널을 보고 있을 때 메시지를 받으면 알림 초기화
-              // (Chat.vue가 현재 보고 있는 채널이므로 알림이 있으면 안됨)
-              if (channelSeq.value && parsed.channelSeq && 
-                  Number(channelSeq.value) === Number(parsed.channelSeq)) {
+              // ✅ 현재 채널을 보고 있을 때만 메시지를 받으면 알림 초기화
+              // workspaceStore의 선택된 채널과 비교하여 실제로 선택된 채널인지 확인
+              const currentSelectedChannel = workspaceStore.selectedSubChannel;
+              const currentMainChannel = workspaceStore.currentChannel;
+              const messageChannelSeq = Number(parsed.channelSeq);
+              const messageChannelSeqStr = String(parsed.channelSeq);
+              
+              // 실제로 현재 선택된 채널인지 확인
+              let isCurrentlySelected = false;
+              if (currentMainChannel === 'chat' && currentSelectedChannel && channelSeq.value) {
+                const selectedChannelNum = Number(String(currentSelectedChannel).replace('chat_', ''));
+                isCurrentlySelected = 
+                  (selectedChannelNum === messageChannelSeq && selectedChannelNum === Number(channelSeq.value)) ||
+                  (currentSelectedChannel === messageChannelSeqStr && Number(channelSeq.value) === messageChannelSeq);
+              }
+              
+              // 실제로 선택된 채널이고 현재 보고 있는 채널일 때만 알림 초기화
+              if (isCurrentlySelected && channelSeq.value && parsed.channelSeq && 
+                  Number(channelSeq.value) === messageChannelSeq) {
                 const channelSeqStr = String(channelSeq.value);
                 if (notificationStore.getChannelNotificationCount(channelSeqStr) > 0) {
                   notificationStore.clearChannelNotificationCount(channelSeqStr);
+                  console.log('[Chat.vue] ✅ 현재 선택된 채널에서 메시지 수신, 알림 초기화:', channelSeqStr);
                 }
               }
 
