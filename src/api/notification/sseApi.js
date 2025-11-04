@@ -37,12 +37,9 @@ class SSEConnection {
     if (this.eventSource) {
       const state = this.eventSource.readyState
       if (state === EventSource.OPEN || state === EventSource.CONNECTING) {
-        console.log('[SSE] ⚠️ 이미 연결 중이거나 연결 시도 중:', state === EventSource.OPEN ? 'OPEN' : 'CONNECTING')
         return
       }
     }
-
-    console.log('[SSE] 🔌 연결 시작')
     // 기존 연결 정리
     this.cleanup()
 
@@ -56,13 +53,12 @@ class SSEConnection {
           'X-Member-Seq': authStore.memberSeq.toString(),
           'Authorization': `Bearer ${authStore.accessToken}`
         },
-        heartbeatTimeout: 600000, // 10분 (백엔드 SseEmitter 타임아웃과 동일)
+        heartbeatTimeout: 864000000, // 10일 (백엔드 SseEmitter 타임아웃과 동일)
         withCredentials: true
       })
 
       // 연결 성공
       this.eventSource.onopen = () => {
-        console.log('[SSE] ✅ 연결 성공')
         this.reconnectAttempts = 0
         this.isManualDisconnect = false
         this.lastMessageTime = Date.now()
@@ -85,14 +81,8 @@ class SSEConnection {
       }
 
       // Heartbeat 이벤트 (백엔드 이벤트명이 ping/heartbeat 등 다를 수 있어 모두 수신)
-      let heartbeatCount = 0
       const onHeartbeat = (event) => {
         this.lastMessageTime = Date.now()
-        heartbeatCount++
-        // 10번에 한 번만 로그 출력 (너무 많이 찍지 않기 위해)
-        if (heartbeatCount % 10 === 0) {
-          console.log('[SSE] 💓 Heartbeat:', heartbeatCount + '번 수신')
-        }
       }
       this.eventSource.addEventListener('ping', onHeartbeat)
       this.eventSource.addEventListener('heartbeat', onHeartbeat)
@@ -102,7 +92,6 @@ class SSEConnection {
         this.lastMessageTime = Date.now()
         try {
           const data = JSON.parse(event.data)
-          console.log('[SSE] 📨 알림 수신:', data.alarmType || data.type)
           this.notifyCallbacks(data)
         } catch (error) {
           // 파싱 실패 무시
@@ -140,9 +129,6 @@ class SSEConnection {
 
       // 연결 오류
       this.eventSource.onerror = (error) => {
-        const state = this.eventSource?.readyState
-        console.log('[SSE] ❌ 연결 오류, 상태:', state === EventSource.CONNECTING ? 'CONNECTING' : state === EventSource.OPEN ? 'OPEN' : state === EventSource.CLOSED ? 'CLOSED' : 'UNKNOWN', '재연결 시도:', this.reconnectAttempts + 1)
-        
         // CLOSED 상태가 아니면 연결 닫기
         if (this.eventSource && this.eventSource.readyState !== EventSource.CLOSED) {
           try {
@@ -153,17 +139,33 @@ class SSEConnection {
           this.eventSource = null
         }
 
-        // 수동 종료가 아니면 자동 재연결
+        // 수동 종료가 아니면 즉시 재연결
         if (!this.isManualDisconnect) {
-          this.scheduleReconnect()
-        } else {
-          console.log('[SSE] 수동 종료로 인해 재연결하지 않음')
+          this.reconnectAttempts++
+          // 기존 재연결 타이머가 있으면 취소
+          if (this.reconnectTimer) {
+            clearTimeout(this.reconnectTimer)
+            this.reconnectTimer = null
+          }
+          // 즉시 재연결
+          this.connect()
         }
       }
 
     } catch (error) {
-      console.log('[SSE] ❌ 연결 생성 실패:', error.message)
-      this.scheduleReconnect()
+      // 수동 종료가 아니면 즉시 재연결
+      if (!this.isManualDisconnect) {
+        this.reconnectAttempts++
+        // 기존 재연결 타이머가 있으면 취소
+        if (this.reconnectTimer) {
+          clearTimeout(this.reconnectTimer)
+          this.reconnectTimer = null
+        }
+        // 약간의 지연 후 재연결 (무한 루프 방지)
+        setTimeout(() => {
+          this.connect()
+        }, 100)
+      }
     }
   }
 
@@ -172,30 +174,25 @@ class SSEConnection {
    */
   scheduleReconnect() {
     if (this.isManualDisconnect) {
-      console.log('[SSE] 수동 종료 상태이므로 재연결하지 않음')
       return
     }
 
     // 이미 재연결 예약되어 있으면 무시
     if (this.reconnectTimer) {
-      console.log('[SSE] 이미 재연결 예약됨')
       return
     }
 
     this.reconnectAttempts++
     const delay = Math.min(2000 * this.reconnectAttempts, 30000) // 2초, 4초, 6초, ... 최대 30초
     
-    console.log('[SSE] 🔄 재연결 예약:', delay + 'ms 후')
-    
     this.reconnectTimer = setTimeout(() => {
       this.reconnectTimer = null
-      console.log('[SSE] 🔄 재연결 시작')
       this.connect()
     }, delay)
   }
 
   /**
-   * 연결 상태 헬스 체크 시작 (1분마다)
+   * 연결 상태 헬스 체크 시작 (5분마다)
    */
   startHealthCheck() {
     // 기존 헬스 체크 제거
@@ -204,31 +201,20 @@ class SSEConnection {
       this.healthCheckInterval = null
     }
 
-    // 1분마다 연결 상태 확인 (백엔드 heartbeat: 25초 주기, 타임아웃: 10분)
-    // 1분 이상 heartbeat가 없으면 연결 끊어진 것으로 간주
+    // 5분마다 연결 상태만 확인 (메시지 시간 기반 체크 제거)
+    // 백엔드 heartbeat: 25초 주기, 타임아웃: 10일
+    // 메시지가 없어도 연결 상태만 확인하여 유지
     this.healthCheckInterval = setInterval(() => {
-      const now = Date.now()
-      const timeSinceLastMessage = now - this.lastMessageTime
-      const maxIdleTime = 90000 // 90초 (heartbeat 25초 주기이므로 3-4번 정도는 받아야 함)
-
-      // 연결 상태도 확인
+      // 연결 상태만 확인 (메시지 시간은 체크하지 않음)
       const isConnected = this.eventSource?.readyState === EventSource.OPEN
 
       if (!isConnected) {
-        console.log('[SSE] ⚠️ 연결 상태가 OPEN이 아님, 재연결 시도')
-        this.cleanup()
-        if (!this.isManualDisconnect) {
-          this.connect()
-        }
-      } else if (timeSinceLastMessage > maxIdleTime) {
-        console.log('[SSE] ⚠️ Heartbeat 타임아웃:', timeSinceLastMessage, 'ms, 재연결 시도')
-        // 강제 재연결
         this.cleanup()
         if (!this.isManualDisconnect) {
           this.connect()
         }
       }
-    }, 60000) // 1분마다 체크
+    }, 300000) // 5분마다 체크
   }
 
   /**
@@ -277,7 +263,6 @@ class SSEConnection {
  * SSE 연결 종료
  */
 disconnect() {
-  console.log('[SSE] 🔌 연결 종료')
   this.isManualDisconnect = true
   this.cleanup()
 }
@@ -336,10 +321,9 @@ async disconnectFromServer() {
         
         if (this.eventSource.readyState !== EventSource.CLOSED) {
           this.eventSource.close()
-          console.log('[SSE] 연결 종료 완료')
         }
       } catch (error) {
-        console.log('[SSE] 정리 중 오류:', error.message)
+        // 정리 중 오류 무시
       }
 
       this.eventSource = null
@@ -359,15 +343,8 @@ async disconnectFromServer() {
    */
   isConnected() {
     const isOpen = this.eventSource?.readyState === EventSource.OPEN
-    // 연결이 열려있고, 수동 종료가 아니고, 최근 메시지를 받았으면 연결된 것으로 간주
-    if (isOpen && !this.isManualDisconnect) {
-      const timeSinceLastMessage = Date.now() - this.lastMessageTime
-      // 2분 이상 메시지가 없으면 연결 끊어진 것으로 간주
-      if (timeSinceLastMessage > 120000) {
-        console.log('[SSE] ⚠️ 오래된 메시지로 연결 끊김으로 간주:', timeSinceLastMessage, 'ms')
-        return false
-      }
-    }
+    // 연결이 열려있고, 수동 종료가 아니면 연결된 것으로 간주
+    // 메시지가 없어도 연결 상태는 유지 (백엔드 타임아웃: 10일)
     return isOpen && !this.isManualDisconnect
   }
 

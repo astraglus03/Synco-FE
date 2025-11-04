@@ -188,12 +188,9 @@ export const useNotificationStore = defineStore('notification', () => {
   const connectSSE = () => {
     // 이미 연결되어 있으면 무시
     if (sseConnection.isConnected()) {
-      console.log('[알림 Store] SSE 이미 연결됨')
       sseConnected.value = true
       return
     }
-
-    console.log('[알림 Store] SSE 연결 시작')
     
     // 메시지 콜백 등록 (중복 방지는 sseConnection에서 처리)
     sseConnection.onMessage(sseMessageHandler)
@@ -205,7 +202,6 @@ export const useNotificationStore = defineStore('notification', () => {
     const checkConnection = () => {
       const isConnected = sseConnection.isConnected()
       if (sseConnected.value !== isConnected) {
-        console.log('[알림 Store] SSE 연결 상태 변화:', isConnected ? '연결됨' : '연결 끊김')
         sseConnected.value = isConnected
       }
     }
@@ -288,7 +284,6 @@ export const useNotificationStore = defineStore('notification', () => {
           // 프로젝트 워크스페이스: 채팅 채널이므로 channelNotificationCounts 사용
           const key = String(targetSeq)
           channelNotificationCounts.value[key] = (channelNotificationCounts.value[key] || 0) + 1
-          console.log('[알림 Store] 📢 프로젝트 채팅 알림, 채널:', targetSeq, '개수:', channelNotificationCounts.value[key])
         }
         
         // alarm-chat은 알림 목록에 추가하지 않음
@@ -302,30 +297,12 @@ export const useNotificationStore = defineStore('notification', () => {
     const currentUser = authStore.user?.value || authStore.user // ref이거나 일반 객체일 수 있음
     const ynAlarmOffSet = currentUser?.ynAlarmOffSet
     
-    console.log('[알림 Store] 알림 수신 및 필터링 확인:', {
-      type: notificationType,
-      message: data.message,
-      ynAlarmOffSet: ynAlarmOffSet,
-      userExists: !!currentUser,
-      user: currentUser
-    })
-    
     // authStore.user가 없거나 ynAlarmOffSet이 없으면 알림을 표시 (기본값: 알림 ON)
     if (!currentUser || ynAlarmOffSet === undefined || ynAlarmOffSet === null) {
-      console.log('[알림 Store] 알림 설정 정보가 없으므로 알림을 표시합니다 (기본값: ON)')
       // 알림 설정 정보가 없으면 알림을 표시 (기본값: 알림 ON)
     } else if (ynAlarmOffSet === 'N' && notificationType !== 'alarm-chat') {
       // 알림이 꺼져있으면 ('N') 알림을 표시하지 않음 (CHAT 타입은 예외)
-      console.log('[알림 Store] 알림 설정이 OFF이므로 알림을 표시하지 않습니다:', {
-        type: notificationType,
-        message: data.message,
-        ynAlarmOffSet: ynAlarmOffSet
-      })
       return
-    } else {
-      console.log('[알림 Store] 알림 설정이 ON이므로 알림을 표시합니다:', {
-        ynAlarmOffSet: ynAlarmOffSet
-      })
     }
 
     // 알림 객체 생성
@@ -405,6 +382,12 @@ export const useNotificationStore = defineStore('notification', () => {
   const setWorkspace = (type, workspaceSeq = null) => {
     currentWorkspaceType.value = type
     currentWorkspaceSeq.value = workspaceSeq
+    
+    // 개인 워크스페이스로 변경 시 'project' 필터가 활성화되어 있으면 'all'로 변경
+    if (type === 'personal' && activeFilter.value === 'project') {
+      activeFilter.value = 'all'
+    }
+    
     // console.log('[알림 Store] 🔄 setWorkspace 호출:', { type, workspaceSeq })
     // console.log('[알림 Store] 🔄 설정 후 currentWorkspaceSeq:', currentWorkspaceSeq.value)
     // console.log('[알림 Store] 🔄 현재 알림 개수:', notifications.value.length)
@@ -422,6 +405,11 @@ export const useNotificationStore = defineStore('notification', () => {
    * 필터 변경
    */
   const setActiveFilter = (filterKey) => {
+    // 개인 워크스페이스에서 'project' 필터는 허용하지 않음 (탭 제거됨)
+    if (currentWorkspaceType.value === 'personal' && filterKey === 'project') {
+      activeFilter.value = 'all'
+      return
+    }
     activeFilter.value = filterKey
   }
   
@@ -431,7 +419,6 @@ export const useNotificationStore = defineStore('notification', () => {
   const markAsRead = async (notificationId) => {
     // 중복 요청 방지
     if (processingMarkAsRead.value.has(notificationId)) {
-      console.log('[알림 Store] 이미 처리 중인 알림:', notificationId)
       return
     }
     
@@ -485,13 +472,11 @@ export const useNotificationStore = defineStore('notification', () => {
   const markAllAsRead = async () => {
     // 중복 요청 방지
     if (isMarkingAllAsRead.value) {
-      console.log('[알림 Store] 이미 전체 읽음 처리 중입니다.')
       return
     }
     
     try {
       isMarkingAllAsRead.value = true
-      // console.log('[알림 Store] 🔄 전체 알림 읽음 처리 시작...')
       
       // 프로젝트 페이지의 "모든 알림" 탭은 개인 전체 읽음과 동일
       // 프로젝트 페이지의 "프로젝트" 탭만 해당 프로젝트 알림 읽음
@@ -511,9 +496,6 @@ export const useNotificationStore = defineStore('notification', () => {
           workSpaceSeq: currentWorkspaceSeq.value
         }
       }
-      
-      console.log('  - API 엔드포인트:', endpoint)
-      console.log('  - 요청 데이터:', requestDto)
       
       // API 호출
       await apiPatch(endpoint, requestDto)
@@ -541,15 +523,11 @@ export const useNotificationStore = defineStore('notification', () => {
   const markFilterAsRead = async (alarmType) => {
     // 중복 요청 방지
     if (processingMarkFilterAsRead.value.has(alarmType)) {
-      console.log('[알림 Store] 이미 타입별 읽음 처리 중입니다:', alarmType)
       return
     }
     
     try {
       processingMarkFilterAsRead.value.add(alarmType)
-      // console.log('[알림 Store] 🔄 타입별 알림 읽음 처리 시작')
-      console.log('  - 워크스페이스 타입:', currentWorkspaceType.value)
-      console.log('  - 워크스페이스 번호:', currentWorkspaceSeq.value)
       
       // 개인/프로젝트 페이지에 따라 다른 API 엔드포인트 사용
       const endpoint = currentWorkspaceType.value === 'personal' 
@@ -566,9 +544,6 @@ export const useNotificationStore = defineStore('notification', () => {
       if (currentWorkspaceType.value === 'project') {
         requestDto.workSpaceSeq = currentWorkspaceSeq.value
       }
-      
-      console.log('  - API 엔드포인트:', endpoint)
-      console.log('  - 요청 데이터:', requestDto)
       
       // API 호출
       await apiPatch(endpoint, requestDto)
@@ -650,49 +625,28 @@ export const useNotificationStore = defineStore('notification', () => {
    * 프로젝트 페이지 - "프로젝트" 탭: 해당 프로젝트의 모든 알림 삭제
    */
   const clearAllNotifications = async () => {
+    // 프로젝트 페이지의 "모든 알림" 탭은 개인 전체 삭제와 동일
+    // 프로젝트 페이지의 "프로젝트" 탭만 해당 프로젝트 알림 삭제
+    const isProjectWorkspaceFilter = currentWorkspaceType.value === 'project' && activeFilter.value === 'workspace'
+    
+    const endpoint = isProjectWorkspaceFilter
+      ? '/workspace-service/alarms/project' 
+      : '/workspace-service/alarms/personal'
+    
+    let requestDto = null
+    if (isProjectWorkspaceFilter) {
+      requestDto = { workSpaceSeq: currentWorkspaceSeq.value }
+    }
+
     try {
+      await apiDelete(endpoint, requestDto)
       
-      // 프로젝트 페이지의 "모든 알림" 탭은 개인 전체 삭제와 동일
-      // 프로젝트 페이지의 "프로젝트" 탭만 해당 프로젝트 알림 삭제
-      const isProjectWorkspaceFilter = currentWorkspaceType.value === 'project' && activeFilter.value === 'workspace'
-      
-      const endpoint = isProjectWorkspaceFilter
-        ? '/workspace-service/alarms/project' 
-        : '/workspace-service/alarms/personal'
-      
-      let requestDto = null
-      if (isProjectWorkspaceFilter) {
-        requestDto = { workSpaceSeq: currentWorkspaceSeq.value }
-      }
-      console.log('  - API 엔드포인트:', endpoint)
-      console.log('  - 요청 데이터:', requestDto)
-
-      let deleted = false
-      try {
-        await apiDelete(endpoint, requestDto)
-        deleted = true
-      } catch (e1) {
-        try {
-          await apiPatch(endpoint, requestDto)
-          deleted = true
-        } catch (e2) {
-          const clearEndpoint = endpoint + '/clear'
-          try {
-            await apiPatch(clearEndpoint, requestDto)
-            deleted = true
-          } catch (e3) {
-            // 마지막 실패는 무시
-          }
-        }
-      }
-
       // 로컬 즉시 비우기
       notifications.value = []
-      if (deleted) {
-        await fetchNotifications()
-      }
+      await fetchNotifications()
     } catch (error) {
-      notifications.value = []
+      // 로컬 상태는 복구하지 않음 (이미 삭제된 상태로 유지)
+      throw error
     }
   }
   
@@ -701,45 +655,23 @@ export const useNotificationStore = defineStore('notification', () => {
    * @param {string} alarmType - 알림 타입 (alarm-friend, alarm-task, etc.)
    */
   const deleteFilterNotifications = async (alarmType) => {
+    const endpoint = currentWorkspaceType.value === 'personal' 
+      ? '/workspace-service/alarms/personal/type' 
+      : '/workspace-service/alarms/project/type'
+    const requestDto = { alarmType }
+    if (currentWorkspaceType.value === 'project') {
+      requestDto.workSpaceSeq = currentWorkspaceSeq.value
+    }
+
     try {
-      console.log('  - 워크스페이스 타입:', currentWorkspaceType.value)
-      console.log('  - 워크스페이스 번호:', currentWorkspaceSeq.value)
-      const endpoint = currentWorkspaceType.value === 'personal' 
-        ? '/workspace-service/alarms/personal/type' 
-        : '/workspace-service/alarms/project/type'
-      const requestDto = { alarmType }
-      if (currentWorkspaceType.value === 'project') {
-        requestDto.workSpaceSeq = currentWorkspaceSeq.value
-      }
-      console.log('  - API 엔드포인트:', endpoint)
-      console.log('  - 요청 데이터:', requestDto)
-
-      let deleted = false
-      try {
-        await apiDelete(endpoint, requestDto)
-        deleted = true
-      } catch (e1) {
-        try {
-          await apiPatch(endpoint, requestDto)
-          deleted = true
-        } catch (e2) {
-          const clearEndpoint = endpoint + '/clear'
-          try {
-            await apiPatch(clearEndpoint, requestDto)
-            deleted = true
-          } catch (e3) {
-            // 마지막 실패는 무시
-          }
-        }
-      }
-
+      await apiDelete(endpoint, requestDto)
+      
       // 로컬에서 해당 타입 제거
       notifications.value = notifications.value.filter(n => n.type !== alarmType)
-      if (deleted) {
-        await fetchNotifications()
-      }
+      await fetchNotifications()
     } catch (error) {
-      notifications.value = notifications.value.filter(n => n.type !== alarmType)
+      // 로컬 상태는 복구하지 않음 (이미 삭제된 상태로 유지)
+      throw error
     }
   }
 

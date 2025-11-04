@@ -431,8 +431,7 @@ const projectNotifications = ref([
 const personalFilters = ref([
   { key: 'all', label: '전체', icon: 'mdi-bell', alarmType: null },
   { key: 'friend', label: '친구 요청', icon: 'mdi-account-plus', alarmType: 'alarm-friend' },
-  { key: 'task', label: '개인 업무', icon: 'mdi-clipboard-list', alarmType: 'alarm-task' },
-  { key: 'project', label: '프로젝트', icon: 'mdi-folder-account', alarmType: 'alarm-project' }
+  { key: 'task', label: '개인 업무', icon: 'mdi-clipboard-list', alarmType: 'alarm-task' }
 ])
 
 // 프로젝트 스페이스용 필터 옵션
@@ -590,16 +589,26 @@ const deleteNotification = async (notificationId) => {
 
 // 전체 알림 삭제 (notificationStore로 위임)
 const clearAllNotifications = async () => {
-  // console.log('[AppHeader] 🗑️ 전체 삭제 호출')
-  await notificationStore.clearAllNotifications()
-  // console.log('[AppHeader] ✅ 전체 삭제 완료')
+  try {
+    // console.log('[AppHeader] 🗑️ 전체 삭제 호출')
+    await notificationStore.clearAllNotifications()
+    // console.log('[AppHeader] ✅ 전체 삭제 완료')
+  } catch (error) {
+    console.error('[AppHeader] ❌ 전체 삭제 실패:', error)
+    showCustomToast('알림 삭제 실패', '알림 삭제에 실패했습니다.', 'error')
+  }
 }
 
 // 타입별 알림 삭제 (notificationStore로 위임)
 const deleteFilterNotifications = async (alarmType) => {
-  // console.log('[AppHeader] 🗑️ 타입별 삭제 호출:', alarmType)
-  await notificationStore.deleteFilterNotifications(alarmType)
-  // console.log('[AppHeader] ✅ 타입별 삭제 완료')
+  try {
+    // console.log('[AppHeader] 🗑️ 타입별 삭제 호출:', alarmType)
+    await notificationStore.deleteFilterNotifications(alarmType)
+    // console.log('[AppHeader] ✅ 타입별 삭제 완료')
+  } catch (error) {
+    console.error('[AppHeader] ❌ 타입별 삭제 실패:', error)
+    showCustomToast('알림 삭제 실패', '알림 삭제에 실패했습니다.', 'error')
+  }
 }
 
 // 모든 알림 보기
