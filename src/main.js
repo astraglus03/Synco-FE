@@ -14,42 +14,43 @@ import GlobalSearch from '@/components/common/GlobalSearch.vue'
 
 // ===== 콘솔 로그 필터링 설정 =====
 // NOTE: 로컬에서 전체 로그를 보려면 localStorage.setItem('DEBUG_LOGS','1')
-const originalConsoleLog = console.log
-if (localStorage.getItem('DEBUG_LOGS') !== '1') {
-  // SSE 및 알림, 스케줄/워크스페이스 디버그 로그만 표시
-  console.log = function(...args) {
-    const firstArg = String(args[0] || '')
-    const allowedKeywords = [
-      '[SSE]',
-      '[알림',
-      'SSE 연결',
-      'SSE 메시지',
-      '알림 수신',
-      '알림 Store',
-      '[App] 로그인',
-      '[App] 로그아웃',
-      '[Schedule]',
-      '[WorkspaceMemberStore]',
-      '[Workspace]'
-    ]
-    const shouldLog = allowedKeywords.some(keyword => firstArg.includes(keyword))
-    if (shouldLog) {
-      originalConsoleLog.apply(console, args)
-    }
-  }
-}
+// const originalConsoleLog = console.log
+// if (localStorage.getItem('DEBUG_LOGS') !== '1') {
+//   // SSE 및 알림, 스케줄/워크스페이스 디버그 로그만 표시
+//   console.log = function(...args) {
+//     const firstArg = String(args[0] || '')
+//     const allowedKeywords = [
+//       '[SSE]',
+//       '[알림',
+//       'SSE 연결',
+//       'SSE 메시지',
+//       '알림 수신',
+//       '알림 Store',
+//       '[App] 로그인',
+//       '[App] 로그아웃',
+//       '[Schedule]',
+//       '[WorkspaceMemberStore]',
+//       '[Workspace]',
+//       '[인터셉터]'
+//     ]
+//     const shouldLog = allowedKeywords.some(keyword => firstArg.includes(keyword))
+//     if (shouldLog) {
+//       originalConsoleLog.apply(console, args)
+//     }
+//   }
+// }
 
 // console.warn 비활성화 (임시)
-const originalConsoleWarn = console.warn
-if (localStorage.getItem('DEBUG_LOGS') !== '1') {
-  console.warn = function(...args) {
-    const firstArg = String(args[0] || '')
-    // SSE 및 스케줄/워크스페이스 관련 경고만 표시
-    if (firstArg.includes('[SSE]') || firstArg.includes('[Schedule]') || firstArg.includes('[Workspace')) {
-      originalConsoleWarn.apply(console, args)
-    }
-  }
-}
+// const originalConsoleWarn = console.warn
+// if (localStorage.getItem('DEBUG_LOGS') !== '1') {
+//   console.warn = function(...args) {
+//     const firstArg = String(args[0] || '')
+//     // SSE 및 스케줄/워크스페이스 관련 경고만 표시
+//     if (firstArg.includes('[SSE]') || firstArg.includes('[Schedule]') || firstArg.includes('[Workspace')) {
+//       originalConsoleWarn.apply(console, args)
+//     }
+//   }
+// }
 
 const app = createApp(App)
 
