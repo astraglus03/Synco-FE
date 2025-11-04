@@ -8,7 +8,6 @@ const refreshNotifications = async () => {
     const notificationStore = useNotificationStore()
     await notificationStore.fetchNotifications()
   } catch (error) {
-    console.error('[Drive API] 알림 갱신 실패:', error)
   }
 }
 
@@ -87,7 +86,6 @@ const createApiResponse = (success, data = null, error = null) => ({
 })
 
 const handleApiError = (error, defaultMessage) => {
-  console.error(error)
   return createApiResponse(false, null, error.response?.data?.message || defaultMessage)
 }
 
@@ -175,10 +173,7 @@ class DriveApiBase {
         params: { parentFolderId: parentFolderSeq }
       })
       
-      console.log(`${this.isPersonal ? '개인' : '프로젝트'} 드라이브 응답:`, response.data)
-      
       if (!response.data?.data?.content) {
-        console.warn(`${this.isPersonal ? '개인' : '프로젝트'} 드라이브 응답 구조가 예상과 다릅니다:`, response.data)
         return createApiResponse(true, [])
       }
       
@@ -505,10 +500,8 @@ class DriveApiBase {
         newOrder: newOrder
       })
       
-      console.log('✅ 폴더 순서 변경 성공')
       return createApiResponse(true)
     } catch (error) {
-      console.error('❌ 폴더 순서 변경 실패:', error)
       return handleApiError(error, '순서 변경에 실패했습니다.')
     }
   }

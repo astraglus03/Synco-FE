@@ -125,11 +125,6 @@ export const useMeetingStore = defineStore('meeting', () => {
       isLoading.value = true
       error.value = null
       
-      console.log('📋 loadActiveRooms 호출:')
-      console.log('  - workSpaceSeq:', workSpaceSeq)
-      console.log('  - currentMemberSeq.value:', currentMemberSeq.value)
-      console.log('  - page:', page, 'size:', size)
-      
       const response = await meetingApi.getActiveRooms(workSpaceSeq, currentMemberSeq.value, page, size)
       const pageData = response.data || response
       
@@ -143,11 +138,8 @@ export const useMeetingStore = defineStore('meeting', () => {
         totalPages: pageData.totalPages || 0
       }
       
-      console.log('📋 활성 회의 목록 업데이트:', activeRooms.value.length, '개')
-      console.log('📋 페이지네이션 정보:', activeRoomsPagination.value)
       return activeRooms.value
     } catch (err) {
-      console.error('📋 loadActiveRooms 실패:', err)
       error.value = err.message || '활성 회의 목록을 불러오는데 실패했습니다.'
       throw err
     } finally {
@@ -222,7 +214,6 @@ export const useMeetingStore = defineStore('meeting', () => {
       }
       
       error.value = errorMessage
-      console.error('❌ 회의 생성 에러:', errorMessage)
       throw err
     } finally {
       isCreating.value = false
@@ -279,7 +270,6 @@ export const useMeetingStore = defineStore('meeting', () => {
       }
       
       error.value = errorMessage
-      console.error('❌ 회의 참여 에러:', errorMessage)
       throw err
     } finally {
       isJoining.value = false
@@ -312,7 +302,6 @@ export const useMeetingStore = defineStore('meeting', () => {
       
       return chatMessages.value
     } catch (err) {
-      console.error('채팅 메시지 로드 실패:', err)
       return []
     }
   }
@@ -458,10 +447,6 @@ export const useMeetingStore = defineStore('meeting', () => {
       isLoading.value = true
       error.value = null
       
-      console.log('📋 loadEndedRooms 호출:')
-      console.log('  - workSpaceSeq:', workSpaceSeq)
-      console.log('  - page:', page, 'size:', size)
-      
       const response = await meetingApi.getEndedRooms(workSpaceSeq, currentMemberSeq.value, page, size)
       const pageData = response.data || response
       
@@ -475,11 +460,8 @@ export const useMeetingStore = defineStore('meeting', () => {
         totalPages: pageData.totalPages || 0
       }
       
-      console.log('📋 종료된 회의 목록 업데이트:', endedRooms.value.length, '개')
-      console.log('📋 페이지네이션 정보:', endedRoomsPagination.value)
       return endedRooms.value
     } catch (err) {
-      console.error('📋 loadEndedRooms 실패:', err)
       error.value = err.message || '종료된 회의 목록을 불러오는데 실패했습니다.'
       throw err
     } finally {
@@ -497,7 +479,6 @@ export const useMeetingStore = defineStore('meeting', () => {
       
       return currentRoomDetail.value
     } catch (err) {
-      console.error('📋 loadRoomDetail 실패:', err)
       error.value = err.message || '회의 상세 정보를 불러오는데 실패했습니다.'
       throw err
     } finally {

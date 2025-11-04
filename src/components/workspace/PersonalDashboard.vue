@@ -1805,26 +1805,17 @@ const loadDriveFiles = async () => {
     // 개인 워크스페이스 정보 가져오기
     const personalWorkspace = workspaceStore.workspaces.find(ws => ws.type === 'personal')
     
-    console.log('📁 [개인 드라이브] 워크스페이스 검색:', personalWorkspace)
-    
     if (!personalWorkspace || !personalWorkspace.workSpaceSeq) {
-      console.warn('⚠️ [개인 드라이브] 개인 워크스페이스 정보가 없습니다')
       driveItems.value = []
       return
     }
     
-    console.log('📡 [개인 드라이브] API 호출, Seq:', personalWorkspace.workSpaceSeq)
     const response = await personalDriveApi.getItems(personalWorkspace.workSpaceSeq, null)
-    
-    console.log('📦 [개인 드라이브] API 응답:', response)
     
     // 백엔드 응답 구조 처리: { success, data } 또는 직접 배열
     const driveData = response?.data || response
     driveItems.value = Array.isArray(driveData) ? driveData : []
-    
-    console.log('✅ [개인 드라이브] 로드 완료:', driveItems.value.length, '개')
   } catch (error) {
-    console.error('❌ [개인 드라이브] 로드 실패:', error)
     driveItems.value = []
   }
 }

@@ -98,7 +98,6 @@ export const meetingApi = {
       const response = await axios.post(API_ENDPOINTS.CREATE_ROOM, roomCreateReqDto)
       return response.data
     } catch (error) {
-      console.error('화상회의 방 생성 실패:', error)
       throw error
     }
   },
@@ -109,7 +108,6 @@ export const meetingApi = {
       const response = await axios.post(API_ENDPOINTS.JOIN_ROOM(roomId), {})
       return response.data
     } catch (error) {
-      console.error('화상회의 방 참여 실패:', error)
       throw error
     }
   },
@@ -120,7 +118,6 @@ export const meetingApi = {
       const response = await axios.delete(API_ENDPOINTS.CANCEL_ROOM(roomId))
       return response.data
     } catch (error) {
-      console.error('화상회의 방 취소 실패:', error)
       throw error
     }
   },
@@ -131,7 +128,6 @@ export const meetingApi = {
       const response = await axios.post(API_ENDPOINTS.SEND_MESSAGE(roomId), chatMessageReq)
       return response.data
     } catch (error) {
-      console.error('채팅 메시지 전송 실패:', error)
       throw error
     }
   },
@@ -148,7 +144,6 @@ export const meetingApi = {
       })
       return response.data
     } catch (error) {
-      console.error('채팅 메시지 조회 실패:', error)
       throw error
     }
   },
@@ -159,7 +154,6 @@ export const meetingApi = {
       const response = await axios.post(API_ENDPOINTS.START_RECORDING(roomId), {})
       return response.data
     } catch (error) {
-      console.error('녹화 시작 실패:', error)
       throw error
     }
   },
@@ -172,7 +166,6 @@ export const meetingApi = {
       })
       return response
     } catch (error) {
-      console.error('녹화 파일 다운로드 실패:', error)
       throw error
     }
   },
@@ -183,7 +176,6 @@ export const meetingApi = {
       const response = await axios.get(API_ENDPOINTS.GET_WORKSPACE_MEMBERS(workSpaceSeq))
       return response.data
     } catch (error) {
-      console.error('워크스페이스 멤버 조회 실패:', error)
       throw error
     }
   },
@@ -196,7 +188,6 @@ export const meetingApi = {
       const response = await axios.post(API_ENDPOINTS.CREATE_BASIC_CHANNEL, channelCreateReqDto)
       return response.data
     } catch (error) {
-      console.error('기본 채널 생성 실패:', error)
       throw error
     }
   },
@@ -207,7 +198,6 @@ export const meetingApi = {
       const response = await axios.post(API_ENDPOINTS.ADD_MEMBER, channelInviteReqDto)
       return response.data
     } catch (error) {
-      console.error('멤버 추가 실패:', error)
       throw error
     }
   },
@@ -218,7 +208,6 @@ export const meetingApi = {
       const response = await axios.post(API_ENDPOINTS.DELEGATE_SUPER_AUTHORITY, delegateSuperAuthorityReqDto)
       return response.data
     } catch (error) {
-      console.error('SUPER 권한 위임 실패:', error)
       throw error
     }
   },
@@ -229,7 +218,6 @@ export const meetingApi = {
       const response = await axios.get(API_ENDPOINTS.GET_CHANNELS(workSpaceSeq))
       return response.data
     } catch (error) {
-      console.error('채널 목록 조회 실패:', error)
       throw error
     }
   },
@@ -240,7 +228,6 @@ export const meetingApi = {
       const response = await axios.delete(API_ENDPOINTS.DELETE_ALL_CHANNELS(workSpaceSeq))
       return response.data
     } catch (error) {
-      console.error('모든 채널 삭제 실패:', error)
       throw error
     }
   },
@@ -251,7 +238,6 @@ export const meetingApi = {
       const response = await axios.delete(API_ENDPOINTS.LEAVE_WORKSPACE(workSpaceSeq))
       return response.data
     } catch (error) {
-      console.error('워크스페이스 탈퇴 실패:', error)
       throw error
     }
   },
@@ -264,7 +250,6 @@ export const meetingApi = {
       })
       return response.data
     } catch (error) {
-      console.error('멤버 강제 탈퇴 실패:', error)
       throw error
     }
   },
@@ -275,7 +260,6 @@ export const meetingApi = {
       const response = await axios.post(API_ENDPOINTS.CHANGE_CHANNEL_AUTHORITY, grantAuthorityReqDto)
       return response.data
     } catch (error) {
-      console.error('채널 권한 변경 실패:', error)
       throw error
     }
   },
@@ -284,10 +268,6 @@ export const meetingApi = {
   async getActiveRooms(workSpaceSeq, memberSeq, page = 0, size = 10) {
     try {
       const url = API_ENDPOINTS.GET_ACTIVE_ROOMS(workSpaceSeq)
-      console.log('🔍 활성 회의 목록 API 호출:')
-      console.log('  - URL:', url)
-      console.log('  - workSpaceSeq:', workSpaceSeq)
-      console.log('  - memberSeq:', memberSeq)
       
       // 백엔드 엔드포인트는 /channel/{channelSeq}이지만 실제로는 workSpaceSeq를 전달해야 함
       const response = await axios.get(url, {
@@ -298,14 +278,8 @@ export const meetingApi = {
         }
       })
       
-      console.log('✅ API 응답:', response.data)
       return response.data
     } catch (error) {
-      console.error('❌ 활성 회의 목록 조회 실패:', error)
-      if (error.response) {
-        console.error('  - Status:', error.response.status)
-        console.error('  - Data:', error.response.data)
-      }
       throw error
     }
   },
@@ -314,10 +288,6 @@ export const meetingApi = {
   async getEndedRooms(workSpaceSeq, memberSeq, page = 0, size = 10) {
     try {
       const url = API_ENDPOINTS.GET_ENDED_ROOMS(workSpaceSeq)
-      console.log('🔍 종료된 회의 목록 API 호출:')
-      console.log('  - URL:', url)
-      console.log('  - workSpaceSeq:', workSpaceSeq)
-      console.log('  - memberSeq:', memberSeq)
       
       const response = await axios.get(url, {
         params: {
@@ -327,14 +297,8 @@ export const meetingApi = {
         }
       })
       
-      console.log('✅ API 응답:', response.data)
       return response.data
     } catch (error) {
-      console.error('❌ 종료된 회의 목록 조회 실패:', error)
-      if (error.response) {
-        console.error('  - Status:', error.response.status)
-        console.error('  - Data:', error.response.data)
-      }
       throw error
     }
   },
@@ -343,21 +307,11 @@ export const meetingApi = {
   async getRoomDetail(roomSeq, memberSeq) {
     try {
       const url = API_ENDPOINTS.GET_ROOM_DETAIL(roomSeq)
-      console.log('🔍 회의 상세 정보 API 호출:')
-      console.log('  - URL:', url)
-      console.log('  - roomSeq:', roomSeq)
-      console.log('  - memberSeq:', memberSeq)
       
       const response = await axios.get(url)
       
-      console.log('✅ API 응답:', response.data)
       return response.data
     } catch (error) {
-      console.error('❌ 회의 상세 정보 조회 실패:', error)
-      if (error.response) {
-        console.error('  - Status:', error.response.status)
-        console.error('  - Data:', error.response.data)
-      }
       throw error
     }
   }

@@ -345,19 +345,15 @@ const loadRoomTitle = async () => {
   }
   
   try {
-    console.log('🔍 회의 제목 API 호출 시작:', props.roomId)
     // 백엔드 API로 회의 상세 정보 가져오기 (파라미터 순서: roomSeq, memberSeq)
     const response = await meetingApi.getRoomDetail(props.roomId, authStore.memberSeq)
-    console.log('📋 API 응답:', response)
     
     if (response?.data?.roomName) {
       roomTitle.value = response.data.roomName
-      console.log('✅ 회의 제목 로드 완료:', roomTitle.value)
       // meetingData는 computed이므로 직접 수정 불가, 대신 sessionStorage 업데이트
       sessionStorage.setItem('meetingRoomName', roomTitle.value)
     }
   } catch (error) {
-    console.warn('⚠️ 회의 제목 로드 실패:', error)
   }
 }
 
@@ -366,16 +362,12 @@ const loadRoomParticipants = async () => {
   if (!props.roomId) return
   
   try {
-    console.log('🔍 회의 참가자 정보 API 호출 시작:', props.roomId)
     const response = await meetingApi.getRoomDetail(props.roomId, authStore.memberSeq)
-    console.log('📋 참가자 정보 API 응답:', response)
     
     if (response?.data?.participants && Array.isArray(response.data.participants)) {
       roomParticipants.value = response.data.participants
-      console.log('✅ 참가자 정보 로드 완료:', roomParticipants.value.length, '명')
     }
   } catch (error) {
-    console.warn('⚠️ 참가자 정보 로드 실패:', error)
   }
 }
 
@@ -432,15 +424,11 @@ const displayRoomName = computed(() => {
 const initializeExistingTracks = async () => {
   if (!room.value) return
 
-  console.log('🔍 기존 참가자 수:', room.value.remoteParticipants.size)
-
   // 참가자 정보 먼저 로드
   await loadRoomParticipants()
 
   // 원격 참가자들
   room.value.remoteParticipants.forEach((participant) => {
-    console.log('📹 기존 원격 참가자 추가:', participant.identity)
-    
     // 참가자 이름 찾기
     const participantName = getParticipantName(participant.identity)
     
@@ -463,8 +451,6 @@ const initializeExistingTracks = async () => {
       attachTrack(pub.track, room.value.localParticipant, pub)
     }
   })
-  
-  console.log('✅ 초기 트랙 붙이기 완료, remoteParticipants:', remoteParticipants.value.length)
 }
 
 // LiveKit Room 초기화
@@ -472,12 +458,6 @@ const initializeLiveKitRoom = async () => {
   try {
     const token = meetingData.value.livekitToken
     const lkRoomName = meetingData.value.livekitRoomName
-
-    console.log('[LiveKit connect try]', {
-      wsUrl: import.meta.env.VITE_LIVEKIT_API_URL,
-      tokenPreview: token?.substring?.(0, 20) + '...',
-      lkRoomName,
-    })
 
     if (!token || !lkRoomName) {
       throw new Error('LiveKit 토큰 또는 룸 이름이 없습니다.')
@@ -502,15 +482,11 @@ const initializeLiveKitRoom = async () => {
       wsUrl = wsUrl.replace('https://', 'wss://')
     }
 
-    console.log('[LiveKit] WebSocket URL:', wsUrl)
-    console.log('[LiveKit] Token preview:', token?.substring?.(0, 50))
-
     // 방 연결
     await room.value.connect(wsUrl, token)
 
     // 로컬 참가자 identity 저장
     localParticipantIdentity.value = room.value.localParticipant.identity
-    console.log('로컬 참가자 identity:', localParticipantIdentity.value)
 
     // 이벤트 리스너 등록 (connect 이후)
     setupRoomEventListeners()
@@ -520,18 +496,13 @@ const initializeLiveKitRoom = async () => {
 
     // 카메라와 마이크 트랙 생성 및 publish
     try {
-      console.log('🎥 카메라/마이크 트랙 생성 시작...')
       const tracks = await createLocalTracks({
         video: true,
         audio: true,
       })
       
-      console.log('📹 트랙 생성됨:', tracks.length, '개')
-      
       for (const track of tracks) {
-        console.log('📤 트랙 publish 중:', track.kind)
         await room.value.localParticipant.publishTrack(track)
-        console.log('✅ 트랙 publish 완료:', track.kind)
         
         // 트랙을 바로 DOM에 붙이기
         attachTrack(track, room.value.localParticipant)
@@ -539,11 +510,7 @@ const initializeLiveKitRoom = async () => {
       
       isVideoOn.value = true
       isMuted.value = false
-      
-      console.log('✅ 카메라/마이크 트랙 생성 및 publish 완료')
-      console.log('📺 현재 DOM 비디오 요소:', document.querySelectorAll('video').length)
     } catch (err) {
-      console.error('❌ 카메라/마이크 권한 요청 실패:', err)
     }
 
     // 통화 타이머 시작
@@ -552,10 +519,7 @@ const initializeLiveKitRoom = async () => {
 
     // 기존 채팅 메시지 불러오기
     await loadChatMessages()
-
-    console.log('LiveKit Room 연결 성공')
   } catch (error) {
-    console.error('LiveKit Room 초기화 실패:', error)
     alert('화상회의 연결에 실패했습니다.')
   }
 }
@@ -566,7 +530,6 @@ const setupRoomEventListeners = () => {
 
   // 새 참가자 입장
   room.value.on(RoomEvent.ParticipantConnected, async (participant) => {
-    console.log('참여자 연결:', participant.identity)
     
     // 참가자 정보 새로고침 (새 참가자가 추가되었을 수 있음)
     await loadRoomParticipants()
@@ -583,7 +546,6 @@ const setupRoomEventListeners = () => {
 
   // 참가자 퇴장
   room.value.on(RoomEvent.ParticipantDisconnected, (participant) => {
-    console.log('참여자 연결 해제:', participant.identity)
     remoteParticipants.value = remoteParticipants.value.filter(
       p => p.identity !== participant.identity
     )
@@ -595,7 +557,6 @@ const setupRoomEventListeners = () => {
   room.value.on(
     RoomEvent.TrackSubscribed,
     (track, publication, participant) => {
-      console.log('트랙 구독:', track.kind, participant.identity, 'source:', publication?.source)
       attachTrack(track, participant, publication)
     },
   )
@@ -604,7 +565,6 @@ const setupRoomEventListeners = () => {
   room.value.on(
     RoomEvent.TrackUnsubscribed,
     (track, publication, participant) => {
-      console.log('트랙 구독 해제:', track.kind, participant.identity, 'source:', publication?.source)
       detachTrack(track, participant, publication)
     },
   )
@@ -617,13 +577,11 @@ const setupRoomEventListeners = () => {
         handleChatMessage(data, participant)
       }
     } catch (err) {
-      console.error('데이터 파싱 실패:', err)
     }
   })
 
   // 룸 연결 끊김
   room.value.on(RoomEvent.Disconnected, (reason) => {
-    console.log('룸 연결 해제:', reason)
     endCall()
   })
 }
@@ -632,18 +590,15 @@ const setupRoomEventListeners = () => {
 const setupParticipantEvents = (participant) => {
   // 참가자의 트랙 게시 이벤트
   participant.on(RoomEvent.TrackPublished, (publication) => {
-    console.log('참여자 트랙 게시:', publication.kind)
   })
 
   // 참가자의 트랙 구독
   participant.on(RoomEvent.TrackSubscribed, (track, publication) => {
-    console.log('참여자 트랙 구독:', track.kind, participant.identity, 'source:', publication?.source)
     attachTrack(track, participant, publication)
   })
 
   // 참가자의 트랙 구독 해제
   participant.on(RoomEvent.TrackUnsubscribed, (track, publication) => {
-    console.log('참여자 트랙 구독 해제:', track.kind, participant.identity, 'source:', publication?.source)
     detachTrack(track, participant, publication)
   })
 }
@@ -671,8 +626,6 @@ const attachTrack = (track, participant, publication = null) => {
                          track.source === Track.Source.ScreenShareAudio
 
     if (isScreenShare) {
-      console.log('🖥️ 화면 공유 트랙 감지:', pid)
-      
       // 화면 공유 트랙 저장
       screenShareTracks.value.set(pid, { track, participant })
       
@@ -688,14 +641,11 @@ const attachTrack = (track, participant, publication = null) => {
         const screenShareElement = document.getElementById(`screen-share-${pid}`)
         if (screenShareElement) {
           track.attach(screenShareElement)
-          console.log('✅ 화면 공유 트랙 attach됨:', pid)
         } else {
-          console.warn('⚠️ 화면 공유 element 찾을 수 없음, 재시도:', `screen-share-${pid}`)
           setTimeout(() => {
             const retryElement = document.getElementById(`screen-share-${pid}`)
             if (retryElement) {
               track.attach(retryElement)
-              console.log('✅ 재시도 성공 - 화면 공유 트랙 attach됨:', pid)
             }
           }, 200)
         }
@@ -717,7 +667,6 @@ const attachTrack = (track, participant, publication = null) => {
             })
           }
           track.attach(videoElement)
-          console.log('✅ 비디오 트랙 attach됨:', pid, 'to', elementId)
           return true
         }
         return false
@@ -725,11 +674,9 @@ const attachTrack = (track, participant, publication = null) => {
       
       // 먼저 직접 요소 찾기 시도
       if (!attachCameraTrack(`video-${pid}`)) {
-        console.warn('⚠️ 비디오 element 찾을 수 없음, 재시도:', `video-${pid}`)
         // Vue의 반응형 시스템이 DOM을 업데이트할 때까지 기다림
         setTimeout(() => {
           if (!attachCameraTrack(`video-${pid}`)) {
-            console.error('❌ 재시도 실패 - 여전히 element 못 찾음:', `video-${pid}`)
             // 추가 재시도 (화면 공유 모드 전환 시 DOM이 늦게 업데이트될 수 있음)
             setTimeout(() => {
               attachCameraTrack(`video-${pid}`)
@@ -760,8 +707,6 @@ const detachTrack = (track, participant, publication = null) => {
                          track.source === Track.Source.ScreenShareAudio
 
     if (isScreenShare) {
-      console.log('🖥️ 화면 공유 트랙 해제:', pid)
-      
       // 화면 공유 트랙 제거
       screenShareTracks.value.delete(pid)
       
@@ -868,7 +813,6 @@ const handleChatMessage = (data, participant) => {
 // 녹화 처리
 const handleRecording = async () => {
   if (!meetingData.value?.isHost) {
-    console.warn('❌ 호스트가 아닙니다. 녹화 권한이 없습니다.')
     return
   }
 
@@ -889,19 +833,10 @@ const handleRecording = async () => {
 // 녹화 시작
 const startRecording = async () => {
   try {
-    console.log('🎬 녹화 시작 시도:', {
-      memberSeq: authStore.memberSeq,
-      roomId: props.roomId
-    })
-    
     const response = await meetingApi.startRecording(authStore.memberSeq, props.roomId)
-    console.log('✅ 녹화 시작 성공:', response)
     
     isRecording.value = true
-    
-    console.log('📊 녹화 상태 업데이트: isRecording =', isRecording.value)
   } catch (err) {
-    console.error('❌ 녹화 시작 실패:', err)
     alert('녹화 시작에 실패했습니다: ' + (err.message || err))
   }
 }
@@ -912,7 +847,6 @@ const startRecording = async () => {
 const endCall = async () => {
   // 이미 종료 중이면 중복 호출 방지
   if (isEndingCall.value) {
-    console.log('⚠️ 이미 종료 중입니다.')
     return
   }
   
@@ -921,7 +855,6 @@ const endCall = async () => {
   try {
     // LiveKit 방 나가기 (Webhook이 자동으로 회의 종료 처리함)
     if (room.value) {
-      console.log('📞 LiveKit 방 나가기...')
       await room.value.disconnect()
       room.value = null
     }
@@ -941,7 +874,6 @@ const endCall = async () => {
 
     window.close()
   } catch (err) {
-    console.error('통화 종료 중 문제:', err)
     window.close()
   }
 }
@@ -958,7 +890,6 @@ const toggleMute = async () => {
       isMuted.value = true
     }
   } catch (err) {
-    console.error('마이크 토글 중 문제:', err)
   }
 }
 
@@ -974,7 +905,6 @@ const toggleVideo = async () => {
       isVideoOn.value = true
     }
   } catch (err) {
-    console.error('비디오 토글 중 문제:', err)
   }
 }
 
@@ -990,7 +920,6 @@ const toggleScreenShare = async () => {
       isScreenSharing.value = true
     }
   } catch (err) {
-    console.error('화면 공유 토글 중 문제:', err)
   }
 }
 
@@ -1020,7 +949,6 @@ const expandVideo = (participantId, type) => {
       const screenShareData = screenShareTracks.value.get(participantId)
       if (screenShareData?.track) {
         screenShareData.track.attach(expandedElement)
-        console.log('✅ 확대된 화면 공유 트랙 attach됨')
       }
     } else {
       // 카메라 트랙 찾기
@@ -1034,7 +962,6 @@ const expandVideo = (participantId, type) => {
               pub.source !== Track.Source.ScreenShare && 
               pub.source !== Track.Source.ScreenShareAudio) {
             pub.track.attach(expandedElement)
-            console.log('✅ 확대된 카메라 트랙 attach됨')
           }
         })
       }
@@ -1120,7 +1047,6 @@ const reattachAllCameraTracks = async () => {
             pub.source !== Track.Source.ScreenShare && 
             pub.source !== Track.Source.ScreenShareAudio) {
           pub.track.attach(localVideoElement)
-          console.log('✅ 로컬 카메라 트랙 재attach:', localParticipantIdentity.value)
         }
       })
     }
@@ -1135,7 +1061,6 @@ const reattachAllCameraTracks = async () => {
             pub.source !== Track.Source.ScreenShare && 
             pub.source !== Track.Source.ScreenShareAudio) {
           pub.track.attach(videoElement)
-          console.log('✅ 원격 카메라 트랙 재attach:', participant.identity)
         }
       })
     }
@@ -1146,7 +1071,6 @@ const reattachAllCameraTracks = async () => {
 watch(activeScreenShare, async (newVal, oldVal) => {
   // 화면 공유가 시작되거나 종료될 때
   if (newVal !== oldVal) {
-    console.log('🔄 화면 공유 모드 변경 감지:', newVal ? '시작' : '종료')
     // DOM 업데이트 후 카메라 트랙 재attach
     await nextTick()
     await reattachAllCameraTracks()
@@ -1163,14 +1087,10 @@ const loadChatMessages = async () => {
       50 // 최근 50개 메시지
     )
     
-    console.log('📨 채팅 메시지 응답 구조:', response)
-    
     // ResponseDto 구조: { success, code, message, data }
     // data가 Page 객체: { content: [...], totalElements: ... }
     const pageData = response.data || response
     const messagesArray = pageData.content || []
-    
-    console.log('📋 파싱된 메시지 배열:', messagesArray.length, '개')
     
     if (Array.isArray(messagesArray) && messagesArray.length > 0) {
       const messages = messagesArray.map((msg) => {
@@ -1194,7 +1114,6 @@ const loadChatMessages = async () => {
       }).reverse();
       
       chatMessages.value = messages
-      console.log('✅ 채팅 메시지 로드 완료:', messages.length, '개')
       
       // 채팅 스크롤을 맨 아래로
       setTimeout(() => {
@@ -1203,11 +1122,9 @@ const loadChatMessages = async () => {
         }
       }, 100)
     } else {
-      console.log('📭 채팅 메시지 없음')
       chatMessages.value = []
     }
   } catch (err) {
-    console.error('❌ 채팅 메시지 로드 실패:', err)
     chatMessages.value = []
   }
 }
@@ -1248,7 +1165,6 @@ const sendMessage = async () => {
         }
       )
     } catch (apiErr) {
-      console.warn('백엔드 채팅 저장 실패 (LiveKit은 전송됨):', apiErr)
     }
 
     // 3. 내 메시지를 UI에 즉시 표시
@@ -1274,7 +1190,6 @@ const sendMessage = async () => {
       }
     }, 100)
   } catch (err) {
-    console.error('메시지 전송 중 문제:', err)
   }
 }
 

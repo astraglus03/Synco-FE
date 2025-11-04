@@ -627,7 +627,6 @@ const refreshMeetings = async () => {
       }
     }
   } catch (error) {
-    console.error('회의 목록 새로고침 실패:', error)
   }
 }
 
@@ -644,7 +643,6 @@ const onTabChange = async (tab) => {
       }
     }
   } catch (error) {
-    console.error('회의 목록 로드 실패:', error)
   }
 }
 
@@ -662,7 +660,6 @@ const onActivePageChange = async (page) => {
       window.scrollTo({ top: 0, behavior: 'smooth' })
     }
   } catch (error) {
-    console.error('활성 회의 페이지 변경 실패:', error)
   }
 }
 
@@ -680,7 +677,6 @@ const onEndedPageChange = async (page) => {
       window.scrollTo({ top: 0, behavior: 'smooth' })
     }
   } catch (error) {
-    console.error('종료된 회의 페이지 변경 실패:', error)
   }
 }
 
@@ -690,7 +686,6 @@ const openRoomDetail = async (room) => {
     await meetingStore.loadRoomDetail(room.roomId)
     showRoomDetailModal.value = true
   } catch (error) {
-    console.error('회의 상세 정보 로드 실패:', error)
   }
 }
 
@@ -718,7 +713,6 @@ const downloadMeetingRecording = async () => {
     document.body.removeChild(link)
     window.URL.revokeObjectURL(url)
   } catch (error) {
-    console.error('회의 음성 다운로드 실패:', error)
     alert('회의 음성 다운로드 중 오류가 발생했습니다.')
   }
 }
@@ -740,7 +734,6 @@ const joinFirstActiveRoom = async () => {
     try {
       await joinRoom(activeRooms.value[0])
     } catch (error) {
-      console.error('첫 회의 참여 실패:', error)
       // 에러는 meetingStore에서 이미 설정되므로 스낵바만 표시
       if (meetingStore.error) {
         showError.value = true
@@ -753,7 +746,6 @@ const joinRoom = async (room) => {
   try {
     await meetingStore.joinRoom(room.roomId)
   } catch (error) {
-    console.error('회의 참여 실패:', error)
     // 에러는 meetingStore에서 이미 설정되므로 스낵바만 표시
     if (meetingStore.error) {
       showError.value = true
@@ -767,7 +759,6 @@ const cancelRoom = async (room) => {
       await meetingStore.cancelRoom(room.roomId)
       await refreshMeetings()
     } catch (error) {
-      console.error('회의 취소 실패:', error)
     }
   }
 }
@@ -790,7 +781,6 @@ const confirmCreateRoom = async () => {
     closeCreateRoomModal()
     await refreshMeetings()
   } catch (error) {
-    console.error('회의 생성 실패:', error)
     // 에러는 meetingStore에서 이미 설정되므로 스낵바만 표시
     if (meetingStore.error) {
       showError.value = true
@@ -816,11 +806,8 @@ const initialize = async () => {
   try {
     // 워크스페이스 seq 확인
     if (!currentWorkSpaceSeq.value) {
-      console.error('워크스페이스 seq가 없습니다. 현재 워크스페이스:', workspaceStore.currentWorkspaceInfo)
       return
     }
-    
-    console.log('초기화 시작 - 워크스페이스 seq:', currentWorkSpaceSeq.value)
     
     // 현재 사용자 정보 설정
     meetingStore.setCurrentUser(
@@ -857,7 +844,6 @@ const initialize = async () => {
       currentEndedPage.value = 1
     }
   } catch (error) {
-    console.error('초기화 실패:', error)
   }
 }
 
@@ -866,7 +852,6 @@ watch(() => workspaceStore.currentWorkspaceInfo, async (newWorkspace, oldWorkspa
   if (newWorkspace && newWorkspace.workSpaceSeq) {
     // 워크스페이스가 실제로 변경된 경우에만 초기화
     if (!oldWorkspace || oldWorkspace.workSpaceSeq !== newWorkspace.workSpaceSeq) {
-      console.log('워크스페이스 변경 감지:', newWorkspace)
       await initialize()
     }
   }
