@@ -7,7 +7,7 @@
     
     <!-- 2. 통계 카드 그리드 (4개 카드) -->
     <v-row class="stats-grid">
-      <v-col cols="12" sm="6" md="3" class="stat-col">
+      <v-col cols="12" sm="6" md="6" lg="3" class="stat-col">
         <v-card class="stat-card stat-card-primary">
           <v-card-text class="d-flex align-center">
             <div class="stat-icon primary">
@@ -22,7 +22,7 @@
         </v-card>
       </v-col>
 
-      <v-col cols="12" sm="6" md="3" class="stat-col">
+      <v-col cols="12" sm="6" md="6" lg="3" class="stat-col">
         <div 
           class="stat-card-wrapper"
           @mouseenter="showInProgressDropdown = true"
@@ -75,7 +75,7 @@
         </div>
       </v-col>
 
-      <v-col cols="12" sm="6" md="3" class="stat-col">
+      <v-col cols="12" sm="6" md="6" lg="3" class="stat-col">
         <div 
           class="stat-card-wrapper"
           @mouseenter="showCompletedDropdown = true"
@@ -128,7 +128,7 @@
         </div>
       </v-col>
 
-      <v-col cols="12" sm="6" md="3" class="stat-col">
+      <v-col cols="12" sm="6" md="6" lg="3" class="stat-col">
         <v-card 
           class="stat-card stat-card-info clickable"
           @click="toggleMemberSidebar"
@@ -2916,6 +2916,71 @@ watch(showTaskDetailModal, async (newVal, oldVal) => {
 }
 
 /* 반응형 */
+@media (max-width: 1024px) {
+  .team-dashboard {
+    padding: 20px;
+  }
+
+  .dashboard-header h1 {
+    font-size: 26px;
+  }
+
+  /* 통계 카드 그리드 - 2열로 변경 */
+  .stats-grid :deep(.v-row) {
+    margin: 0 !important;
+  }
+
+  .stats-grid :deep(.v-col) {
+    padding: 8px !important;
+  }
+
+  .stat-card .v-card-text {
+    padding: 16px;
+    min-height: 90px;
+  }
+
+  .stat-icon {
+    width: 56px;
+    height: 56px;
+    margin-right: 12px;
+  }
+
+  .stat-value {
+    font-size: 28px;
+  }
+
+  .stat-label {
+    font-size: 13px;
+  }
+
+  /* 프로젝트 진행 흐름 카드 */
+  .flow-header {
+    padding: 16px 20px;
+  }
+
+  .flow-title-text h3 {
+    font-size: 18px;
+  }
+
+  .flow-controls {
+    gap: 12px;
+  }
+
+  .chart-container {
+    height: 200px;
+    padding: 0 4px;
+  }
+
+  /* 업무 목록 섹션 */
+  .task-section {
+    padding: 16px;
+  }
+
+  .task-section-title {
+    font-size: 18px;
+  }
+}
+
 @media (max-width: 960px) {
   .flow-header {
     flex-direction: column;

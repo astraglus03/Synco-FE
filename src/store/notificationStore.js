@@ -1,10 +1,8 @@
 import { defineStore } from 'pinia'
 import { ref, computed, watch } from 'vue'
-import { ref, computed, watch } from 'vue'
 import sseConnection from '@/api/notification/sseApi'
 import { apiGet, apiPatch, apiDelete } from '@/utils/api'
 import { emitter } from '@/eventBus'
-import { useAuthStore } from '@/store/authStore'
 import { useWorkspaceStore } from '@/store/workspaceStore'
 
 export const useNotificationStore = defineStore('notification', () => {
@@ -54,11 +52,6 @@ export const useNotificationStore = defineStore('notification', () => {
   watch(channelNotificationCounts, () => {
     saveChannelNotificationCounts()
   }, { deep: true })
-
-  // 중복 요청 방지용 플래그
-  const processingMarkAsRead = ref(new Set()) // 처리 중인 notificationId
-  const isMarkingAllAsRead = ref(false) // 전체 읽음 처리 중
-  const processingMarkFilterAsRead = ref(new Set()) // 타입별 읽음 처리 중 (alarmType)
 
   // ===== Computed =====
   
@@ -126,30 +119,11 @@ export const useNotificationStore = defineStore('notification', () => {
     const key = String(channelSeq)
     channelNotificationCounts.value[key] = 0
     saveChannelNotificationCounts()
-    saveChannelNotificationCounts()
   }
   
   // 특정 채널에 알림이 있는지 확인 (bold 처리용)
   const hasChannelNotification = (channelSeq) => {
     return getChannelNotificationCount(channelSeq) > 0
-  }
-  
-  // 워크스페이스별 채팅 채널 알림 개수 계산
-  // (채널 목록을 받아서 각 채널의 알림 개수를 합산)
-  const getWorkspaceChatNotificationCount = (chatChannels) => {
-    if (!chatChannels || !Array.isArray(chatChannels) || chatChannels.length === 0) {
-      return 0
-    }
-    
-    return chatChannels.reduce((total, channel) => {
-      const count = getChannelNotificationCount(channel.channelSeq)
-      return total + count
-    }, 0)
-  }
-  
-  // 워크스페이스에 채팅 알림이 있는지 확인
-  const hasWorkspaceChatNotification = (chatChannels) => {
-    return getWorkspaceChatNotificationCount(chatChannels) > 0
   }
   
   // 워크스페이스별 채팅 채널 알림 개수 계산
@@ -194,125 +168,91 @@ export const useNotificationStore = defineStore('notification', () => {
    * SSE 메시지 핸들러 (단일 인스턴스)
    */
   const sseMessageHandler = (data) => {
-    // member-status 이벤트 처리 (즉시 처리, 비동기로 전파)
-    if (data.type === 'member-status') {
-      // 동기적으로 이벤트 전파 (다음 틱까지 기다리지 않음)
-      handleMemberStatusUpdate(data).catch(() => {
-        // 에러 무시
-      })
-      return
-    }
-    
-    // 기타 알림 처리
+    console.log('[알림 Store] 📬 메시지 수신:', data)
     handleNotification(data)
-  }
-
-  /**
-   * 멤버 상태 업데이트 처리
-   */
-  const handleMemberStatusUpdate = async (data) => {
-    try {
-      // MemberStatusResDto 구조에 맞춰 데이터 추출
-      // 백엔드에서 보내는 payload는 MemberStatusResDto 직렬화 결과
-      // 가능한 필드명: memberSeq, memberId, activeStatus, status 등
-      const memberSeq = data.memberSeq || data.data?.memberSeq || data.member?.memberSeq
-      const memberId = data.memberId || data.data?.memberId
-      const activeStatus = data.activeStatus || data.data?.activeStatus || data.member?.activeStatus || data.status
-      
-      // memberSeq가 없고 memberId만 있는 경우, memberId로 memberSeq 조회 필요할 수 있음
-      // 일단은 memberSeq 우선 사용
-      
-      if (!memberSeq || !activeStatus) {
-        return
-      }
-      
-      // eventBus로 이벤트 전파 (동기적으로 즉시 전파)
-      // nextTick을 사용하지 않고 바로 emit하여 즉시 처리되도록 함
-      emitter.emit('member-status-updated', {
-        memberSeq: Number(memberSeq), // 숫자로 변환하여 타입 일치
-        activeStatus: String(activeStatus).toUpperCase() // 대문자로 통일 (ONLINE, OFFLINE, AWAY)
-      })
-      
-      // workspaceMemberStore에도 직접 업데이트 (비동기, 실패해도 무시)
-      try {
-        const { useWorkspaceMemberStore } = await import('@/store/workspaceMemberStore')
-        const workspaceMemberStore = useWorkspaceMemberStore()
-        workspaceMemberStore.updateMemberStatus(Number(memberSeq), String(activeStatus).toUpperCase())
-      } catch (storeError) {
-        // 업데이트 실패 무시
-      }
-    } catch (error) {
-      // 에러 무시
-    }
   }
 
   /**
    * SSE 연결 시작
    */
   const connectSSE = () => {
+    console.log('[알림 Store] 🔌 SSE 연결 요청')
+
     // 이미 연결되어 있으면 무시
     if (sseConnection.isConnected()) {
+      console.log('[알림 Store] ✅ 이미 연결됨')
       sseConnected.value = true
       return
     }
-    
+
     // 메시지 콜백 등록 (중복 방지는 sseConnection에서 처리)
+    console.log('[알림 Store] 📝 콜백 등록 중...')
     sseConnection.onMessage(sseMessageHandler)
 
     // SSE 연결
+    console.log('[알림 Store] 📡 sseConnection.connect() 호출')
     sseConnection.connect()
 
-    // 연결 상태 확인 (주기적으로 체크)
-    const checkConnection = () => {
-      const isConnected = sseConnection.isConnected()
-      if (sseConnected.value !== isConnected) {
-        sseConnected.value = isConnected
-      }
-    }
+    // 연결 상태 확인 (여러 번 체크)
+    console.log('[알림 Store] ⏳ 연결 상태 확인 스케줄링...')
     
-    // 즉시 확인
-    checkConnection()
-    
-    // 1초 후 확인
-    setTimeout(checkConnection, 1000)
-    
-    // 3초 후 확인
-    setTimeout(checkConnection, 3000)
-    
-    // 5초 후 확인
-    setTimeout(checkConnection, 5000)
-    
-    // 주기적으로 연결 상태 확인 (10초마다)
-    const statusCheckInterval = setInterval(() => {
-      checkConnection()
-      // 연결되어 있으면 주기적 체크 중단
-      if (sseConnection.isConnected()) {
-        clearInterval(statusCheckInterval)
-      }
-    }, 10000)
-    
-    // 1분 후 주기적 체크 중단 (타임아웃)
+    // 1초 후 첫 확인
     setTimeout(() => {
-      clearInterval(statusCheckInterval)
-    }, 60000)
+      const status = sseConnection.getConnectionStatus()
+      const isConnected = sseConnection.isConnected()
+      console.log('[알림 Store] 📊 1초 후 연결 상태:', status, '/ isConnected:', isConnected)
+      sseConnected.value = isConnected
+    }, 1000)
+    
+    // 3초 후 재확인
+    setTimeout(() => {
+      const status = sseConnection.getConnectionStatus()
+      const isConnected = sseConnection.isConnected()
+      console.log('[알림 Store] 📊 3초 후 연결 상태:', status, '/ isConnected:', isConnected)
+      sseConnected.value = isConnected
+    }, 3000)
+    
+    // 5초 후 최종 확인
+    setTimeout(() => {
+      const status = sseConnection.getConnectionStatus()
+      const isConnected = sseConnection.isConnected()
+      console.log('[알림 Store] 📊 5초 후 연결 상태:', status, '/ isConnected:', isConnected)
+      sseConnected.value = isConnected
+      
+      if (isConnected) {
+        console.log('[알림 Store] ✅ SSE 연결 성공!')
+      } else {
+        console.error('[알림 Store] ❌ 5초 후에도 연결 안 됨!')
+        console.error('[알림 Store] 🔍 백엔드 확인 필요:')
+        console.error('[알림 Store]    1. 백엔드 서버가 실행 중인가?')
+        console.error('[알림 Store]    2. /workspace-service/alarms/sse/connect 엔드포인트가 동작하는가?')
+        console.error('[알림 Store]    3. 백엔드 로그에 오류가 있는가?')
+        console.error('[알림 Store]    4. SseEmitter를 제대로 반환하는가?')
+      }
+    }, 5000)
   }
 
   /**
    * SSE 연결 종료
    */
   const disconnectSSE = () => {
+    console.log('[알림 Store] 🔌 SSE 연결 종료 요청')
+
     // 콜백 제거
     sseConnection.offMessage(sseMessageHandler)
 
     // 연결 종료
     sseConnection.disconnect()
     sseConnected.value = false
+
+    console.log('[알림 Store] ✅ SSE 연결 종료 완료')
   }
 
   /**
    * SSE 재연결 카운터 초기화
    */
   const resetSSEReconnection = () => {
+    console.log('[알림 Store] 🔄 재연결 카운터 초기화')
     sseConnection.resetReconnection()
   }
   
@@ -320,14 +260,15 @@ export const useNotificationStore = defineStore('notification', () => {
    * 알림 처리 (SSE 메시지 → 알림 객체 변환 → 목록 추가)
    */
   const handleNotification = (data) => {
+    console.log('[알림 Store] 🔔 알림 추가 시작')
+    console.log('[알림 Store] 📦 데이터:', data)
+
     // 알림 타입 정규화
     const notificationType = normalizeType(data.alarmType || data.type || 'UNKNOWN')
 
     // alarm-chat 타입 특별 처리
     if (notificationType === 'alarm-chat') {
       const targetSeq = data.targetSeq || data.channelSeq || data.data?.targetSeq || data.data?.channelSeq
-      const workSpaceSeq = data.workSpaceSeq || data.data?.workSpaceSeq
-      
       const workSpaceSeq = data.workSpaceSeq || data.data?.workSpaceSeq
       
       if (targetSeq) {
@@ -354,6 +295,7 @@ export const useNotificationStore = defineStore('notification', () => {
           
           if (isCurrentlySelected) {
             // 현재 선택된 1:1 채팅 채널이면 알림을 증가시키지 않음
+            console.log('[알림 Store] ⏭️ 현재 선택된 1:1 채팅 채널이므로 알림 스킵:', targetSeq, '현재 워크스페이스:', currentWorkspaceType.value)
             return
           }
           
@@ -362,11 +304,11 @@ export const useNotificationStore = defineStore('notification', () => {
           // (개인/프로젝트 워크스페이스 모두 동일하게 처리)
           const key = String(targetSeq)
           channelNotificationCounts.value[key] = (channelNotificationCounts.value[key] || 0) + 1
+          console.log('[알림 Store] 📢 1:1 채팅 알림, 채널:', targetSeq, '개수:', channelNotificationCounts.value[key])
           
           // 마지막 메시지 업데이트
           const messageContent = data.message || data.content || data.chatMessageText || '';
           if (messageContent) {
-            emitter.emit('update-direct-message-last-message', {
             emitter.emit('update-direct-message-last-message', {
               channelSeq: targetSeq,
               lastMessage: messageContent
@@ -393,44 +335,26 @@ export const useNotificationStore = defineStore('notification', () => {
           
           if (isCurrentlySelected) {
             // 현재 선택된 채널이면 알림을 증가시키지 않음
+            console.log('[알림 Store] ⏭️ 현재 선택된 채널이므로 알림 스킵:', targetSeq)
             return
           }
           
           // 선택된 채널이 아니면 알림 개수 증가 (현재 워크스페이스 타입과 관계없이 항상 처리)
           const key = String(targetSeq)
           channelNotificationCounts.value[key] = (channelNotificationCounts.value[key] || 0) + 1
+          console.log('[알림 Store] 📢 프로젝트 채팅 알림, 채널:', targetSeq, '개수:', channelNotificationCounts.value[key], '워크스페이스:', workSpaceSeq || '미지정', '현재 워크스페이스:', currentWorkspaceType.value)
         }
         
         // alarm-chat은 알림 목록에 추가하지 않음
         return
       }
     }
-    
-    // 사용자 알림 설정 확인 (CHAT 타입이 아닌 경우에만)
-    // 항상 최신 값을 읽기 위해 authStore.user.value를 사용 (ref 반응형)
-    const authStore = useAuthStore()
-    const currentUser = authStore.user?.value || authStore.user // ref이거나 일반 객체일 수 있음
-    const ynAlarmOffSet = currentUser?.ynAlarmOffSet
-    
-    // authStore.user가 없거나 ynAlarmOffSet이 없으면 알림을 표시 (기본값: 알림 ON)
-    if (!currentUser || ynAlarmOffSet === undefined || ynAlarmOffSet === null) {
-      // 알림 설정 정보가 없으면 알림을 표시 (기본값: 알림 ON)
-    } else if (ynAlarmOffSet === 'N' && notificationType !== 'alarm-chat') {
-      // 알림이 꺼져있으면 ('N') 알림을 표시하지 않음 (CHAT 타입은 예외)
-      return
-    }
-
-    // message 필드가 없거나 비어있으면 알림을 표시하지 않음
-    const message = data.message ? String(data.message).trim() : ''
-    if (!message || message.length === 0) {
-      return
-    }
 
     // 알림 객체 생성
     const notification = {
       id: String(data.alarmSeq || data.id || Date.now()),
       type: notificationType,
-      message: message,
+      message: data.message || '새로운 알림이 있습니다',
       time: '방금 전',
       read: false,
       priority: data.priority || 'normal',
@@ -442,12 +366,15 @@ export const useNotificationStore = defineStore('notification', () => {
 
     // 친구 요청 알림 특별 처리
     if (data.type === 'FRIEND_REQUEST' || data.alarmType === 'alarm-friend') {
+      notification.message = data.message || `${data.sender || '누군가'}가 친구 요청을 보냈습니다`
       notification.user = {
         name: data.sender || '알 수 없음',
         avatar: data.sender?.charAt(0) || '?',
         status: 'online'
       }
     }
+
+    console.log('[알림 Store] 📊 추가 전 알림 개수:', notifications.value.length)
 
     // 중복 방지: 같은 alarmSeq가 이미 있으면 갱신만 수행
     if (notification.alarmSeq) {
@@ -458,6 +385,7 @@ export const useNotificationStore = defineStore('notification', () => {
           ...notification,
           read: notifications.value[existingIndex].read && notification.read
         }
+        console.log('[알림 Store] 🔁 기존 알림 갱신(alarmSeq 중복)')
       } else {
         // 알림 목록 맨 앞에 추가 (최신순)
         notifications.value.unshift(notification)
@@ -466,6 +394,9 @@ export const useNotificationStore = defineStore('notification', () => {
       // alarmSeq가 없으면 안전하게 추가만
       notifications.value.unshift(notification)
     }
+
+    console.log('[알림 Store] ✅ 알림 추가 완료, 현재 개수:', notifications.value.length)
+    console.log('[알림 Store] 📋 추가된 알림:', notification.message)
 
     // 브라우저 알림 표시
     showBrowserNotification(notification)
@@ -502,12 +433,6 @@ export const useNotificationStore = defineStore('notification', () => {
   const setWorkspace = (type, workspaceSeq = null) => {
     currentWorkspaceType.value = type
     currentWorkspaceSeq.value = workspaceSeq
-    
-    // 개인 워크스페이스로 변경 시 'project' 필터가 활성화되어 있으면 'all'로 변경
-    if (type === 'personal' && activeFilter.value === 'project') {
-      activeFilter.value = 'all'
-    }
-    
     // console.log('[알림 Store] 🔄 setWorkspace 호출:', { type, workspaceSeq })
     // console.log('[알림 Store] 🔄 설정 후 currentWorkspaceSeq:', currentWorkspaceSeq.value)
     // console.log('[알림 Store] 🔄 현재 알림 개수:', notifications.value.length)
@@ -525,11 +450,6 @@ export const useNotificationStore = defineStore('notification', () => {
    * 필터 변경
    */
   const setActiveFilter = (filterKey) => {
-    // 개인 워크스페이스에서 'project' 필터는 허용하지 않음 (탭 제거됨)
-    if (currentWorkspaceType.value === 'personal' && filterKey === 'project') {
-      activeFilter.value = 'all'
-      return
-    }
     activeFilter.value = filterKey
   }
   
@@ -537,11 +457,6 @@ export const useNotificationStore = defineStore('notification', () => {
    * 단건 알림 읽음 처리 (API 연동)
    */
   const markAsRead = async (notificationId) => {
-    // 중복 요청 방지
-    if (processingMarkAsRead.value.has(notificationId)) {
-      return
-    }
-    
     try {
       const notification = notifications.value.find(n => n.id === notificationId)
       if (!notification) {
@@ -558,7 +473,6 @@ export const useNotificationStore = defineStore('notification', () => {
         return
       }
 
-      processingMarkAsRead.value.add(notificationId)
       // console.log('[알림 Store] 🔄 알림 읽음 처리 시작:', alarmSeq)
 
       // API 호출
@@ -574,12 +488,10 @@ export const useNotificationStore = defineStore('notification', () => {
       // console.error('[알림 Store] ❌ 에러 상세:', error.response?.data || error.message)
       
       // 에러가 나도 UI는 업데이트 (낙관적 업데이트)
-      const notification = notifications.value.find(n => n.id === notificationId)
-      if (notification) {
-        notification.read = true
+    const notification = notifications.value.find(n => n.id === notificationId)
+    if (notification) {
+      notification.read = true
       }
-    } finally {
-      processingMarkAsRead.value.delete(notificationId)
     }
   }
   
@@ -590,13 +502,11 @@ export const useNotificationStore = defineStore('notification', () => {
    * 프로젝트 페이지 - "프로젝트" 탭: 해당 프로젝트의 모든 알림 읽음
    */
   const markAllAsRead = async () => {
-    // 중복 요청 방지
-    if (isMarkingAllAsRead.value) {
-      return
-    }
-    
     try {
-      isMarkingAllAsRead.value = true
+      // console.log('[알림 Store] 🔄 전체 알림 읽음 처리 시작...')
+      console.log('  - 워크스페이스 타입:', currentWorkspaceType.value)
+      console.log('  - 워크스페이스 번호:', currentWorkspaceSeq.value)
+      console.log('  - 활성 필터:', activeFilter.value)
       
       // 프로젝트 페이지의 "모든 알림" 탭은 개인 전체 읽음과 동일
       // 프로젝트 페이지의 "프로젝트" 탭만 해당 프로젝트 알림 읽음
@@ -617,6 +527,9 @@ export const useNotificationStore = defineStore('notification', () => {
         }
       }
       
+      console.log('  - API 엔드포인트:', endpoint)
+      console.log('  - 요청 데이터:', requestDto)
+      
       // API 호출
       await apiPatch(endpoint, requestDto)
       
@@ -630,9 +543,7 @@ export const useNotificationStore = defineStore('notification', () => {
       // console.error('[알림 Store] ❌ 에러 상세:', error.response?.data || error.message)
       
       // 에러가 나도 로컬 상태는 업데이트 (낙관적 업데이트)
-      notifications.value.forEach(n => n.read = true)
-    } finally {
-      isMarkingAllAsRead.value = false
+    notifications.value.forEach(n => n.read = true)
     }
   }
   
@@ -641,13 +552,11 @@ export const useNotificationStore = defineStore('notification', () => {
    * @param {string} alarmType - 알림 타입 (alarm-friend, alarm-task, etc.)
    */
   const markFilterAsRead = async (alarmType) => {
-    // 중복 요청 방지
-    if (processingMarkFilterAsRead.value.has(alarmType)) {
-      return
-    }
-    
     try {
-      processingMarkFilterAsRead.value.add(alarmType)
+      // console.log('[알림 Store] 🔄 타입별 알림 읽음 처리 시작')
+      console.log('  - 알림 타입:', alarmType)
+      console.log('  - 워크스페이스 타입:', currentWorkspaceType.value)
+      console.log('  - 워크스페이스 번호:', currentWorkspaceSeq.value)
       
       // 개인/프로젝트 페이지에 따라 다른 API 엔드포인트 사용
       const endpoint = currentWorkspaceType.value === 'personal' 
@@ -665,6 +574,9 @@ export const useNotificationStore = defineStore('notification', () => {
         requestDto.workSpaceSeq = currentWorkspaceSeq.value
       }
       
+      console.log('  - API 엔드포인트:', endpoint)
+      console.log('  - 요청 데이터:', requestDto)
+      
       // API 호출
       await apiPatch(endpoint, requestDto)
       
@@ -681,8 +593,6 @@ export const useNotificationStore = defineStore('notification', () => {
       notifications.value
         .filter(n => n.type === alarmType)
         .forEach(n => n.read = true)
-    } finally {
-      processingMarkFilterAsRead.value.delete(alarmType)
     }
   }
   
@@ -745,28 +655,52 @@ export const useNotificationStore = defineStore('notification', () => {
    * 프로젝트 페이지 - "프로젝트" 탭: 해당 프로젝트의 모든 알림 삭제
    */
   const clearAllNotifications = async () => {
-    // 프로젝트 페이지의 "모든 알림" 탭은 개인 전체 삭제와 동일
-    // 프로젝트 페이지의 "프로젝트" 탭만 해당 프로젝트 알림 삭제
-    const isProjectWorkspaceFilter = currentWorkspaceType.value === 'project' && activeFilter.value === 'workspace'
-    
-    const endpoint = isProjectWorkspaceFilter
-      ? '/workspace-service/alarms/project' 
-      : '/workspace-service/alarms/personal'
-    
-    let requestDto = null
-    if (isProjectWorkspaceFilter) {
-      requestDto = { workSpaceSeq: currentWorkspaceSeq.value }
-    }
-
     try {
-      await apiDelete(endpoint, requestDto)
+      console.log('  - 워크스페이스 타입:', currentWorkspaceType.value)
+      console.log('  - 워크스페이스 번호:', currentWorkspaceSeq.value)
+      console.log('  - 활성 필터:', activeFilter.value)
       
+      // 프로젝트 페이지의 "모든 알림" 탭은 개인 전체 삭제와 동일
+      // 프로젝트 페이지의 "프로젝트" 탭만 해당 프로젝트 알림 삭제
+      const isProjectWorkspaceFilter = currentWorkspaceType.value === 'project' && activeFilter.value === 'workspace'
+      
+      const endpoint = isProjectWorkspaceFilter
+        ? '/workspace-service/alarms/project' 
+        : '/workspace-service/alarms/personal'
+      
+      let requestDto = null
+      if (isProjectWorkspaceFilter) {
+        requestDto = { workSpaceSeq: currentWorkspaceSeq.value }
+      }
+      console.log('  - API 엔드포인트:', endpoint)
+      console.log('  - 요청 데이터:', requestDto)
+
+      let deleted = false
+      try {
+        await apiDelete(endpoint, requestDto)
+        deleted = true
+      } catch (e1) {
+        try {
+          await apiPatch(endpoint, requestDto)
+          deleted = true
+        } catch (e2) {
+          const clearEndpoint = endpoint + '/clear'
+          try {
+            await apiPatch(clearEndpoint, requestDto)
+            deleted = true
+          } catch (e3) {
+            // 마지막 실패는 무시
+          }
+        }
+      }
+
       // 로컬 즉시 비우기
       notifications.value = []
-      await fetchNotifications()
+      if (deleted) {
+        await fetchNotifications()
+      }
     } catch (error) {
-      // 로컬 상태는 복구하지 않음 (이미 삭제된 상태로 유지)
-      throw error
+      notifications.value = []
     }
   }
   
@@ -775,23 +709,46 @@ export const useNotificationStore = defineStore('notification', () => {
    * @param {string} alarmType - 알림 타입 (alarm-friend, alarm-task, etc.)
    */
   const deleteFilterNotifications = async (alarmType) => {
-    const endpoint = currentWorkspaceType.value === 'personal' 
-      ? '/workspace-service/alarms/personal/type' 
-      : '/workspace-service/alarms/project/type'
-    const requestDto = { alarmType }
-    if (currentWorkspaceType.value === 'project') {
-      requestDto.workSpaceSeq = currentWorkspaceSeq.value
-    }
-
     try {
-      await apiDelete(endpoint, requestDto)
-      
+      console.log('  - 알림 타입:', alarmType)
+      console.log('  - 워크스페이스 타입:', currentWorkspaceType.value)
+      console.log('  - 워크스페이스 번호:', currentWorkspaceSeq.value)
+      const endpoint = currentWorkspaceType.value === 'personal' 
+        ? '/workspace-service/alarms/personal/type' 
+        : '/workspace-service/alarms/project/type'
+      const requestDto = { alarmType }
+      if (currentWorkspaceType.value === 'project') {
+        requestDto.workSpaceSeq = currentWorkspaceSeq.value
+      }
+      console.log('  - API 엔드포인트:', endpoint)
+      console.log('  - 요청 데이터:', requestDto)
+
+      let deleted = false
+      try {
+        await apiDelete(endpoint, requestDto)
+        deleted = true
+      } catch (e1) {
+        try {
+          await apiPatch(endpoint, requestDto)
+          deleted = true
+        } catch (e2) {
+          const clearEndpoint = endpoint + '/clear'
+          try {
+            await apiPatch(clearEndpoint, requestDto)
+            deleted = true
+          } catch (e3) {
+            // 마지막 실패는 무시
+          }
+        }
+      }
+
       // 로컬에서 해당 타입 제거
       notifications.value = notifications.value.filter(n => n.type !== alarmType)
-      await fetchNotifications()
+      if (deleted) {
+        await fetchNotifications()
+      }
     } catch (error) {
-      // 로컬 상태는 복구하지 않음 (이미 삭제된 상태로 유지)
-      throw error
+      notifications.value = notifications.value.filter(n => n.type !== alarmType)
     }
   }
 
@@ -833,34 +790,27 @@ export const useNotificationStore = defineStore('notification', () => {
         })
         
         // 알림 변환 (AlarmResDto 기준)
-        notifications.value = sortedNotifications
-          .map((alarm, index) => {
-            // 디버깅: ynRead 값 확인
-            if (index === 0) {
-              // console.log('[알림 Store] 🔍 첫 번째 알림 원본 데이터:', alarm)
-              // console.log('[알림 Store] 🔍 ynRead 값:', alarm.ynRead)
-              // console.log('[알림 Store] 🔍 read 변환 결과:', alarm.ynRead === 'Y')
-            }
-            
-            // message가 없으면 알림을 생성하지 않음
-            if (!alarm.message || String(alarm.message).trim().length === 0) {
-              return null
-            }
-            
-            return {
-              id: String(alarm.alarmSeq || `${alarm.receiverId}_${new Date(alarm.time).getTime()}_${index}`),
-              type: normalizeType(alarm.alarmType || alarm.type || 'UNKNOWN'),
-              message: String(alarm.message).trim(),
-              time: formatTime(alarm.time),
-              read: alarm.ynRead === 'Y', // 읽음 여부 (Y/N)
-              priority: 'normal',
-              sender: alarm.sender,
-              workSpaceSeq: alarm.workSpaceSeq,
-              alarmSeq: alarm.alarmSeq, // 읽음 처리 API 호출을 위해 필요
-              data: alarm // 원본 데이터 보관
-            }
-          })
-          .filter(n => n !== null) // null 제거
+        notifications.value = sortedNotifications.map((alarm, index) => {
+          // 디버깅: ynRead 값 확인
+          if (index === 0) {
+            // console.log('[알림 Store] 🔍 첫 번째 알림 원본 데이터:', alarm)
+            // console.log('[알림 Store] 🔍 ynRead 값:', alarm.ynRead)
+            // console.log('[알림 Store] 🔍 read 변환 결과:', alarm.ynRead === 'Y')
+          }
+          
+          return {
+            id: String(alarm.alarmSeq || `${alarm.receiverId}_${new Date(alarm.time).getTime()}_${index}`),
+            type: normalizeType(alarm.alarmType || alarm.type || 'UNKNOWN'),
+            message: alarm.message || '새로운 알림이 있습니다',
+            time: formatTime(alarm.time),
+            read: alarm.ynRead === 'Y', // 읽음 여부 (Y/N)
+            priority: 'normal',
+            sender: alarm.sender,
+            workSpaceSeq: alarm.workSpaceSeq,
+            alarmSeq: alarm.alarmSeq, // 읽음 처리 API 호출을 위해 필요
+            data: alarm // 원본 데이터 보관
+          }
+        })
         
         // console.log('[알림 Store] ✅ 알림 목록 불러오기 성공:', notifications.value.length, '개')
         // console.log('[알림 Store] 📋 변환된 알림 샘플:', notifications.value[0])
@@ -932,9 +882,5 @@ export const useNotificationStore = defineStore('notification', () => {
     hasChannelNotification,
     getWorkspaceChatNotificationCount,
     hasWorkspaceChatNotification
-    hasChannelNotification,
-    getWorkspaceChatNotificationCount,
-    hasWorkspaceChatNotification
   }
 })
-

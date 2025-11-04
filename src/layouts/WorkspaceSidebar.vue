@@ -26,6 +26,15 @@ import Stomp from "webstomp-client";
 
 const router = useRouter();
 
+const props = defineProps({
+  collapsed: Boolean,
+  workspaceType: String, // 'personal' 또는 'project'
+  currentChannel: String,
+  currentWorkspaceData: Object, // 프로젝트 워크스페이스 정보
+  selectedSubChannel: String, // 선택된 하위 채널 ID
+  serverSidebarCollapsed: Boolean,
+});
+
 // 화면 크기 감지
 const windowWidth = ref(window.innerWidth);
 
@@ -41,13 +50,37 @@ const isCollapsedView = computed(() => {
   );
 });
 
-const props = defineProps({
-  collapsed: Boolean,
-  workspaceType: String, // 'personal' 또는 'project'
-  currentChannel: String,
-  currentWorkspaceData: Object, // 프로젝트 워크스페이스 정보
-  selectedSubChannel: String, // 선택된 하위 채널 ID
-});
+// WorkspaceSidebar의 margin-left 계산 (ServerSidebar collapsed 상태 반영)
+const workspaceSidebarStyle = computed(() => {
+  let marginLeft = 72
+  
+  // ServerSidebar가 collapsed 상태이면 margin-left 0
+  if (props.serverSidebarCollapsed) {
+    marginLeft = 0
+  }
+  
+  // 반응형 처리
+  if (windowWidth.value <= 1024) {
+    if (!props.serverSidebarCollapsed) {
+      marginLeft = 60
+    }
+  }
+  if (windowWidth.value <= 768) {
+    if (!props.serverSidebarCollapsed) {
+      marginLeft = 56
+    }
+  }
+  if (windowWidth.value <= 480) {
+    if (!props.serverSidebarCollapsed) {
+      marginLeft = 52
+    }
+  }
+  
+  return {
+    marginLeft: `${marginLeft}px`,
+    transition: 'margin-left 0.3s ease'
+  }
+})
 
 const emit = defineEmits([
   "toggle",
@@ -1291,7 +1324,8 @@ const getStatusColor = (status) => {
   <!-- 워크스페이스 사이드바 -->
   <div
     class="workspace-sidebar"
-    :class="{ collapsed: collapsed && workspaceType === 'project' }"
+    :class="{ collapsed: isCollapsedView || (collapsed && workspaceType === 'project') }"
+    :style="workspaceSidebarStyle"
   >
     <!-- 메인 채널들 -->
     <div class="channels-section">
@@ -2076,14 +2110,14 @@ const getStatusColor = (status) => {
   box-shadow: 1px 0 0 rgba(var(--v-theme-on-surface), 0.04);
   padding: 24px 0 80px 0;
   padding-bottom: 80px;
-  margin-left: 72px;
+  margin-left: 72px; /* 기본값, 동적 스타일로 오버라이드됨 */
   position: fixed;
   left: 0;
   top: 60px;
   bottom: 0;
   z-index: 99;
   overflow-y: auto;
-  transition: transform 0.3s ease;
+  transition: transform 0.3s ease, margin-left 0.3s ease;
 }
 
 /* 스크롤바 스타일 (칸반보드와 동일) */
@@ -2566,7 +2600,7 @@ const getStatusColor = (status) => {
 @media (max-width: 768px) {
   .workspace-sidebar {
     width: 200px;
-    margin-left: 60px;
+    /* margin-left는 동적 스타일로 처리됨 */
   }
 }
 
@@ -3406,19 +3440,33 @@ const getStatusColor = (status) => {
   }
 }
 
+/* 반응형 디자인 */
+@media (min-width: 1025px) {
+  .workspace-sidebar {
+    left: 0;
+    border-radius: 0;
+    /* margin-left는 동적 스타일로 처리됨 */
+  }
+}
+
 /* 반응형 디자인 - 태블릿 이하에서는 아이콘만 표시 */
 @media (max-width: 1024px) {
   .workspace-sidebar {
     width: 60px !important;
     min-width: 60px !important;
     padding: 16px 0 0 0 !important;
+    left: 0 !important;
+    border-radius: 0 !important;
+    top: 56px !important;
+    /* margin-left는 동적 스타일로 처리됨 */
   }
 
+  /* 1024px 미만에서는 collapsed 상태를 아이콘만 보이는 상태로 유지 */
   .workspace-sidebar.collapsed {
-    width: 0 !important;
-    min-width: 0 !important;
-    padding: 0 !important;
-    overflow: hidden !important;
+    width: 60px !important;
+    min-width: 60px !important;
+    padding: 16px 0 0 0 !important;
+    overflow: visible !important;
   }
 
   /* 프로젝트 정보 숨기기 */
@@ -3555,10 +3603,18 @@ const getStatusColor = (status) => {
     width: 56px !important;
     min-width: 56px !important;
     padding: 12px 0 0 0 !important;
+    left: 0 !important;
+    border-radius: 0 !important;
+    top: 56px !important;
+    /* margin-left는 동적 스타일로 처리됨 */
   }
 
+  /* 768px 미만에서는 collapsed 상태를 아이콘만 보이는 상태로 유지 */
   .workspace-sidebar.collapsed {
-    width: 0 !important;
+    width: 56px !important;
+    min-width: 56px !important;
+    padding: 12px 0 0 0 !important;
+    overflow: visible !important;
   }
 
   .channel-item,
@@ -3584,6 +3640,18 @@ const getStatusColor = (status) => {
     width: 52px !important;
     min-width: 52px !important;
     padding: 10px 0 0 0 !important;
+    left: 0 !important;
+    border-radius: 0 !important;
+    top: 56px !important;
+    /* margin-left는 동적 스타일로 처리됨 */
+  }
+
+  /* 480px 미만에서는 collapsed 상태를 아이콘만 보이는 상태로 유지 */
+  .workspace-sidebar.collapsed {
+    width: 52px !important;
+    min-width: 52px !important;
+    padding: 10px 0 0 0 !important;
+    overflow: visible !important;
   }
 
   .channel-item,
