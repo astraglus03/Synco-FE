@@ -32,22 +32,6 @@ export const useNotificationStore = defineStore('notification', () => {
   
   // 필터링된 알림 목록 (프론트엔드 필터링)
   const filteredNotifications = computed(() => {
-    // console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
-    // console.log('[알림 Store] 🔍 필터링 시작')
-    // console.log('  📌 전체 알림 개수:', notifications.value.length)
-    // console.log('  📌 워크스페이스 타입:', currentWorkspaceType.value)
-    // console.log('  📌 워크스페이스 번호:', currentWorkspaceSeq.value)
-    // console.log('  📌 활성 필터:', activeFilter.value)
-    
-    // 알림 데이터 샘플 출력
-    // if (notifications.value.length > 0) {
-    //   console.log('  📋 알림 샘플 (처음 3개):')
-    //   notifications.value.slice(0, 3).forEach((n, i) => {
-    //     console.log(`    [${i}] type: ${n.type}, workSpaceSeq: ${n.workSpaceSeq}, message: ${n.message}`)
-    //   })
-    // } else {
-    //   console.log('  ⚠️ 알림 데이터가 없습니다!')
-    // }
     
     let filtered = notifications.value
     

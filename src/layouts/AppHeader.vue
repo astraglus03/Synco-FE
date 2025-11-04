@@ -37,6 +37,15 @@ const notificationSidebarVisible = computed({
   set: (value) => notificationStore.notificationSidebarVisible = value
 })
 
+// 알림 사이드바 열릴 때 body 스크롤 방지
+watch(notificationSidebarVisible, (isVisible) => {
+  if (isVisible) {
+    document.body.style.overflow = 'hidden'
+  } else {
+    document.body.style.overflow = ''
+  }
+})
+
 // 프로필 메뉴 상태
 const profileMenuOpen = ref(false)
 // 친구 요청 액션 로딩 상태 (알림별)
@@ -2127,6 +2136,7 @@ onMounted(() => {
     :permanent="false"
     :rail="false"
     class="notification-sidebar"
+    :scrim="true"
   >
     <!-- 사이드바 헤더 -->
     <div class="notification-header">
@@ -3250,6 +3260,27 @@ onMounted(() => {
 .notification-sidebar {
   background: #ffffff !important;
   border-left: 1px solid #e5e7eb !important;
+}
+
+/* 알림 사이드바 backdrop 고정 (스크롤 시에도 블러 유지) */
+::v-deep(.v-navigation-drawer__scrim) {
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  bottom: 0 !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  backdrop-filter: blur(8px) !important;
+  -webkit-backdrop-filter: blur(8px) !important;
+  background: rgba(0, 0, 0, 0.4) !important;
+  z-index: 2399 !important;
+}
+
+/* 알림 사이드바 자체도 고정 */
+::v-deep(.notification-sidebar.v-navigation-drawer) {
+  position: fixed !important;
+  z-index: 2400 !important;
 }
 
 /* 헤더 스타일 */
