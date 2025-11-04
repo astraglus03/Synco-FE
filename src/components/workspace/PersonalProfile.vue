@@ -1040,22 +1040,78 @@ onMounted(() => {
 }
 
 /* 입력 필드 다크모드 대응 */
-.profile-card :deep(.v-field) {
-  background: rgb(var(--v-theme-schedule-card-bg));
-  border: 1px solid rgb(var(--v-theme-schedule-border));
-  border-radius: 6px;
+/* 파란 배경 위의 입력 필드는 반투명 흰색 배경과 흰색 텍스트 */
+.profile-banner .profile-card :deep(.v-field) {
+  background: rgba(255, 255, 255, 0.2) !important;
+  border: 1px solid rgba(255, 255, 255, 0.3) !important;
+  border-radius: 8px;
   transition: border-color 0.2s ease, background-color 0.2s ease;
+  backdrop-filter: blur(10px);
 }
-.profile-card :deep(.v-field:hover) {
-  border-color: rgb(var(--v-theme-schedule-border));
+.profile-banner .profile-card :deep(.v-field:hover) {
+  border-color: rgba(255, 255, 255, 0.5) !important;
+  background: rgba(255, 255, 255, 0.25) !important;
 }
-.profile-card :deep(.v-field--focused) {
-  border-color: #1976d2;
-  box-shadow: 0 0 0 2px rgba(25, 118, 210, 0.1);
-  background: rgb(var(--v-theme-schedule-card-bg));
+.profile-banner .profile-card :deep(.v-field--focused) {
+  border-color: rgba(255, 255, 255, 0.8) !important;
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.3) !important;
 }
-.profile-card :deep(.v-field__input) { color: rgb(var(--v-theme-schedule-text)); }
-.profile-card :deep(.v-field__input::placeholder) { color: rgb(var(--v-theme-schedule-placeholder)); opacity: 1; }
+.profile-banner .profile-card :deep(.v-field__input) { 
+  color: #ffffff !important; 
+  background: transparent !important;
+}
+.profile-banner .profile-card :deep(.v-field__input::placeholder) { 
+  color: rgba(255, 255, 255, 0.7) !important; 
+  opacity: 1; 
+}
+.profile-banner .profile-card :deep(.v-field__prepend-inner),
+.profile-banner .profile-card :deep(.v-field__append-inner) {
+  color: rgba(255, 255, 255, 0.9) !important;
+}
+.profile-banner .profile-card :deep(.v-label) {
+  color: rgba(255, 255, 255, 0.9) !important;
+}
+.profile-banner .profile-card :deep(.v-field--focused .v-label) {
+  color: #ffffff !important;
+}
+.profile-banner .profile-card :deep(.v-messages) {
+  color: rgba(255, 255, 255, 0.8) !important;
+}
+
+/* 다크모드 배너는 회색 배경이므로 입력 필드는 원래대로 */
+.dark-mode .profile-banner .profile-card :deep(.v-field) {
+  background: rgb(var(--v-theme-schedule-card-bg)) !important;
+  border: 1px solid rgb(var(--v-theme-schedule-border)) !important;
+  backdrop-filter: none;
+}
+.dark-mode .profile-banner .profile-card :deep(.v-field:hover) {
+  border-color: rgb(var(--v-theme-schedule-border)) !important;
+}
+.dark-mode .profile-banner .profile-card :deep(.v-field--focused) {
+  border-color: #1976d2 !important;
+  background: rgb(var(--v-theme-schedule-card-bg)) !important;
+}
+.dark-mode .profile-banner .profile-card :deep(.v-field__input) { 
+  color: rgb(var(--v-theme-schedule-text)) !important; 
+  background: transparent !important;
+}
+.dark-mode .profile-banner .profile-card :deep(.v-field__input::placeholder) { 
+  color: rgb(var(--v-theme-schedule-placeholder)) !important; 
+}
+.dark-mode .profile-banner .profile-card :deep(.v-field__prepend-inner),
+.dark-mode .profile-banner .profile-card :deep(.v-field__append-inner) {
+  color: rgb(var(--v-theme-schedule-text)) !important;
+}
+.dark-mode .profile-banner .profile-card :deep(.v-label) {
+  color: rgb(var(--v-theme-schedule-text)) !important;
+}
+.dark-mode .profile-banner .profile-card :deep(.v-field--focused .v-label) {
+  color: #1976d2 !important;
+}
+.dark-mode .profile-banner .profile-card :deep(.v-messages) {
+  color: rgb(var(--v-theme-schedule-text)) !important;
+}
 
 .profile-banner {
   position: relative;

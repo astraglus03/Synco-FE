@@ -146,20 +146,49 @@ const contentStyle = computed(() => {
   // windowWidth.value를 사용하여 반응형 계산 (화면 크기 변경 감지)
   const screenWidth = windowWidth.value
   let serverSidebarWidth = 72
-  let workspaceSidebarWidth = (props.workspaceType === 'personal' || !props.workspaceSidebarCollapsed) ? 220 : 72
+  let workspaceSidebarWidth = 220
   
-  // 태블릿 이하에서는 아이콘만 표시
+  // 개인 워크스페이스는 항상 펼침, 프로젝트는 collapsed 상태 확인
+  if (props.workspaceType === 'personal') {
+    workspaceSidebarWidth = 220
+  } else if (props.workspaceSidebarCollapsed) {
+    // collapsed 상태에서는 72px 너비 유지 (아이콘만 표시)
+    workspaceSidebarWidth = 72
+  }
+  
+  // 태블릿 이하에서는 사이드바 너비 조정 (개인 워크스페이스 동작 방식 참고)
   if (screenWidth <= 1024) {
     serverSidebarWidth = 60
-    workspaceSidebarWidth = props.workspaceSidebarCollapsed ? 0 : 60
+    if (props.workspaceType === 'personal') {
+      workspaceSidebarWidth = 60
+    } else if (props.workspaceSidebarCollapsed) {
+      // collapsed 상태일 때도 반응형에서는 최소 너비 유지 (아이콘만 표시)
+      workspaceSidebarWidth = 60
+    } else {
+      workspaceSidebarWidth = 60
+    }
   }
   if (screenWidth <= 768) {
     serverSidebarWidth = 56
-    workspaceSidebarWidth = props.workspaceSidebarCollapsed ? 0 : 56
+    if (props.workspaceType === 'personal') {
+      workspaceSidebarWidth = 56
+    } else if (props.workspaceSidebarCollapsed) {
+      // collapsed 상태일 때도 반응형에서는 최소 너비 유지
+      workspaceSidebarWidth = 56
+    } else {
+      workspaceSidebarWidth = 56
+    }
   }
   if (screenWidth <= 480) {
     serverSidebarWidth = 52
-    workspaceSidebarWidth = props.workspaceSidebarCollapsed ? 0 : 52
+    if (props.workspaceType === 'personal') {
+      workspaceSidebarWidth = 52
+    } else if (props.workspaceSidebarCollapsed) {
+      // collapsed 상태일 때도 반응형에서는 최소 너비 유지
+      workspaceSidebarWidth = 52
+    } else {
+      workspaceSidebarWidth = 52
+    }
   }
   
   const memberSidebarWidth = props.memberSidebarVisible ? 280 : 0

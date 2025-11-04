@@ -58,7 +58,6 @@ export const useDriveStore = defineStore('drive', () => {
       }
     } catch (err) {
       error.value = '목록을 불러오는데 실패했습니다.'
-      console.error('드라이브 목록 로드 실패:', err)
     } finally {
       isLoading.value = false
     }
@@ -80,7 +79,6 @@ export const useDriveStore = defineStore('drive', () => {
       }
     } catch (err) {
       error.value = '파일 업로드에 실패했습니다.'
-      console.error('파일 업로드 실패:', err)
       return { success: false, error: error.value }
     } finally {
       isLoading.value = false
@@ -103,7 +101,6 @@ export const useDriveStore = defineStore('drive', () => {
       }
     } catch (err) {
       error.value = '폴더 생성에 실패했습니다.'
-      console.error('폴더 생성 실패:', err)
       return { success: false, error: error.value }
     } finally {
       isLoading.value = false
@@ -126,7 +123,6 @@ export const useDriveStore = defineStore('drive', () => {
       }
     } catch (err) {
       error.value = '공유문서 생성에 실패했습니다.'
-      console.error('공유문서 생성 실패:', err)
       return { success: false, error: error.value }
     } finally {
       isLoading.value = false
@@ -150,7 +146,6 @@ export const useDriveStore = defineStore('drive', () => {
       }
     } catch (err) {
       error.value = '삭제에 실패했습니다.'
-      console.error('아이템 삭제 실패:', err)
       return { success: false, error: error.value }
     } finally {
       isLoading.value = false
@@ -176,7 +171,6 @@ export const useDriveStore = defineStore('drive', () => {
       }
     } catch (err) {
       error.value = '이름 변경에 실패했습니다.'
-      console.error('폴더 이름 변경 실패:', err)
       return { success: false, error: error.value }
     } finally {
       isLoading.value = false
@@ -203,7 +197,6 @@ export const useDriveStore = defineStore('drive', () => {
       }
     } catch (err) {
       error.value = '다운로드에 실패했습니다.'
-      console.error('파일 다운로드 실패:', err)
       return { success: false, error: error.value }
     }
   }
@@ -228,7 +221,6 @@ export const useDriveStore = defineStore('drive', () => {
       }
     } catch (err) {
       error.value = '문서 다운로드에 실패했습니다.'
-      console.error('문서 다운로드 실패:', err)
       return { success: false, error: error.value }
     }
   }
@@ -257,7 +249,6 @@ export const useDriveStore = defineStore('drive', () => {
       }
     } catch (err) {
       error.value = '공유문서 다운로드에 실패했습니다.'
-      console.error('공유문서 다운로드 실패:', err)
       return { success: false, error: error.value }
     }
   }
@@ -276,7 +267,6 @@ export const useDriveStore = defineStore('drive', () => {
       }
     } catch (err) {
       error.value = '문서 내용 조회에 실패했습니다.'
-      console.error('문서 내용 조회 실패:', err)
       return { success: false, error: error.value }
     }
   }
@@ -300,7 +290,6 @@ export const useDriveStore = defineStore('drive', () => {
       }
     } catch (err) {
       error.value = '문서 저장에 실패했습니다.'
-      console.error('문서 저장 실패:', err)
       return { success: false, error: error.value }
     }
   }
@@ -321,7 +310,6 @@ export const useDriveStore = defineStore('drive', () => {
       }
     } catch (err) {
       error.value = '잠금 상태 변경에 실패했습니다.'
-      console.error('문서 잠금 상태 변경 실패:', err)
       return { success: false, error: error.value }
     }
   }
@@ -341,7 +329,6 @@ export const useDriveStore = defineStore('drive', () => {
       }
     } catch (err) {
       error.value = '이동에 실패했습니다.'
-      console.error('아이템 이동 실패:', err)
       return { success: false, error: error.value }
     }
   }
@@ -358,7 +345,6 @@ export const useDriveStore = defineStore('drive', () => {
       }
     } catch (err) {
       error.value = '순서 변경에 실패했습니다.'
-      console.error('폴더 순서 변경 실패:', err)
       return { success: false, error: error.value }
     }
   }

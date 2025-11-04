@@ -22,6 +22,10 @@ const profileInput = ref(null)
 const newWorkspaceStartDate = ref('') // yyyy-MM-dd
 const newWorkspaceEndDate = ref('')   // yyyy-MM-dd
 
+// 프로젝트 생성 날짜 메뉴 상태
+const newWorkspaceStartDateMenu = ref(false)
+const newWorkspaceEndDateMenu = ref(false)
+
 // 친구 관련 상태
 const friendSearchQuery = ref('')
 const selectedFriends = ref([])
@@ -183,13 +187,45 @@ const handleCreateWorkspace = async () => {
     // memberList 생성 (memberSeq 배열)
     const memberList = invitedMembers.value.map(member => member.memberSeq)
     
+    // 날짜를 ISO LocalDateTime 형식으로 변환 (yyyy-MM-ddTHH:mm:ss)
+    const formatDateForApi = (dateValue) => {
+      if (!dateValue) return null
+      
+      // Date 객체인 경우
+      if (dateValue instanceof Date) {
+        const year = dateValue.getFullYear()
+        const month = String(dateValue.getMonth() + 1).padStart(2, '0')
+        const day = String(dateValue.getDate()).padStart(2, '0')
+        return `${year}-${month}-${day}`
+      }
+      
+      // 문자열인 경우 (yyyy-MM-dd 형식)
+      if (typeof dateValue === 'string' && dateValue.match(/^\d{4}-\d{2}-\d{2}$/)) {
+        return dateValue
+      }
+      
+      // 다른 형식인 경우 Date로 파싱 시도
+      const date = new Date(dateValue)
+      if (!isNaN(date.getTime())) {
+        const year = date.getFullYear()
+        const month = String(date.getMonth() + 1).padStart(2, '0')
+        const day = String(date.getDate()).padStart(2, '0')
+        return `${year}-${month}-${day}`
+      }
+      
+      return dateValue
+    }
+    
+    const startDateStr = formatDateForApi(newWorkspaceStartDate.value)
+    const endDateStr = formatDateForApi(newWorkspaceEndDate.value)
+    
     // API 호출
     const createdWorkspace = await createWorkspace(
       newWorkspaceName.value,
       newWorkspaceProfileFile.value,
       memberList,
-      `${newWorkspaceStartDate.value}T00:00:00`,
-      `${newWorkspaceEndDate.value}T23:59:59`
+      startDateStr ? `${startDateStr}T00:00:00` : null,
+      endDateStr ? `${endDateStr}T23:59:59` : null
     )
     
     // 성공 메시지
@@ -206,8 +242,40 @@ const handleCreateWorkspace = async () => {
     closeCreateWorkspaceDialog()
   } catch (error) {
     console.error('프로젝트 생성 실패:', error)
-    alert('프로젝트 생성에 실패했습니다. 다시 시도해주세요.')
+    const errorMessage = error.response?.data?.message || error.response?.data?.error || '프로젝트 생성에 실패했습니다. 다시 시도해주세요.'
+    alert(errorMessage)
   }
+}
+
+// 프로젝트 날짜 표시용 포맷 변환
+const formatNewWorkspaceDisplayDate = (dateString) => {
+  if (!dateString) return ''
+  const date = new Date(dateString)
+  const year = date.getFullYear()
+  const month = date.getMonth() + 1
+  const day = date.getDate()
+  return `${year}년 ${month}월 ${day}일`
+}
+
+// 프로젝트 날짜 피커 열기
+const openNewWorkspaceDatePicker = (type) => {
+  if (type === 'start') {
+    newWorkspaceStartDateMenu.value = true
+  } else {
+    newWorkspaceEndDateMenu.value = true
+  }
+}
+
+// 프로젝트 시작일 업데이트
+const updateNewWorkspaceStartDate = (value) => {
+  newWorkspaceStartDate.value = value
+  newWorkspaceStartDateMenu.value = false
+}
+
+// 프로젝트 종료일 업데이트
+const updateNewWorkspaceEndDate = (value) => {
+  newWorkspaceEndDate.value = value
+  newWorkspaceEndDateMenu.value = false
 }
 
 // 모달 닫기 및 초기화
@@ -218,6 +286,8 @@ const closeCreateWorkspaceDialog = () => {
   newWorkspaceProfileFile.value = null
   newWorkspaceStartDate.value = ''
   newWorkspaceEndDate.value = ''
+  newWorkspaceStartDateMenu.value = false
+  newWorkspaceEndDateMenu.value = false
   selectedFriends.value = []
   invitedMembers.value = []
   friendSearchQuery.value = ''
@@ -537,27 +607,79 @@ onMounted(() => {
             <div class="workspace-basic-row" style="align-items: center;">
               <div class="workspace-name-group">
                 <label class="input-label">프로젝트 기간</label>
-                <div style="display:flex; gap:12px;">
-                  <v-text-field
-                    v-model="newWorkspaceStartDate"
-                    type="date"
-                    label="시작일"
-                    variant="outlined"
-                    density="compact"
-                    hide-details
-                    :max="newWorkspaceEndDate || undefined"
-                    required
-                  />
-                  <v-text-field
-                    v-model="newWorkspaceEndDate"
-                    type="date"
-                    label="종료일"
-                    variant="outlined"
-                    density="compact"
-                    hide-details
-                    :min="newWorkspaceStartDate || undefined"
-                    required
-                  />
+                <!-- 날짜 선택 카드 -->
+                <div class="date-selector-container">
+                  <v-menu
+                    v-model="newWorkspaceStartDateMenu"
+                    :close-on-content-click="false"
+                    transition="scale-transition"
+                    offset-y
+                    min-width="290px"
+                  >
+                    <template v-slot:activator="{ props: menuProps }">
+                      <div 
+                        v-bind="menuProps"
+                        class="date-selector-card"
+                        @click="openNewWorkspaceDatePicker('start')"
+                      >
+                        <div class="date-selector-icon">
+                          <v-icon color="primary">mdi-calendar-start</v-icon>
+                        </div>
+                        <div class="date-selector-content">
+                          <div class="date-selector-label">시작일</div>
+                          <div class="date-selector-value">
+                            {{ formatNewWorkspaceDisplayDate(newWorkspaceStartDate) || '날짜 선택' }}
+                          </div>
+                        </div>
+                        <v-icon class="date-selector-arrow">mdi-chevron-right</v-icon>
+                      </div>
+                    </template>
+                    <v-date-picker
+                      :model-value="newWorkspaceStartDate"
+                      @update:model-value="updateNewWorkspaceStartDate"
+                      :max="newWorkspaceEndDate || undefined"
+                      color="primary"
+                      locale="ko-KR"
+                    ></v-date-picker>
+                  </v-menu>
+                  
+                  <div class="date-connector">
+                    <v-icon size="small" color="grey">mdi-arrow-right</v-icon>
+                  </div>
+                  
+                  <v-menu
+                    v-model="newWorkspaceEndDateMenu"
+                    :close-on-content-click="false"
+                    transition="scale-transition"
+                    offset-y
+                    min-width="290px"
+                  >
+                    <template v-slot:activator="{ props: menuProps }">
+                      <div 
+                        v-bind="menuProps"
+                        class="date-selector-card"
+                        @click="openNewWorkspaceDatePicker('end')"
+                      >
+                        <div class="date-selector-icon">
+                          <v-icon color="primary">mdi-calendar-end</v-icon>
+                        </div>
+                        <div class="date-selector-content">
+                          <div class="date-selector-label">종료일</div>
+                          <div class="date-selector-value">
+                            {{ formatNewWorkspaceDisplayDate(newWorkspaceEndDate) || '날짜 선택' }}
+                          </div>
+                        </div>
+                        <v-icon class="date-selector-arrow">mdi-chevron-right</v-icon>
+                      </div>
+                    </template>
+                    <v-date-picker
+                      :model-value="newWorkspaceEndDate"
+                      @update:model-value="updateNewWorkspaceEndDate"
+                      :min="newWorkspaceStartDate || undefined"
+                      color="primary"
+                      locale="ko-KR"
+                    ></v-date-picker>
+                  </v-menu>
                 </div>
               </div>
             </div>
@@ -749,15 +871,57 @@ onMounted(() => {
 }
 
 /* 반응형 디자인 */
+@media (max-width: 1024px) {
+  .server-sidebar {
+    width: 60px !important;
+    top: 56px;
+  }
+  
+  .server-icon {
+    width: 44px;
+    height: 44px;
+    font-size: 16px;
+    margin-left: 6px;
+  }
+  
+  .server-icon .v-icon {
+    font-size: 20px;
+  }
+}
+
 @media (max-width: 768px) {
   .server-sidebar {
-    width: 60px;
+    width: 56px !important;
+    top: 56px;
   }
   
   .server-icon {
     width: 40px;
     height: 40px;
     font-size: 14px;
+    margin-left: 6px;
+  }
+  
+  .server-icon .v-icon {
+    font-size: 18px;
+  }
+}
+
+@media (max-width: 480px) {
+  .server-sidebar {
+    width: 52px !important;
+    top: 56px;
+  }
+  
+  .server-icon {
+    width: 36px;
+    height: 36px;
+    font-size: 12px;
+    margin-left: 6px;
+  }
+  
+  .server-icon .v-icon {
+    font-size: 16px;
   }
 }
 
@@ -1202,59 +1366,105 @@ onMounted(() => {
   font-size: 14px;
 }
 
-/* 반응형 디자인 - 태블릿 이하에서는 항상 아이콘만 표시 */
-@media (max-width: 1024px) {
-  .server-sidebar {
-    width: 60px !important;
-  }
-  
-  .server-icon {
-    width: 44px;
-    height: 44px;
-  }
-  
-  .server-icon .v-icon {
-    font-size: 22px;
-  }
+
+/* 날짜 선택 카드 스타일 */
+.date-selector-container {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 8px;
 }
 
+.date-selector-card {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px;
+  background: rgb(var(--v-theme-surface));
+  border: 2px solid rgba(var(--v-theme-on-surface), 0.12);
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.date-selector-card:hover {
+  border-color: rgb(var(--v-theme-primary));
+  background: rgba(var(--v-theme-primary), 0.05);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.date-selector-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  background: rgba(var(--v-theme-primary), 0.1);
+  border-radius: 10px;
+}
+
+.date-selector-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.date-selector-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: rgba(var(--v-theme-on-surface), 0.6);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 4px;
+}
+
+.date-selector-value {
+  font-size: 15px;
+  font-weight: 600;
+  color: rgb(var(--v-theme-on-surface));
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.date-selector-arrow {
+  color: rgba(var(--v-theme-on-surface), 0.4);
+  transition: transform 0.2s ease;
+}
+
+.date-selector-card:hover .date-selector-arrow {
+  transform: translateX(4px);
+  color: rgb(var(--v-theme-primary));
+}
+
+.date-connector {
+  display: flex;
+  align-items: center;
+  padding: 0 4px;
+  flex-shrink: 0;
+}
+
+/* 날짜 피커 스타일 */
+:deep(.v-date-picker) {
+  background: rgb(var(--v-theme-surface));
+  border-radius: 8px;
+}
+
+/* 반응형 디자인 */
 @media (max-width: 768px) {
-  .server-sidebar {
-    width: 56px !important;
+  .date-selector-container {
+    flex-direction: column;
+    gap: 8px;
   }
   
-  .server-icon {
-    width: 40px;
-    height: 40px;
+  .date-connector {
+    transform: rotate(90deg);
+    padding: 8px 0;
   }
   
-  .server-icon .v-icon {
-    font-size: 20px;
-  }
-  
-  .workspace-thumbnail {
-    width: 40px;
-    height: 40px;
-  }
-}
-
-@media (max-width: 480px) {
-  .server-sidebar {
-    width: 52px !important;
-  }
-  
-  .server-icon {
-    width: 36px;
-    height: 36px;
-  }
-  
-  .server-icon .v-icon {
-    font-size: 18px;
-  }
-  
-  .workspace-thumbnail {
-    width: 36px;
-    height: 36px;
+  .date-selector-card {
+    width: 100%;
   }
 }
 
