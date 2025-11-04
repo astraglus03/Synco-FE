@@ -20,6 +20,13 @@ export const decodeJWT = (token) => {
   }
 }
 
+const isTokenExpired = (token) => {
+  const payload = decodeJWT(token)
+  if (!payload?.exp) return true
+  const now = Math.floor(Date.now() / 1000)
+  return payload.exp < now
+}
+
 // ----------------------
 // Axios 인스턴스
 // ----------------------
@@ -32,7 +39,7 @@ const apiClient = axios.create({
 
 // 요청 인터셉터 (토큰 자동 주입)
 // 모든 API 요청에 자동으로 Authorization 헤더 및 X-Member-Seq 헤더 추가
-apiClient.interceptors.request.use((config) => {
+apiClient.interceptors.request.use(async (config) => {
   const authStore = useAuthStore()
   
   // 인증 관련 엔드포인트는 토큰 주입 건너뛰기
@@ -56,6 +63,26 @@ apiClient.interceptors.request.use((config) => {
       delete config.headers['X-Member-Seq']
     }
     return config
+  }
+
+  if (authStore.accessToken && isTokenExpired(authStore.accessToken)) {
+    try {
+      const { data } = await apiClient.post(
+        '/workspace-service/member/refreshAt',
+        {},
+        { withCredentials: true }
+      )
+
+      const newAccessToken = data?.data?.accessToken || data?.accessToken
+      if (newAccessToken) {
+        authStore.setAccessToken(newAccessToken)
+      }
+    } catch (err) {
+      console.warn('토큰 자동 갱신 실패:', err)
+      authStore.logout()
+      window.location.href = '/'
+      throw err
+    }
   }
 
   // 액세스 토큰이 있으면 Authorization 헤더에 추가
