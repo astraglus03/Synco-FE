@@ -1384,7 +1384,7 @@ onMounted(() => {
         <GlobalSearch 
           placeholder="검색"
           search-scope="current-workspace"
-          :search-types="['messages', 'files', 'users', 'channels']"
+          :search-types="['task', 'file', 'message', 'meeting']"
           :auto-navigate="true"
           :debounce-ms="300"
         />

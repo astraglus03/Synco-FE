@@ -636,7 +636,6 @@ onBeforeUnmount(() => {
 const onOpenTaskDetailFromAlarm = async (e) => {
   try {
     const detail = e?.detail || {}
-    console.log('[알림 연동] open-task-detail 수신:', detail)
     const taskSeq = detail.taskSeq || detail.channelSeq
     const channelSeq = detail.channelSeq
     if (taskSeq) {
@@ -645,7 +644,6 @@ const onOpenTaskDetailFromAlarm = async (e) => {
       if (taskDetail) {
         selectedTaskData.value = taskDetail
         isTaskDetailModalOpen.value = true
-        console.log('[알림 연동] 상세 모달 오픈 성공:', taskDetail?.taskSeq || taskSeq)
       }
       return
     }
@@ -673,7 +671,6 @@ const onOpenTaskDetailFromAlarm = async (e) => {
         if (taskDetail) {
           selectedTaskData.value = taskDetail
           isTaskDetailModalOpen.value = true
-          console.log('[알림 연동] 채널 기반 Fallback 오픈:', candidate.taskSeq)
         }
       }
     }

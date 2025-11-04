@@ -47,6 +47,7 @@
 import { ref, computed, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useWorkspaceStore } from '@/store/workspaceStore'
+import { searchUnified } from '@/api/search/searchApi'
 
 /**
  * GlobalSearch 컴포넌트
@@ -55,7 +56,7 @@ import { useWorkspaceStore } from '@/store/workspaceStore'
  * 
  * @param {String} placeholder - 검색 입력창 placeholder
  * @param {String} searchScope - 검색 범위 ('all', 'current-workspace', 'current-channel', 'personal', 'project')
- * @param {Array} searchTypes - 검색할 타입들 (['messages', 'files', 'users', 'channels'])
+ * @param {Array} searchTypes - 검색할 타입들 (['task', 'file', 'message', 'meeting'])
  * @param {Boolean} autoNavigate - 검색 결과 선택 시 자동 네비게이션 여부
  * @param {Number} debounceMs - 검색 디바운스 시간 (ms)
  */
@@ -71,7 +72,7 @@ const props = defineProps({
   },
   searchTypes: {
     type: Array,
-    default: () => ['messages', 'files', 'users', 'channels']
+    default: () => ['task', 'file', 'message', 'meeting']
   },
   autoNavigate: {
     type: Boolean,
@@ -126,73 +127,114 @@ const handleSearch = () => {
   }, props.debounceMs)
 }
 
+// ID에서 접두사 제거 (workspace_4 → 4, chat_8 → 8, task_1 → 1)
+const extractId = (fullId) => {
+  if (!fullId) return fullId
+  const match = fullId.match(/_(\d+)$/)
+  if (match) {
+    return match[1]
+  }
+  return fullId
+}
+
+// 프론트엔드 타입을 백엔드 타입으로 변환 (백엔드는 task, file, message, meeting만 지원)
+const mapToBackendTypes = (frontendTypes) => {
+  const typeMap = {
+    'messages': 'message',
+    'message': 'message',
+    'files': 'file',
+    'file': 'file',
+    'task': 'task',
+    'tasks': 'task',
+    'meeting': 'meeting',
+    'meetings': 'meeting'
+  }
+  
+  // 지원하는 타입만 매핑하고 필터링
+  const validBackendTypes = ['task', 'file', 'message', 'meeting']
+  const mapped = frontendTypes
+    .map(type => typeMap[type] || type)
+    .filter(type => validBackendTypes.includes(type))
+  
+  // 중복 제거
+  return [...new Set(mapped)]
+}
+
+// 타입에 따른 아이콘과 색상 매핑 (백엔드 지원 타입만)
+const getResultIcon = (type) => {
+  const iconMap = {
+    task: 'mdi-checkbox-marked-circle',
+    file: 'mdi-file-document',
+    message: 'mdi-message',
+    meeting: 'mdi-calendar-clock'
+  }
+  return iconMap[type] || 'mdi-circle'
+}
+
+const getResultIconColor = (type) => {
+  const colorMap = {
+    task: 'primary',
+    file: 'orange',
+    message: 'blue',
+    meeting: 'green'
+  }
+  return colorMap[type] || 'grey'
+}
+
 // Elasticsearch 검색 수행
 const performSearch = async (query) => {
   const currentWorkspace = workspaceStore.currentWorkspaceInfo
   
-  // 검색 범위에 따른 인덱스 결정
-  let searchIndex = 'all'
-  let channelId = null
-  
-  if (props.searchScope === 'current-workspace') {
-    searchIndex = currentWorkspace?.id || 'personal'
-  } else if (props.searchScope === 'current-channel') {
-    searchIndex = currentWorkspace?.id || 'personal'
-    channelId = props.channelId || workspaceStore.currentChannel
-  } else if (props.searchScope === 'personal') {
-    searchIndex = 'personal'
-  } else if (props.searchScope === 'project') {
-    searchIndex = 'project'
+  if (!currentWorkspace) {
+    console.warn('워크스페이스 정보가 없습니다.')
+    return []
   }
   
-  // 실제 API 호출 (현재는 목업 데이터)
-  const mockResults = generateMockResults(query, searchIndex, channelId)
-  return mockResults
-}
-
-// 목업 검색 결과 생성 (실제 구현 시 제거)
-const generateMockResults = (query, searchIndex, channelId = null) => {
-  const mockData = {
-    messages: [
-      { 
-        id: '1', 
-        type: 'message', 
-        title: `${query} 관련 메시지`, 
-        subtitle: channelId ? `채널 ${channelId}에서` : '채팅방에서', 
-        icon: 'mdi-message', 
-        iconColor: 'primary',
-        channelId: channelId
-      },
-      { 
-        id: '2', 
-        type: 'message', 
-        title: `${query} 대화 내용`, 
-        subtitle: channelId ? `채널 ${channelId}에서` : '팀 채팅에서', 
-        icon: 'mdi-message', 
-        iconColor: 'primary',
-        channelId: channelId
-      }
-    ],
-    files: [
-      { id: '1', type: 'file', title: `${query} 관련 문서.pdf`, subtitle: '문서 폴더', icon: 'mdi-file-document', iconColor: 'orange' },
-      { id: '2', type: 'file', title: `${query} 이미지.jpg`, subtitle: '이미지 폴더', icon: 'mdi-image', iconColor: 'green' }
-    ],
-    users: [
-      { id: '1', type: 'user', title: `${query} 사용자`, subtitle: '@username', icon: 'mdi-account', iconColor: 'blue' }
-    ],
-    channels: [
-      { id: '1', type: 'channel', title: `${query} 채널`, subtitle: '채널 설명', icon: 'mdi-pound', iconColor: 'purple' }
-    ]
-  }
+  // workSpaceSeq 추출 (personal인 경우 workSpaceSeq가 있을 수 있음)
+  let workSpaceSeq = currentWorkspace.workSpaceSeq
   
-  const results = []
-  props.searchTypes.forEach(type => {
-    if (mockData[type]) {
-      results.push(...mockData[type])
+  // workSpaceSeq가 없으면 ID에서 추출 시도
+  if (!workSpaceSeq) {
+    const extractedId = extractId(currentWorkspace.id)
+    // 숫자로 변환 가능한지 확인
+    if (/^\d+$/.test(extractedId)) {
+      workSpaceSeq = Number(extractedId)
+    } else {
+      // personal인 경우 workSpaceSeq가 있을 수 있으므로 다시 확인
+      workSpaceSeq = currentWorkspace.workSpaceSeq
     }
-  })
+  }
   
-  return results.slice(0, 10) // 최대 10개 결과
+  // workSpaceSeq가 여전히 없으면 에러
+  if (!workSpaceSeq) {
+    console.warn('워크스페이스 Seq를 찾을 수 없습니다.')
+    return []
+  }
+  
+  try {
+    // 프론트엔드 타입을 백엔드 타입으로 변환
+    const backendTypes = mapToBackendTypes(props.searchTypes)
+    
+    // API 호출
+    const response = await searchUnified(workSpaceSeq, {
+      query: query,
+      types: backendTypes,
+      page: 0,
+      size: 20
+    })
+    
+    // 백엔드 응답 결과에 아이콘과 색상 추가
+    const results = response.results.map(result => ({
+      ...result,
+      icon: getResultIcon(result.type),
+      iconColor: getResultIconColor(result.type)
+    }))
+    
+    return results
+  } catch (error) {
+    console.error('검색 API 호출 실패:', error)
+    throw error
+  }
 }
 
 // 검색 결과 선택
@@ -208,16 +250,6 @@ const selectResult = (result) => {
   searchQuery.value = ''
 }
 
-// ID에서 접두사 제거 (workspace_4 → 4, chat_8 → 8)
-const extractId = (fullId) => {
-  if (!fullId) return fullId
-  const match = fullId.match(/_(\d+)$/)
-  if (match) {
-    return match[1]
-  }
-  return fullId
-}
-
 // 결과로 네비게이션
 const navigateToResult = (result) => {
   const currentWorkspace = workspaceStore.currentWorkspaceInfo
@@ -230,11 +262,15 @@ const navigateToResult = (result) => {
     case 'file':
       router.push(`/workspaces/${cleanWorkspaceId}/drive?fileId=${result.id}`)
       break
-    case 'user':
-      router.push(`/workspaces/${cleanWorkspaceId}/friends?userId=${result.id}`)
+    case 'task':
+      // task ID에서 실제 ID 추출 (task_1 -> 1)
+      const taskId = extractId(result.id)
+      router.push(`/workspaces/${cleanWorkspaceId}/schedule?taskId=${taskId}`)
       break
-    case 'channel':
-      router.push(`/workspaces/${cleanWorkspaceId}/${result.id}`)
+    case 'meeting':
+      // meeting ID에서 실제 ID 추출
+      const meetingId = extractId(result.id)
+      router.push(`/workspaces/${cleanWorkspaceId}/meetings?meetingId=${meetingId}`)
       break
     default:
       console.log('알 수 없는 결과 타입:', result.type)
