@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref, computed, watch } from 'vue'
+import { ref, computed, watch } from 'vue'
 import sseConnection from '@/api/notification/sseApi'
 import { apiGet, apiPatch, apiDelete } from '@/utils/api'
 import { emitter } from '@/eventBus'
@@ -125,11 +126,30 @@ export const useNotificationStore = defineStore('notification', () => {
     const key = String(channelSeq)
     channelNotificationCounts.value[key] = 0
     saveChannelNotificationCounts()
+    saveChannelNotificationCounts()
   }
   
   // 특정 채널에 알림이 있는지 확인 (bold 처리용)
   const hasChannelNotification = (channelSeq) => {
     return getChannelNotificationCount(channelSeq) > 0
+  }
+  
+  // 워크스페이스별 채팅 채널 알림 개수 계산
+  // (채널 목록을 받아서 각 채널의 알림 개수를 합산)
+  const getWorkspaceChatNotificationCount = (chatChannels) => {
+    if (!chatChannels || !Array.isArray(chatChannels) || chatChannels.length === 0) {
+      return 0
+    }
+    
+    return chatChannels.reduce((total, channel) => {
+      const count = getChannelNotificationCount(channel.channelSeq)
+      return total + count
+    }, 0)
+  }
+  
+  // 워크스페이스에 채팅 알림이 있는지 확인
+  const hasWorkspaceChatNotification = (chatChannels) => {
+    return getWorkspaceChatNotificationCount(chatChannels) > 0
   }
   
   // 워크스페이스별 채팅 채널 알림 개수 계산
@@ -308,6 +328,8 @@ export const useNotificationStore = defineStore('notification', () => {
       const targetSeq = data.targetSeq || data.channelSeq || data.data?.targetSeq || data.data?.channelSeq
       const workSpaceSeq = data.workSpaceSeq || data.data?.workSpaceSeq
       
+      const workSpaceSeq = data.workSpaceSeq || data.data?.workSpaceSeq
+      
       if (targetSeq) {
         // ✅ 1:1 채팅과 프로젝트 채팅 구분
         // workSpaceSeq가 없으면 1:1 채팅, 있으면 프로젝트 채팅
@@ -344,6 +366,7 @@ export const useNotificationStore = defineStore('notification', () => {
           // 마지막 메시지 업데이트
           const messageContent = data.message || data.content || data.chatMessageText || '';
           if (messageContent) {
+            emitter.emit('update-direct-message-last-message', {
             emitter.emit('update-direct-message-last-message', {
               channelSeq: targetSeq,
               lastMessage: messageContent
@@ -909,5 +932,9 @@ export const useNotificationStore = defineStore('notification', () => {
     hasChannelNotification,
     getWorkspaceChatNotificationCount,
     hasWorkspaceChatNotification
+    hasChannelNotification,
+    getWorkspaceChatNotificationCount,
+    hasWorkspaceChatNotification
   }
 })
+
