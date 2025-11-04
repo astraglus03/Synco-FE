@@ -704,6 +704,37 @@
               </div>
             </div>
           </div>
+          
+          <!-- 프로젝트 기간 (서버 사이드바와 동일하게 멤버 초대 아래에 위치) -->
+          <div class="workspace-info-section">
+            <div class="workspace-basic-row" style="align-items: center;">
+              <div class="workspace-name-group">
+                <label class="input-label">프로젝트 기간</label>
+                <div style="display:flex; gap:12px;">
+                  <v-text-field
+                    v-model="newProjectStartDate"
+                    type="date"
+                    label="시작일"
+                    variant="outlined"
+                    density="compact"
+                    hide-details
+                    :max="newProjectEndDate || undefined"
+                    required
+                  />
+                  <v-text-field
+                    v-model="newProjectEndDate"
+                    type="date"
+                    label="종료일"
+                    variant="outlined"
+                    density="compact"
+                    hide-details
+                    :min="newProjectStartDate || undefined"
+                    required
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
         
         <div class="modal-actions">
@@ -903,6 +934,8 @@ const newProject = ref({
 const newProjectProfile = ref('')
 const newProjectProfileFile = ref(null)
 const profileInput = ref(null)
+const newProjectStartDate = ref('') // yyyy-MM-dd (서버 사이드바와 동일)
+const newProjectEndDate = ref('')   // yyyy-MM-dd (서버 사이드바와 동일)
 const memberSearchQuery = ref('')
 const invitedMembers = ref([])
 const isLoadingProjectFriends = ref(false)
@@ -1532,10 +1565,22 @@ const isInvited = (userSeq) => {
   return invitedMembers.value.some(member => (member.memberSeq || member.id) === userSeq)
 }
 
-// 프로젝트 생성 처리
+// 프로젝트 생성 처리 (서버 사이드바와 동일한 로직)
 const handleCreateProject = async () => {
   if (!newProject.value.name.trim()) {
-    showError('프로젝트 생성 실패', '프로젝트 이름을 입력해주세요.')
+    alert('프로젝트 이름을 입력해주세요.')
+    return
+  }
+  if (!newProjectStartDate.value) {
+    alert('프로젝트 시작일을 선택하세요.')
+    return
+  }
+  if (!newProjectEndDate.value) {
+    alert('프로젝트 종료일을 선택하세요.')
+    return
+  }
+  if (new Date(newProjectStartDate.value) > new Date(newProjectEndDate.value)) {
+    alert('종료일은 시작일 이후여야 합니다.')
     return
   }
 
@@ -1543,28 +1588,34 @@ const handleCreateProject = async () => {
     // memberList 생성 (memberSeq 배열)
     const memberList = invitedMembers.value.map(member => member.memberSeq)
     
-    // API 호출
+    // API 호출 (서버 사이드바와 동일하게 시작일/종료일 포함)
     const createdWorkspace = await createWorkspace(
       newProject.value.name,
       newProjectProfileFile.value,
-      memberList
+      memberList,
+      `${newProjectStartDate.value}T00:00:00`,
+      `${newProjectEndDate.value}T23:59:59`
     )
     
-    // 워크스페이스 목록 새로고침
+    // 성공 메시지
+    alert(`프로젝트 "${createdWorkspace.workSpaceName}"가 성공적으로 생성되었습니다!`)
+    
+    // 워크스페이스 목록 새로고침 (API에서 최신 목록 가져오기)
     await workspaceStore.loadMyWorkspaces()
     
     // 생성된 워크스페이스로 이동
-    const newWorkspaceId = createdWorkspace.workSpaceSeq
-    await router.push(`/workspaces/${newWorkspaceId}/dashboard`)
+    const newWorkspaceId = `workspace_${createdWorkspace.workSpaceSeq}`
+    await router.push(`/workspaces/${newWorkspaceId.split('_')[1]}/dashboard`)
     
     // 모달 닫기
     closeProjectDialog()
   } catch (error) {
-    showError('프로젝트 생성 실패', error.message || '프로젝트 생성 중 오류가 발생했습니다.')
+    console.error('프로젝트 생성 실패:', error)
+    alert('프로젝트 생성에 실패했습니다. 다시 시도해주세요.')
   }
 }
 
-// 프로젝트 모달 닫기 및 초기화
+// 프로젝트 모달 닫기 및 초기화 (서버 사이드바와 동일)
 const closeProjectDialog = () => {
   showProjectDialog.value = false
   newProject.value = {
@@ -1575,6 +1626,8 @@ const closeProjectDialog = () => {
   }
   newProjectProfile.value = ''
   newProjectProfileFile.value = null
+  newProjectStartDate.value = ''
+  newProjectEndDate.value = ''
   invitedMembers.value = []
   memberSearchQuery.value = ''
   memberSearchResults.value = []
