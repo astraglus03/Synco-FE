@@ -1,9 +1,10 @@
 import { defineStore } from 'pinia'
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import sseConnection from '@/api/notification/sseApi'
 import { apiGet, apiPatch, apiDelete } from '@/utils/api'
 import { emitter } from '@/eventBus'
 import { useAuthStore } from '@/store/authStore'
+import { useWorkspaceStore } from '@/store/workspaceStore'
 
 export const useNotificationStore = defineStore('notification', () => {
   // ===== 상태 =====
@@ -27,7 +28,31 @@ export const useNotificationStore = defineStore('notification', () => {
   const currentWorkspaceSeq = ref(null)
   
   // 채널별 알림 개수 (channelSeq -> count)
-  const channelNotificationCounts = ref({})
+  // 로컬 스토리지에서 복원 (새로고침 후에도 유지)
+  const loadChannelNotificationCounts = () => {
+    try {
+      const stored = localStorage.getItem('channelNotificationCounts')
+      return stored ? JSON.parse(stored) : {}
+    } catch (e) {
+      console.warn('로컬 스토리지에서 채널 알림 개수 복원 실패:', e)
+      return {}
+    }
+  }
+  
+  const saveChannelNotificationCounts = () => {
+    try {
+      localStorage.setItem('channelNotificationCounts', JSON.stringify(channelNotificationCounts.value))
+    } catch (e) {
+      console.warn('로컬 스토리지에 채널 알림 개수 저장 실패:', e)
+    }
+  }
+  
+  const channelNotificationCounts = ref(loadChannelNotificationCounts())
+  
+  // channelNotificationCounts 변경 시 자동 저장
+  watch(channelNotificationCounts, () => {
+    saveChannelNotificationCounts()
+  }, { deep: true })
 
   // 중복 요청 방지용 플래그
   const processingMarkAsRead = ref(new Set()) // 처리 중인 notificationId
@@ -58,7 +83,11 @@ export const useNotificationStore = defineStore('notification', () => {
         // 여기서는 별도 workspaceSeq 필터링은 하지 않음
       }
     } else {
-      // 개인 워크스페이스: 필터링 없음 (전체 알림 표시)
+      // 개인 워크스페이스: 프로젝트 전용 알림 제외
+      // alarm-drive(공유문서/파일 공유)와 alarm-meeting(화상회의)는 프로젝트에서만 사용
+      filtered = filtered.filter(n => 
+        n.type !== 'alarm-drive' && n.type !== 'alarm-meeting'
+      )
     }
     
     // 2. 필터 타입별 필터링
@@ -95,11 +124,30 @@ export const useNotificationStore = defineStore('notification', () => {
   const clearChannelNotificationCount = (channelSeq) => {
     const key = String(channelSeq)
     channelNotificationCounts.value[key] = 0
+    saveChannelNotificationCounts()
   }
   
   // 특정 채널에 알림이 있는지 확인 (bold 처리용)
   const hasChannelNotification = (channelSeq) => {
     return getChannelNotificationCount(channelSeq) > 0
+  }
+  
+  // 워크스페이스별 채팅 채널 알림 개수 계산
+  // (채널 목록을 받아서 각 채널의 알림 개수를 합산)
+  const getWorkspaceChatNotificationCount = (chatChannels) => {
+    if (!chatChannels || !Array.isArray(chatChannels) || chatChannels.length === 0) {
+      return 0
+    }
+    
+    return chatChannels.reduce((total, channel) => {
+      const count = getChannelNotificationCount(channel.channelSeq)
+      return total + count
+    }, 0)
+  }
+  
+  // 워크스페이스에 채팅 알림이 있는지 확인
+  const hasWorkspaceChatNotification = (chatChannels) => {
+    return getWorkspaceChatNotificationCount(chatChannels) > 0
   }
   
   // 읽지 않은 알림 개수 (필터링된 알림 기준)
@@ -255,29 +303,77 @@ export const useNotificationStore = defineStore('notification', () => {
     // 알림 타입 정규화
     const notificationType = normalizeType(data.alarmType || data.type || 'UNKNOWN')
 
-    // alarm-chat 타입 특별 처리 (CHAT은 항상 표시)
+    // alarm-chat 타입 특별 처리
     if (notificationType === 'alarm-chat') {
       const targetSeq = data.targetSeq || data.channelSeq || data.data?.targetSeq || data.data?.channelSeq
+      const workSpaceSeq = data.workSpaceSeq || data.data?.workSpaceSeq
+      
       if (targetSeq) {
-        // ✅ 프로젝트 워크스페이스 채팅 채널: channelNotificationCounts 사용
-        // ✅ 1:1 채팅: dm.unreadCount 사용 (이벤트 발생)
-        // 워크스페이스 타입으로 구분
-        const isPersonalWorkspace = currentWorkspaceType.value === 'personal'
+        // ✅ 1:1 채팅과 프로젝트 채팅 구분
+        // workSpaceSeq가 없으면 1:1 채팅, 있으면 프로젝트 채팅
+        const isPersonalChat = !workSpaceSeq || workSpaceSeq === null || workSpaceSeq === undefined
         
-        if (isPersonalWorkspace) {
-          // 개인 워크스페이스: 1:1 채팅이므로 dm.unreadCount로만 관리
-          // channelNotificationCounts는 증가시키지 않음 (중복 방지)
+        if (isPersonalChat) {
+          // 1:1 채팅은 현재 워크스페이스 타입과 관계없이 항상 1:1 채팅으로 처리
+          // (다른 워크스페이스를 선택 중이어도 1:1 채팅 알림은 처리해야 함)
           
-          // ✅ 1:1 채팅 목록의 마지막 메시지 업데이트를 위한 이벤트 발생
+          // 현재 선택된 채널인지 확인 (모든 워크스페이스 타입에서 체크)
+          const workspaceStore = useWorkspaceStore()
+          const currentSelectedChannel = workspaceStore.selectedSubChannel
+          const currentMainChannel = workspaceStore.currentChannel
+          
+          const targetSeqStr = String(targetSeq)
+          // 1:1 채팅이 선택되어 있는지 확인
+          // currentMainChannel이 'chat'이고 selectedSubChannel이 channelSeq와 같으면 선택된 상태
+          const isCurrentlySelected = 
+            currentMainChannel === 'chat' && 
+            (currentSelectedChannel === targetSeqStr || 
+             currentSelectedChannel?.replace('chat_', '') === targetSeqStr)
+          
+          if (isCurrentlySelected) {
+            // 현재 선택된 1:1 채팅 채널이면 알림을 증가시키지 않음
+            return
+          }
+          
+          // ✅ 1:1 채팅 알림 처리
+          // 프로젝트 채팅처럼 channelNotificationCounts에만 증가
+          // (개인/프로젝트 워크스페이스 모두 동일하게 처리)
+          const key = String(targetSeq)
+          channelNotificationCounts.value[key] = (channelNotificationCounts.value[key] || 0) + 1
+          
+          // 마지막 메시지 업데이트
           const messageContent = data.message || data.content || data.chatMessageText || '';
           if (messageContent) {
-            emitter.emit('increment-direct-message-unread', {
+            emitter.emit('update-direct-message-last-message', {
               channelSeq: targetSeq,
               lastMessage: messageContent
             });
           }
         } else {
-          // 프로젝트 워크스페이스: 채팅 채널이므로 channelNotificationCounts 사용
+          // 프로젝트 채팅 채널: channelNotificationCounts 사용
+          // workSpaceSeq가 있으면 프로젝트 채팅이므로 현재 워크스페이스 타입과 관계없이 항상 처리
+          // (개인 워크스페이스에 있어도 프로젝트 채팅 알림은 쌓여야 함)
+          
+          // 현재 선택된 채널인지 확인 (현재 워크스페이스가 프로젝트이고 해당 채널을 보고 있을 때만 스킵)
+          const workspaceStore = useWorkspaceStore()
+          const currentSelectedChannel = workspaceStore.selectedSubChannel
+          const currentMainChannel = workspaceStore.currentChannel
+          
+          // 현재 선택된 채널인지 확인
+          // selectedSubChannel이 'chat_${channelSeq}' 형식이거나 그냥 channelSeq 문자열일 수 있음
+          const targetSeqStr = String(targetSeq)
+          const isCurrentlySelected = 
+            currentMainChannel === 'chat' && 
+            (currentSelectedChannel === targetSeqStr || 
+             currentSelectedChannel === `chat_${targetSeqStr}` ||
+             currentSelectedChannel?.replace('chat_', '') === targetSeqStr)
+          
+          if (isCurrentlySelected) {
+            // 현재 선택된 채널이면 알림을 증가시키지 않음
+            return
+          }
+          
+          // 선택된 채널이 아니면 알림 개수 증가 (현재 워크스페이스 타입과 관계없이 항상 처리)
           const key = String(targetSeq)
           channelNotificationCounts.value[key] = (channelNotificationCounts.value[key] || 0) + 1
         }
@@ -810,6 +906,8 @@ export const useNotificationStore = defineStore('notification', () => {
     fetchNotifications,
     getChannelNotificationCount,
     clearChannelNotificationCount,
-    hasChannelNotification
+    hasChannelNotification,
+    getWorkspaceChatNotificationCount,
+    hasWorkspaceChatNotification
   }
 })
