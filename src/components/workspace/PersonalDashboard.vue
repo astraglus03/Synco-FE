@@ -1646,13 +1646,45 @@ const handleCreateProject = async () => {
     // memberList 생성 (memberSeq 배열)
     const memberList = invitedMembers.value.map(member => member.memberSeq)
     
+    // 날짜를 ISO LocalDateTime 형식으로 변환 (yyyy-MM-ddTHH:mm:ss)
+    const formatDateForApi = (dateValue) => {
+      if (!dateValue) return null
+      
+      // Date 객체인 경우
+      if (dateValue instanceof Date) {
+        const year = dateValue.getFullYear()
+        const month = String(dateValue.getMonth() + 1).padStart(2, '0')
+        const day = String(dateValue.getDate()).padStart(2, '0')
+        return `${year}-${month}-${day}`
+      }
+      
+      // 문자열인 경우 (yyyy-MM-dd 형식)
+      if (typeof dateValue === 'string' && dateValue.match(/^\d{4}-\d{2}-\d{2}$/)) {
+        return dateValue
+      }
+      
+      // 다른 형식인 경우 Date로 파싱 시도
+      const date = new Date(dateValue)
+      if (!isNaN(date.getTime())) {
+        const year = date.getFullYear()
+        const month = String(date.getMonth() + 1).padStart(2, '0')
+        const day = String(date.getDate()).padStart(2, '0')
+        return `${year}-${month}-${day}`
+      }
+      
+      return dateValue
+    }
+    
+    const startDateStr = formatDateForApi(newProjectStartDate.value)
+    const endDateStr = formatDateForApi(newProjectEndDate.value)
+    
     // API 호출 (서버 사이드바와 동일하게 시작일/종료일 포함)
     const createdWorkspace = await createWorkspace(
       newProject.value.name,
       newProjectProfileFile.value,
       memberList,
-      `${newProjectStartDate.value}T00:00:00`,
-      `${newProjectEndDate.value}T23:59:59`
+      startDateStr ? `${startDateStr}T00:00:00` : null,
+      endDateStr ? `${endDateStr}T23:59:59` : null
     )
     
     // 성공 메시지
@@ -1669,7 +1701,8 @@ const handleCreateProject = async () => {
     closeProjectDialog()
   } catch (error) {
     console.error('프로젝트 생성 실패:', error)
-    alert('프로젝트 생성에 실패했습니다. 다시 시도해주세요.')
+    const errorMessage = error.response?.data?.message || error.response?.data?.error || '프로젝트 생성에 실패했습니다. 다시 시도해주세요.'
+    alert(errorMessage)
   }
 }
 

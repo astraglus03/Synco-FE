@@ -95,11 +95,7 @@ export const meetingApi = {
   // 화상회의 방 생성
   async createRoom(memberSeq, roomCreateReqDto) {
     try {
-      const response = await axios.post(API_ENDPOINTS.CREATE_ROOM, roomCreateReqDto, {
-        headers: {
-          'X-Member-Seq': memberSeq
-        }
-      })
+      const response = await axios.post(API_ENDPOINTS.CREATE_ROOM, roomCreateReqDto)
       return response.data
     } catch (error) {
       console.error('화상회의 방 생성 실패:', error)
@@ -110,11 +106,7 @@ export const meetingApi = {
   // 화상회의 방 참여
   async joinRoom(memberSeq, roomId) {
     try {
-      const response = await axios.post(API_ENDPOINTS.JOIN_ROOM(roomId), {}, {
-        headers: {
-          'X-Member-Seq': memberSeq
-        }
-      })
+      const response = await axios.post(API_ENDPOINTS.JOIN_ROOM(roomId), {})
       return response.data
     } catch (error) {
       console.error('화상회의 방 참여 실패:', error)
@@ -125,11 +117,7 @@ export const meetingApi = {
   // 화상회의 방 취소
   async cancelRoom(memberSeq, roomId) {
     try {
-      const response = await axios.delete(API_ENDPOINTS.CANCEL_ROOM(roomId), {
-        headers: {
-          'X-Member-Seq': memberSeq
-        }
-      })
+      const response = await axios.delete(API_ENDPOINTS.CANCEL_ROOM(roomId))
       return response.data
     } catch (error) {
       console.error('화상회의 방 취소 실패:', error)
@@ -140,11 +128,7 @@ export const meetingApi = {
   // 채팅 메시지 전송
   async sendMessage(memberSeq, roomId, chatMessageReq) {
     try {
-      const response = await axios.post(API_ENDPOINTS.SEND_MESSAGE(roomId), chatMessageReq, {
-        headers: {
-          'X-Member-Seq': memberSeq
-        }
-      })
+      const response = await axios.post(API_ENDPOINTS.SEND_MESSAGE(roomId), chatMessageReq)
       return response.data
     } catch (error) {
       console.error('채팅 메시지 전송 실패:', error)
@@ -156,9 +140,6 @@ export const meetingApi = {
   async getMessages(memberSeq, roomId, page = 0, size = 10) {
     try {
       const response = await axios.get(API_ENDPOINTS.GET_MESSAGES(roomId), {
-        headers: {
-          'X-Member-Seq': memberSeq
-        },
         params: {
           page,
           size,
@@ -175,11 +156,7 @@ export const meetingApi = {
   // 녹화 시작
   async startRecording(memberSeq, roomId) {
     try {
-      const response = await axios.post(API_ENDPOINTS.START_RECORDING(roomId), {}, {
-        headers: {
-          'X-Member-Seq': memberSeq
-        }
-      })
+      const response = await axios.post(API_ENDPOINTS.START_RECORDING(roomId), {})
       return response.data
     } catch (error) {
       console.error('녹화 시작 실패:', error)
@@ -191,9 +168,6 @@ export const meetingApi = {
   async downloadRecording(memberSeq, roomSeq) {
     try {
       const response = await axios.get(API_ENDPOINTS.DOWNLOAD_RECORDING(roomSeq), {
-        headers: {
-          'X-Member-Seq': memberSeq
-        },
         responseType: 'blob'
       })
       return response
@@ -230,11 +204,7 @@ export const meetingApi = {
   // 채널에 멤버 추가
   async addMember(memberSeq, channelInviteReqDto) {
     try {
-      const response = await axios.post(API_ENDPOINTS.ADD_MEMBER, channelInviteReqDto, {
-        headers: {
-          'X-Member-Seq': memberSeq
-        }
-      })
+      const response = await axios.post(API_ENDPOINTS.ADD_MEMBER, channelInviteReqDto)
       return response.data
     } catch (error) {
       console.error('멤버 추가 실패:', error)
@@ -245,11 +215,7 @@ export const meetingApi = {
   // SUPER 권한 위임
   async delegateSuperAuthority(memberSeq, delegateSuperAuthorityReqDto) {
     try {
-      const response = await axios.post(API_ENDPOINTS.DELEGATE_SUPER_AUTHORITY, delegateSuperAuthorityReqDto, {
-        headers: {
-          'X-Member-Seq': memberSeq
-        }
-      })
+      const response = await axios.post(API_ENDPOINTS.DELEGATE_SUPER_AUTHORITY, delegateSuperAuthorityReqDto)
       return response.data
     } catch (error) {
       console.error('SUPER 권한 위임 실패:', error)
@@ -282,11 +248,7 @@ export const meetingApi = {
   // 워크스페이스 탈퇴
   async leaveWorkSpace(workSpaceSeq, memberSeq) {
     try {
-      const response = await axios.delete(API_ENDPOINTS.LEAVE_WORKSPACE(workSpaceSeq), {
-        headers: {
-          'X-Member-Seq': memberSeq
-        }
-      })
+      const response = await axios.delete(API_ENDPOINTS.LEAVE_WORKSPACE(workSpaceSeq))
       return response.data
     } catch (error) {
       console.error('워크스페이스 탈퇴 실패:', error)
@@ -310,11 +272,7 @@ export const meetingApi = {
   // 채널 권한 변경
   async changeChannelAuthority(memberSeq, grantAuthorityReqDto) {
     try {
-      const response = await axios.post(API_ENDPOINTS.CHANGE_CHANNEL_AUTHORITY, grantAuthorityReqDto, {
-        headers: {
-          'X-Member-Seq': memberSeq
-        }
-      })
+      const response = await axios.post(API_ENDPOINTS.CHANGE_CHANNEL_AUTHORITY, grantAuthorityReqDto)
       return response.data
     } catch (error) {
       console.error('채널 권한 변경 실패:', error)
@@ -333,9 +291,6 @@ export const meetingApi = {
       
       // 백엔드 엔드포인트는 /channel/{channelSeq}이지만 실제로는 workSpaceSeq를 전달해야 함
       const response = await axios.get(url, {
-        headers: {
-          'X-Member-Seq': memberSeq
-        },
         params: {
           page,
           size,
@@ -365,9 +320,6 @@ export const meetingApi = {
       console.log('  - memberSeq:', memberSeq)
       
       const response = await axios.get(url, {
-        headers: {
-          'X-Member-Seq': memberSeq
-        },
         params: {
           page,
           size,
@@ -396,11 +348,7 @@ export const meetingApi = {
       console.log('  - roomSeq:', roomSeq)
       console.log('  - memberSeq:', memberSeq)
       
-      const response = await axios.get(url, {
-        headers: {
-          'X-Member-Seq': memberSeq
-        }
-      })
+      const response = await axios.get(url)
       
       console.log('✅ API 응답:', response.data)
       return response.data

@@ -254,8 +254,7 @@ class DriveApiBase {
       
       const response = await axios.post(this.endpoints.upload, formData, {
         headers: { 
-          'Content-Type': 'multipart/form-data',
-          'X-Member-Seq': '1'
+          'Content-Type': 'multipart/form-data'
         }
       })
       
