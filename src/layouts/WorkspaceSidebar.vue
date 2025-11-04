@@ -332,7 +332,7 @@ const personalWsSubscriptions = ref([]); // 각 채널별 구독 리스트
 const connectPersonalChatWebSocket = () => {
   if (props.workspaceType !== "personal") return;
 
-  const token = localStorage.getItem("token");
+  const token = localStorage.getItem("accessToken");
   if (!token) {
     console.warn("⚠️ 토큰이 없어 WebSocket 연결 불가");
     return;
@@ -1276,19 +1276,27 @@ const selectSubChannel = (parentId, subChannelId) => {
     type: typeof subChannelId,
   });
 
-  // 채널 선택 시 해당 채널의 알림 개수 초기화
+  // chat 채널인 경우 channelSeq 정규화 (chat_ prefix 제거)
+  let normalizedChannelId = subChannelId;
   if (parentId === "chat" && subChannelId) {
-    const channelSeq = subChannelId.toString().replace("chat_", "");
-    notificationStore.clearChannelNotificationCount(channelSeq);
+    // chat_ prefix 제거하여 순수 channelSeq만 추출
+    normalizedChannelId = subChannelId.toString().replace("chat_", "");
+    
+    // 채널 선택 시 해당 채널의 알림 개수 초기화
+    notificationStore.clearChannelNotificationCount(normalizedChannelId);
   }
 
-  // 항상 부모로 emit (URL 변경)
+  // 항상 부모로 emit (URL 변경) - 원본 subChannelId 사용
   emit("select-subchannel", parentId, subChannelId);
 
   // chat 채널인 경우 event bus로도 이벤트 발생 (Chat.vue에서 받기 위해)
+  // Chat.vue에는 정규화된 channelSeq 전달
   if (parentId === "chat") {
-    console.log("🔔 Event bus로 채널 선택 발생:", parentId, subChannelId);
-    emitter.emit("select-chat-channel", { parentId, subChannelId });
+    console.log("🔔 Event bus로 채널 선택 발생:", parentId, normalizedChannelId);
+    emitter.emit("select-chat-channel", { 
+      parentId, 
+      subChannelId: normalizedChannelId 
+    });
   }
 };
 
@@ -1618,7 +1626,7 @@ const getStatusColor = (status) => {
               class="subchannel-item"
               :class="{ active: selectedSubChannel === subChannel.id }"
               @click="
-                selectSubChannel(channel.id, subChannel.id.replace('chat_', ''))
+                selectSubChannel(channel.id, subChannel.id)
               "
               @mouseenter="hoveredChannel = subChannel.id"
               @mouseleave="hoveredChannel = null"
