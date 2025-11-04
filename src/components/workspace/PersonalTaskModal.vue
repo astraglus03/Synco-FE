@@ -54,33 +54,83 @@
           </div>
 
           <!-- 날짜 필드들 -->
-          <div class="mb-2">
-            <v-row>
-              <v-col cols="6">
-                <label class="text-subtitle-1 font-weight-medium mb-2">시작일</label>
-                <v-text-field
-                  v-model="taskData.startDate"
-                  type="date"
-                  :rules="dateRules"
-                  variant="outlined"
-                  density="comfortable"
-                  hide-details
-                  required
-                ></v-text-field>
-              </v-col>
-              <v-col cols="6">
-                <label class="text-subtitle-1 font-weight-medium mb-2">종료일</label>
-                <v-text-field
-                  v-model="taskData.endDate"
-                  type="date"
-                  :rules="dateRules"
-                  variant="outlined"
-                  density="comfortable"
-                  hide-details
-                  required
-                ></v-text-field>
-              </v-col>
-            </v-row>
+          <div class="mb-3">
+            <label class="text-subtitle-1 font-weight-medium mb-3">일정 기간</label>
+            
+            <!-- 날짜 선택 카드 -->
+            <div class="date-selector-container">
+              <v-menu
+                v-model="startDateMenu"
+                :close-on-content-click="false"
+                transition="scale-transition"
+                offset-y
+                min-width="290px"
+              >
+                <template v-slot:activator="{ props: menuProps }">
+                  <div 
+                    v-bind="menuProps"
+                    class="date-selector-card"
+                    @click="openDatePicker('start')"
+                  >
+                    <div class="date-selector-icon">
+                      <v-icon color="primary">mdi-calendar-start</v-icon>
+                    </div>
+                    <div class="date-selector-content">
+                      <div class="date-selector-label">시작일</div>
+                      <div class="date-selector-value">
+                        {{ formatDisplayDate(taskData.startDate) || '날짜 선택' }}
+                      </div>
+                    </div>
+                    <v-icon class="date-selector-arrow">mdi-chevron-right</v-icon>
+                  </div>
+                </template>
+                <v-date-picker
+                  :model-value="taskData.startDate"
+                  @update:model-value="updateStartDate"
+                  :max="taskData.endDate || undefined"
+                  color="primary"
+                  locale="ko-KR"
+                ></v-date-picker>
+              </v-menu>
+              
+              <div class="date-connector">
+                <v-icon size="small" color="grey">mdi-arrow-right</v-icon>
+              </div>
+              
+              <v-menu
+                v-model="endDateMenu"
+                :close-on-content-click="false"
+                transition="scale-transition"
+                offset-y
+                min-width="290px"
+              >
+                <template v-slot:activator="{ props: menuProps }">
+                  <div 
+                    v-bind="menuProps"
+                    class="date-selector-card"
+                    @click="openDatePicker('end')"
+                  >
+                    <div class="date-selector-icon">
+                      <v-icon color="primary">mdi-calendar-end</v-icon>
+                    </div>
+                    <div class="date-selector-content">
+                      <div class="date-selector-label">종료일</div>
+                      <div class="date-selector-value">
+                        {{ formatDisplayDate(taskData.endDate) || '날짜 선택' }}
+                      </div>
+                    </div>
+                    <v-icon class="date-selector-arrow">mdi-chevron-right</v-icon>
+                  </div>
+                </template>
+                <v-date-picker
+                  :model-value="taskData.endDate"
+                  @update:model-value="updateEndDate"
+                  :min="taskData.startDate || undefined"
+                  color="primary"
+                  locale="ko-KR"
+                ></v-date-picker>
+              </v-menu>
+            </div>
           </div>
         </v-form>
       </v-card-text>
@@ -171,6 +221,10 @@ const isFormValid = ref(false)
 // 로딩 상태
 const isCreating = ref(false)
 
+// 날짜 메뉴 상태
+const startDateMenu = ref(false)
+const endDateMenu = ref(false)
+
 // 일정 데이터
 const taskData = ref({
   taskTitle: '',
@@ -206,6 +260,37 @@ const dateRules = [
 const formatDateForInput = (dateString) => {
   if (!dateString) return ''
   return new Date(dateString).toISOString().split('T')[0]
+}
+
+// 날짜를 표시용 포맷으로 변환 (예: 2024년 1월 15일)
+const formatDisplayDate = (dateString) => {
+  if (!dateString) return ''
+  const date = new Date(dateString)
+  const year = date.getFullYear()
+  const month = date.getMonth() + 1
+  const day = date.getDate()
+  return `${year}년 ${month}월 ${day}일`
+}
+
+// 날짜 피커 열기
+const openDatePicker = (type) => {
+  if (type === 'start') {
+    startDateMenu.value = true
+  } else {
+    endDateMenu.value = true
+  }
+}
+
+// 시작일 업데이트
+const updateStartDate = (value) => {
+  taskData.value.startDate = value
+  startDateMenu.value = false
+}
+
+// 종료일 업데이트
+const updateEndDate = (value) => {
+  taskData.value.endDate = value
+  endDateMenu.value = false
 }
 
 // 일정 저장
@@ -256,13 +341,16 @@ const closeModal = () => {
 
 // 폼 초기화
 const resetForm = () => {
+  const today = new Date().toISOString().split('T')[0]
   taskData.value = {
     taskTitle: '',
     taskContent: '',
     taskStatus: 'TODO',
-    startDate: '',
-    endDate: ''
+    startDate: today, // 시작일은 오늘로 기본 설정
+    endDate: '' // 종료일은 빈 값
   }
+  startDateMenu.value = false
+  endDateMenu.value = false
   if (formRef.value) {
     formRef.value.reset()
   }
@@ -289,8 +377,8 @@ watch([isOpen, () => props.editTaskData], ([newValue]) => {
         taskTitle: '',
         taskContent: '',
         taskStatus: 'TODO',
-        startDate: today,
-        endDate: today
+        startDate: today, // 시작일은 오늘로 기본 설정
+        endDate: '' // 종료일은 빈 값
       }
     }
   }
@@ -481,6 +569,107 @@ watch([isOpen, () => props.editTaskData], ([newValue]) => {
 .v-col {
   padding-top: 0;
   padding-bottom: 0;
+}
+
+/* 날짜 선택 카드 스타일 */
+.date-selector-container {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.date-selector-card {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px;
+  background: rgb(var(--v-theme-schedule-card-bg));
+  border: 2px solid rgb(var(--v-theme-schedule-border));
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.date-selector-card:hover {
+  border-color: rgb(var(--v-theme-primary));
+  background: rgba(var(--v-theme-primary), 0.05);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.date-selector-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  background: rgba(var(--v-theme-primary), 0.1);
+  border-radius: 10px;
+}
+
+.date-selector-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.date-selector-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: rgba(var(--v-theme-on-surface), 0.6);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 4px;
+}
+
+.date-selector-value {
+  font-size: 15px;
+  font-weight: 600;
+  color: rgb(var(--v-theme-on-surface));
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.date-selector-arrow {
+  color: rgba(var(--v-theme-on-surface), 0.4);
+  transition: transform 0.2s ease;
+}
+
+.date-selector-card:hover .date-selector-arrow {
+  transform: translateX(4px);
+  color: rgb(var(--v-theme-primary));
+}
+
+.date-connector {
+  display: flex;
+  align-items: center;
+  padding: 0 4px;
+  flex-shrink: 0;
+}
+
+/* 날짜 피커 스타일 */
+:deep(.v-date-picker) {
+  background: rgb(var(--v-theme-surface));
+  border-radius: 8px;
+}
+
+/* 반응형 디자인 */
+@media (max-width: 768px) {
+  .date-selector-container {
+    flex-direction: column;
+    gap: 8px;
+  }
+  
+  .date-connector {
+    transform: rotate(90deg);
+    padding: 8px 0;
+  }
+  
+  .date-selector-card {
+    width: 100%;
+  }
 }
 </style>
 
