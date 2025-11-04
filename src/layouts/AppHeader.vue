@@ -705,6 +705,10 @@ const teamName = ref('')
 const projectStartDate = ref('') // yyyy-MM-dd
 const projectEndDate = ref('')   // yyyy-MM-dd
 
+// 프로젝트 날짜 메뉴 상태
+const projectStartDateMenu = ref(false)
+const projectEndDateMenu = ref(false)
+
 // 썸네일 이미지
 const thumbnailImage = ref(null)
 const thumbnailPreview = ref('')
@@ -752,6 +756,37 @@ const showCustomToast = (title, message, type = 'success') => {
   setTimeout(() => {
     showToast.value = false
   }, 5000)
+}
+
+// 프로젝트 날짜 표시용 포맷 변환
+const formatProjectDisplayDate = (dateString) => {
+  if (!dateString) return ''
+  const date = new Date(dateString)
+  const year = date.getFullYear()
+  const month = date.getMonth() + 1
+  const day = date.getDate()
+  return `${year}년 ${month}월 ${day}일`
+}
+
+// 프로젝트 날짜 피커 열기
+const openProjectDatePicker = (type) => {
+  if (type === 'start') {
+    projectStartDateMenu.value = true
+  } else {
+    projectEndDateMenu.value = true
+  }
+}
+
+// 프로젝트 시작일 업데이트
+const updateProjectStartDate = (value) => {
+  projectStartDate.value = value
+  projectStartDateMenu.value = false
+}
+
+// 프로젝트 종료일 업데이트
+const updateProjectEndDate = (value) => {
+  projectEndDate.value = value
+  projectEndDateMenu.value = false
 }
 
 // 현재 로그인한 사용자 ID (authStore에서 가져옴)
@@ -1601,30 +1636,80 @@ onMounted(() => {
 
                   <div class="date-section">
                     <label class="field-label">프로젝트 기간</label>
-                    <div class="date-row">
-                      <v-text-field
-                        v-model="projectStartDate"
-                        type="date"
-                        label="시작일"
-                        variant="solo-filled"
-                        flat
-                        density="comfortable"
-                        hide-details
-                        class="modern-input"
-                        :max="projectEndDate || undefined"
-                        required
-                      />
-                      <v-text-field
-                        v-model="projectEndDate"
-                        type="date"
-                        label="종료일"
-                        variant="solo-filled"
-                        flat
-                        density="comfortable"
-                        hide-details
-                        class="modern-input"
-                        :min="projectStartDate || undefined"
-                      />
+                    
+                    <!-- 날짜 선택 카드 -->
+                    <div class="date-selector-container">
+                      <v-menu
+                        v-model="projectStartDateMenu"
+                        :close-on-content-click="false"
+                        transition="scale-transition"
+                        offset-y
+                        min-width="290px"
+                      >
+                        <template v-slot:activator="{ props: menuProps }">
+                          <div 
+                            v-bind="menuProps"
+                            class="date-selector-card"
+                            @click="openProjectDatePicker('start')"
+                          >
+                            <div class="date-selector-icon">
+                              <v-icon color="primary">mdi-calendar-start</v-icon>
+                            </div>
+                            <div class="date-selector-content">
+                              <div class="date-selector-label">시작일</div>
+                              <div class="date-selector-value">
+                                {{ formatProjectDisplayDate(projectStartDate) || '날짜 선택' }}
+                              </div>
+                            </div>
+                            <v-icon class="date-selector-arrow">mdi-chevron-right</v-icon>
+                          </div>
+                        </template>
+                        <v-date-picker
+                          :model-value="projectStartDate"
+                          @update:model-value="updateProjectStartDate"
+                          :max="projectEndDate || undefined"
+                          color="primary"
+                          locale="ko-KR"
+                        ></v-date-picker>
+                      </v-menu>
+                      
+                      <div class="date-connector">
+                        <v-icon size="small" color="grey">mdi-arrow-right</v-icon>
+                      </div>
+                      
+                      <v-menu
+                        v-model="projectEndDateMenu"
+                        :close-on-content-click="false"
+                        transition="scale-transition"
+                        offset-y
+                        min-width="290px"
+                      >
+                        <template v-slot:activator="{ props: menuProps }">
+                          <div 
+                            v-bind="menuProps"
+                            class="date-selector-card"
+                            @click="openProjectDatePicker('end')"
+                          >
+                            <div class="date-selector-icon">
+                              <v-icon color="primary">mdi-calendar-end</v-icon>
+                            </div>
+                            <div class="date-selector-content">
+                              <div class="date-selector-label">종료일</div>
+                              <div class="date-selector-value">
+                                {{ formatProjectDisplayDate(projectEndDate) || '날짜 선택' }}
+                              </div>
+                            </div>
+                            <v-icon class="date-selector-arrow">mdi-chevron-right</v-icon>
+                          </div>
+                        </template>
+                        <v-date-picker
+                          :model-value="projectEndDate"
+                          @update:model-value="updateProjectEndDate"
+                          :min="projectStartDate || undefined"
+                          color="primary"
+                          locale="ko-KR"
+                        ></v-date-picker>
+                      </v-menu>
                     </div>
                   </div>
           
@@ -4619,6 +4704,107 @@ onMounted(() => {
   to {
     opacity: 0;
     transform: translateX(-50%) translateY(20px);
+  }
+}
+
+/* 날짜 선택 카드 스타일 */
+.date-selector-container {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.date-selector-card {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px;
+  background: rgb(var(--v-theme-surface));
+  border: 2px solid rgba(var(--v-theme-on-surface), 0.12);
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.date-selector-card:hover {
+  border-color: rgb(var(--v-theme-primary));
+  background: rgba(var(--v-theme-primary), 0.05);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.date-selector-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  background: rgba(var(--v-theme-primary), 0.1);
+  border-radius: 10px;
+}
+
+.date-selector-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.date-selector-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: rgba(var(--v-theme-on-surface), 0.6);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 4px;
+}
+
+.date-selector-value {
+  font-size: 15px;
+  font-weight: 600;
+  color: rgb(var(--v-theme-on-surface));
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.date-selector-arrow {
+  color: rgba(var(--v-theme-on-surface), 0.4);
+  transition: transform 0.2s ease;
+}
+
+.date-selector-card:hover .date-selector-arrow {
+  transform: translateX(4px);
+  color: rgb(var(--v-theme-primary));
+}
+
+.date-connector {
+  display: flex;
+  align-items: center;
+  padding: 0 4px;
+  flex-shrink: 0;
+}
+
+/* 날짜 피커 스타일 */
+:deep(.v-date-picker) {
+  background: rgb(var(--v-theme-surface));
+  border-radius: 8px;
+}
+
+/* 반응형 디자인 */
+@media (max-width: 768px) {
+  .date-selector-container {
+    flex-direction: column;
+    gap: 8px;
+  }
+  
+  .date-connector {
+    transform: rotate(90deg);
+    padding: 8px 0;
+  }
+  
+  .date-selector-card {
+    width: 100%;
   }
 }
 
