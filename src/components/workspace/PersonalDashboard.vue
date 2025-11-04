@@ -704,6 +704,90 @@
               </div>
             </div>
           </div>
+          
+          <!-- 프로젝트 기간 (서버 사이드바와 동일하게 멤버 초대 아래에 위치) -->
+          <div class="workspace-info-section">
+            <div class="workspace-basic-row" style="align-items: center;">
+              <div class="workspace-name-group">
+                <label class="input-label">프로젝트 기간</label>
+                
+                <!-- 날짜 선택 카드 -->
+                <div class="date-selector-container">
+                  <v-menu
+                    v-model="newProjectStartDateMenu"
+                    :close-on-content-click="false"
+                    transition="scale-transition"
+                    offset-y
+                    min-width="290px"
+                  >
+                    <template v-slot:activator="{ props: menuProps }">
+                      <div 
+                        v-bind="menuProps"
+                        class="date-selector-card"
+                        @click="openNewProjectDatePicker('start')"
+                      >
+                        <div class="date-selector-icon">
+                          <v-icon color="primary">mdi-calendar-start</v-icon>
+                        </div>
+                        <div class="date-selector-content">
+                          <div class="date-selector-label">시작일</div>
+                          <div class="date-selector-value">
+                            {{ formatNewProjectDisplayDate(newProjectStartDate) || '날짜 선택' }}
+                          </div>
+                        </div>
+                        <v-icon class="date-selector-arrow">mdi-chevron-right</v-icon>
+                      </div>
+                    </template>
+                    <v-date-picker
+                      :model-value="newProjectStartDate"
+                      @update:model-value="updateNewProjectStartDate"
+                      :max="newProjectEndDate || undefined"
+                      color="primary"
+                      locale="ko-KR"
+                    ></v-date-picker>
+                  </v-menu>
+                  
+                  <div class="date-connector">
+                    <v-icon size="small" color="grey">mdi-arrow-right</v-icon>
+                  </div>
+                  
+                  <v-menu
+                    v-model="newProjectEndDateMenu"
+                    :close-on-content-click="false"
+                    transition="scale-transition"
+                    offset-y
+                    min-width="290px"
+                  >
+                    <template v-slot:activator="{ props: menuProps }">
+                      <div 
+                        v-bind="menuProps"
+                        class="date-selector-card"
+                        @click="openNewProjectDatePicker('end')"
+                      >
+                        <div class="date-selector-icon">
+                          <v-icon color="primary">mdi-calendar-end</v-icon>
+                        </div>
+                        <div class="date-selector-content">
+                          <div class="date-selector-label">종료일</div>
+                          <div class="date-selector-value">
+                            {{ formatNewProjectDisplayDate(newProjectEndDate) || '날짜 선택' }}
+                          </div>
+                        </div>
+                        <v-icon class="date-selector-arrow">mdi-chevron-right</v-icon>
+                      </div>
+                    </template>
+                    <v-date-picker
+                      :model-value="newProjectEndDate"
+                      @update:model-value="updateNewProjectEndDate"
+                      :min="newProjectStartDate || undefined"
+                      color="primary"
+                      locale="ko-KR"
+                    ></v-date-picker>
+                  </v-menu>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
         
         <div class="modal-actions">
@@ -903,6 +987,13 @@ const newProject = ref({
 const newProjectProfile = ref('')
 const newProjectProfileFile = ref(null)
 const profileInput = ref(null)
+const newProjectStartDate = ref('') // yyyy-MM-dd (서버 사이드바와 동일)
+const newProjectEndDate = ref('')   // yyyy-MM-dd (서버 사이드바와 동일)
+
+// 프로젝트 생성 날짜 메뉴 상태
+const newProjectStartDateMenu = ref(false)
+const newProjectEndDateMenu = ref(false)
+
 const memberSearchQuery = ref('')
 const invitedMembers = ref([])
 const isLoadingProjectFriends = ref(false)
@@ -1532,10 +1623,22 @@ const isInvited = (userSeq) => {
   return invitedMembers.value.some(member => (member.memberSeq || member.id) === userSeq)
 }
 
-// 프로젝트 생성 처리
+// 프로젝트 생성 처리 (서버 사이드바와 동일한 로직)
 const handleCreateProject = async () => {
   if (!newProject.value.name.trim()) {
-    showError('프로젝트 생성 실패', '프로젝트 이름을 입력해주세요.')
+    alert('프로젝트 이름을 입력해주세요.')
+    return
+  }
+  if (!newProjectStartDate.value) {
+    alert('프로젝트 시작일을 선택하세요.')
+    return
+  }
+  if (!newProjectEndDate.value) {
+    alert('프로젝트 종료일을 선택하세요.')
+    return
+  }
+  if (new Date(newProjectStartDate.value) > new Date(newProjectEndDate.value)) {
+    alert('종료일은 시작일 이후여야 합니다.')
     return
   }
 
@@ -1543,28 +1646,98 @@ const handleCreateProject = async () => {
     // memberList 생성 (memberSeq 배열)
     const memberList = invitedMembers.value.map(member => member.memberSeq)
     
-    // API 호출
+    // 날짜를 ISO LocalDateTime 형식으로 변환 (yyyy-MM-ddTHH:mm:ss)
+    const formatDateForApi = (dateValue) => {
+      if (!dateValue) return null
+      
+      // Date 객체인 경우
+      if (dateValue instanceof Date) {
+        const year = dateValue.getFullYear()
+        const month = String(dateValue.getMonth() + 1).padStart(2, '0')
+        const day = String(dateValue.getDate()).padStart(2, '0')
+        return `${year}-${month}-${day}`
+      }
+      
+      // 문자열인 경우 (yyyy-MM-dd 형식)
+      if (typeof dateValue === 'string' && dateValue.match(/^\d{4}-\d{2}-\d{2}$/)) {
+        return dateValue
+      }
+      
+      // 다른 형식인 경우 Date로 파싱 시도
+      const date = new Date(dateValue)
+      if (!isNaN(date.getTime())) {
+        const year = date.getFullYear()
+        const month = String(date.getMonth() + 1).padStart(2, '0')
+        const day = String(date.getDate()).padStart(2, '0')
+        return `${year}-${month}-${day}`
+      }
+      
+      return dateValue
+    }
+    
+    const startDateStr = formatDateForApi(newProjectStartDate.value)
+    const endDateStr = formatDateForApi(newProjectEndDate.value)
+    
+    // API 호출 (서버 사이드바와 동일하게 시작일/종료일 포함)
     const createdWorkspace = await createWorkspace(
       newProject.value.name,
       newProjectProfileFile.value,
-      memberList
+      memberList,
+      startDateStr ? `${startDateStr}T00:00:00` : null,
+      endDateStr ? `${endDateStr}T23:59:59` : null
     )
     
-    // 워크스페이스 목록 새로고침
+    // 성공 메시지
+    alert(`프로젝트 "${createdWorkspace.workSpaceName}"가 성공적으로 생성되었습니다!`)
+    
+    // 워크스페이스 목록 새로고침 (API에서 최신 목록 가져오기)
     await workspaceStore.loadMyWorkspaces()
     
     // 생성된 워크스페이스로 이동
-    const newWorkspaceId = createdWorkspace.workSpaceSeq
-    await router.push(`/workspaces/${newWorkspaceId}/dashboard`)
+    const newWorkspaceId = `workspace_${createdWorkspace.workSpaceSeq}`
+    await router.push(`/workspaces/${newWorkspaceId.split('_')[1]}/dashboard`)
     
     // 모달 닫기
     closeProjectDialog()
   } catch (error) {
-    showError('프로젝트 생성 실패', error.message || '프로젝트 생성 중 오류가 발생했습니다.')
+    console.error('프로젝트 생성 실패:', error)
+    const errorMessage = error.response?.data?.message || error.response?.data?.error || '프로젝트 생성에 실패했습니다. 다시 시도해주세요.'
+    alert(errorMessage)
   }
 }
 
-// 프로젝트 모달 닫기 및 초기화
+// 프로젝트 날짜 표시용 포맷 변환
+const formatNewProjectDisplayDate = (dateString) => {
+  if (!dateString) return ''
+  const date = new Date(dateString)
+  const year = date.getFullYear()
+  const month = date.getMonth() + 1
+  const day = date.getDate()
+  return `${year}년 ${month}월 ${day}일`
+}
+
+// 프로젝트 날짜 피커 열기
+const openNewProjectDatePicker = (type) => {
+  if (type === 'start') {
+    newProjectStartDateMenu.value = true
+  } else {
+    newProjectEndDateMenu.value = true
+  }
+}
+
+// 프로젝트 시작일 업데이트
+const updateNewProjectStartDate = (value) => {
+  newProjectStartDate.value = value
+  newProjectStartDateMenu.value = false
+}
+
+// 프로젝트 종료일 업데이트
+const updateNewProjectEndDate = (value) => {
+  newProjectEndDate.value = value
+  newProjectEndDateMenu.value = false
+}
+
+// 프로젝트 모달 닫기 및 초기화 (서버 사이드바와 동일)
 const closeProjectDialog = () => {
   showProjectDialog.value = false
   newProject.value = {
@@ -1575,6 +1748,10 @@ const closeProjectDialog = () => {
   }
   newProjectProfile.value = ''
   newProjectProfileFile.value = null
+  newProjectStartDate.value = ''
+  newProjectEndDate.value = ''
+  newProjectStartDateMenu.value = false
+  newProjectEndDateMenu.value = false
   invitedMembers.value = []
   memberSearchQuery.value = ''
   memberSearchResults.value = []
@@ -1628,26 +1805,17 @@ const loadDriveFiles = async () => {
     // 개인 워크스페이스 정보 가져오기
     const personalWorkspace = workspaceStore.workspaces.find(ws => ws.type === 'personal')
     
-    console.log('📁 [개인 드라이브] 워크스페이스 검색:', personalWorkspace)
-    
     if (!personalWorkspace || !personalWorkspace.workSpaceSeq) {
-      console.warn('⚠️ [개인 드라이브] 개인 워크스페이스 정보가 없습니다')
       driveItems.value = []
       return
     }
     
-    console.log('📡 [개인 드라이브] API 호출, Seq:', personalWorkspace.workSpaceSeq)
     const response = await personalDriveApi.getItems(personalWorkspace.workSpaceSeq, null)
-    
-    console.log('📦 [개인 드라이브] API 응답:', response)
     
     // 백엔드 응답 구조 처리: { success, data } 또는 직접 배열
     const driveData = response?.data || response
     driveItems.value = Array.isArray(driveData) ? driveData : []
-    
-    console.log('✅ [개인 드라이브] 로드 완료:', driveItems.value.length, '개')
   } catch (error) {
-    console.error('❌ [개인 드라이브] 로드 실패:', error)
     driveItems.value = []
   }
 }
@@ -2894,6 +3062,107 @@ const closeErrorModal = () => {
 
 .create-workspace-modal .create-workspace-btn {
   color: white !important;
+}
+
+/* 날짜 선택 카드 스타일 */
+.date-selector-container {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.date-selector-card {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px;
+  background: rgb(var(--v-theme-surface));
+  border: 2px solid rgba(var(--v-theme-on-surface), 0.12);
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.date-selector-card:hover {
+  border-color: rgb(var(--v-theme-primary));
+  background: rgba(var(--v-theme-primary), 0.05);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.date-selector-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  background: rgba(var(--v-theme-primary), 0.1);
+  border-radius: 10px;
+}
+
+.date-selector-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.date-selector-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: rgba(var(--v-theme-on-surface), 0.6);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 4px;
+}
+
+.date-selector-value {
+  font-size: 15px;
+  font-weight: 600;
+  color: rgb(var(--v-theme-on-surface));
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.date-selector-arrow {
+  color: rgba(var(--v-theme-on-surface), 0.4);
+  transition: transform 0.2s ease;
+}
+
+.date-selector-card:hover .date-selector-arrow {
+  transform: translateX(4px);
+  color: rgb(var(--v-theme-primary));
+}
+
+.date-connector {
+  display: flex;
+  align-items: center;
+  padding: 0 4px;
+  flex-shrink: 0;
+}
+
+/* 날짜 피커 스타일 */
+:deep(.v-date-picker) {
+  background: rgb(var(--v-theme-surface));
+  border-radius: 8px;
+}
+
+/* 반응형 디자인 */
+@media (max-width: 768px) {
+  .date-selector-container {
+    flex-direction: column;
+    gap: 8px;
+  }
+  
+  .date-connector {
+    transform: rotate(90deg);
+    padding: 8px 0;
+  }
+  
+  .date-selector-card {
+    width: 100%;
+  }
 }
 
 /* 파일 업로드 모달 스타일 */

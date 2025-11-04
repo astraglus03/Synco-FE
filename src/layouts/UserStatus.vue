@@ -174,17 +174,22 @@ onMounted(() => {
 .user-status {
   position: fixed;
   bottom: 0;
+  /* WorkspaceSidebar 위치: left 0 + margin-left 72px = 72px */
   left: 72px;
+  /* WorkspaceSidebar width와 정확히 일치 (border 제외) */
   width: 220px;
   background: rgb(var(--v-theme-surface));
   backdrop-filter: blur(6px);
   border-top: 1px solid rgba(var(--v-theme-on-surface), 0.08);
-  border-right: 1px solid rgba(var(--v-theme-on-surface), 0.08);
+  /* border-right 제거: WorkspaceSidebar의 border-right와 겹치지 않도록 */
   box-shadow: 0 -1px 0 rgba(var(--v-theme-on-surface), 0.04);
   padding: 8px;
   z-index: 101;
   height: 60px;
   transition: all 0.3s ease;
+  /* WorkspaceSidebar 안에 정확히 포함되도록 */
+  box-sizing: border-box;
+  margin: 0;
 }
 
 .user-status.collapsed {
@@ -351,11 +356,88 @@ onMounted(() => {
   background: rgba(var(--v-theme-primary), 0.2);
 }
 
-/* 반응형 디자인 - 태블릿 이하에서는 완전히 숨김 */
+/* 반응형 디자인 - 개인 워크스페이스 동작 방식 참고 */
 @media (max-width: 1024px) {
   .user-status {
-    left: 60px;
-    width: 200px;
+    /* WorkspaceSidebar 실제 시작 위치: left 0 + margin-left 60px = 60px */
+    left: 60px !important;
+    /* WorkspaceSidebar width 60px와 동일 (개인 워크스페이스와 동일한 방식) */
+    width: 60px !important;
+    padding: 6px !important;
+    border-right: 1px solid rgba(var(--v-theme-on-surface), 0.08) !important;
+  }
+  
+  .user-status.collapsed {
+    /* collapsed 상태일 때도 반응형에서는 최소 너비 유지 */
+    width: 60px !important;
+    left: 60px !important;
+  }
+  
+  .user-details {
+    display: none !important;
+  }
+  
+  .user-info {
+    justify-content: center !important;
+    padding: 4px !important;
+  }
+  
+  .avatar-wrapper {
+    margin: 0 auto !important;
+  }
+}
+
+@media (max-width: 768px) {
+  .user-status {
+    /* WorkspaceSidebar 실제 시작 위치: left 0 + margin-left 56px = 56px */
+    left: 56px !important;
+    /* WorkspaceSidebar width 56px와 동일 */
+    width: 56px !important;
+    padding: 5px !important;
+    border-right: 1px solid rgba(var(--v-theme-on-surface), 0.08) !important;
+  }
+  
+  .user-status.collapsed {
+    width: 56px !important;
+    left: 56px !important;
+  }
+  
+  .avatar-wrapper .v-avatar {
+    width: 32px !important;
+    height: 32px !important;
+  }
+  
+  .status-dot {
+    width: 10px !important;
+    height: 10px !important;
+    bottom: 0 !important;
+    right: 0 !important;
+  }
+}
+
+@media (max-width: 480px) {
+  .user-status {
+    /* WorkspaceSidebar 실제 시작 위치: left 0 + margin-left 52px = 52px */
+    left: 52px !important;
+    /* WorkspaceSidebar width 52px와 동일 */
+    width: 52px !important;
+    padding: 4px !important;
+    border-right: 1px solid rgba(var(--v-theme-on-surface), 0.08) !important;
+  }
+  
+  .user-status.collapsed {
+    width: 52px !important;
+    left: 52px !important;
+  }
+  
+  .avatar-wrapper .v-avatar {
+    width: 28px !important;
+    height: 28px !important;
+  }
+  
+  .status-dot {
+    width: 8px !important;
+    height: 8px !important;
   }
 }
 </style>
