@@ -1055,8 +1055,12 @@ const closeModals = () => {
   newFolderParentLocation.value = null
 }
 
+// 이전 채널 추적
+const previousChannel = ref(null)
+
 // 생명주기
 onMounted(() => {
+  previousChannel.value = props.currentChannel
   loadDriveItems()
   
   // 전역 클릭 이벤트로 편집 모드 취소
@@ -1066,6 +1070,12 @@ onMounted(() => {
 onUnmounted(() => {
   // 이벤트 리스너 정리
   document.removeEventListener('click', handleGlobalClick)
+  
+  // 컴포넌트가 언마운트될 때 경로 초기화
+  if (props.currentChannel === 'drive') {
+    driveStore.currentPath = []
+    driveStore.currentParentId = null
+  }
 })
 
 // 전역 클릭 핸들러
@@ -1104,6 +1114,20 @@ watch(() => workspaceStore.currentWorkspace, () => {
     loadDriveItems()
   }
 }, { deep: true })
+
+// 드라이브 채널에서 다른 곳으로 이동할 때 경로 초기화
+watch(() => props.currentChannel, (newChannel, oldChannel) => {
+  console.log('🔍 PersonalDrive 채널 변경 감지:', { oldChannel, newChannel })
+  // 드라이브에서 벗어날 때 경로 초기화
+  if (oldChannel === 'drive' && newChannel !== 'drive') {
+    console.log('📁 드라이브 경로 초기화:', driveStore.currentPath)
+    driveStore.currentPath = []
+    driveStore.currentParentId = null
+    console.log('✅ 경로 초기화 완료')
+  }
+  // 이전 채널 업데이트
+  previousChannel.value = newChannel
+})
 </script>
 
 <template>
