@@ -174,29 +174,20 @@ const openSharedDoc = async (doc) => {
 // 파일 다운로드
 const downloadFile = async (file) => {
   if (file.type !== 'folder' && file.type !== 'shared-doc') {
-    const result = await driveStore.downloadFile(file)
-    if (!result.success) {
-      console.error('파일 다운로드 실패:', result.error)
-    }
+    await driveStore.downloadFile(file)
   }
 }
 
 // 공유문서 다운로드
 const downloadSharedDoc = async (doc) => {
   if (doc.type === 'shared-doc') {
-    const result = await driveStore.downloadSharedDocument(doc.id)
-    if (!result.success) {
-      console.error('공유문서 다운로드 실패:', result.error)
-    }
+    await driveStore.downloadSharedDocument(doc.id)
   }
 }
 
 // 공유문서 저장
 const saveDocument = async (docData) => {
-  const result = await driveStore.saveDocumentContent(docData.id, docData.content)
-  if (!result.success) {
-    console.error('문서 저장 실패:', result.error)
-  }
+  await driveStore.saveDocumentContent(docData.id, docData.content)
 }
 
 // 공유문서 편집기 닫기
@@ -323,16 +314,10 @@ const handleDrop = async (targetItem, event) => {
 const executeDropAction = async (actionType, targetItem) => {
   if (actionType === 'move') {
     // 폴더로 이동
-    const result = await driveStore.moveItem(draggedItem.value.id, draggedItem.value.type, targetItem.id)
-    if (!result.success) {
-      console.error('아이템 이동 실패:', result.error)
-    }
+    await driveStore.moveItem(draggedItem.value.id, draggedItem.value.type, targetItem.id)
   } else if (actionType === 'reorder') {
     // 순서 변경 - 타겟 폴더의 order 값 사용
-    const result = await driveStore.reorderFolder(draggedItem.value.id, targetItem.orders)
-    if (!result.success) {
-      console.error('순서 변경 실패:', result.error)
-    }
+    await driveStore.reorderFolder(draggedItem.value.id, targetItem.orders)
   }
 }
 
@@ -405,13 +390,11 @@ const finishRename = async () => {
       // UI 업데이트를 위해 다음 틱에서 포커스 해제
       await nextTick()
     } else {
-      console.error('이름 변경 실패:', result.error)
       // 에러 모달 표시
       showError('이름 변경 실패', result.error || '이름 변경 중 오류가 발생했습니다.')
       // 실패 시 편집 모드 유지 (사용자가 다시 시도할 수 있도록)
     }
   } catch (error) {
-    console.error('이름 변경 중 오류:', error)
     // 에러 모달 표시
     showError('이름 변경 실패', '이름 변경 중 오류가 발생했습니다.')
     // 에러 발생 시 편집 모드 유지
@@ -451,13 +434,11 @@ const loadAllFolders = async () => {
   loadingFolders.value = true
   try {
     const result = await driveStore.getAllFolders()
-    console.log('getAllFolders result:', result) // 디버깅용
     if (result.success) {
       allFolders.value = result.data
-      console.log('allFolders.value set to:', allFolders.value) // 디버깅용
     }
   } catch (error) {
-    console.error('전체 폴더 목록 로드 실패:', error)
+    // 폴더 목록 로드 실패
   } finally {
     loadingFolders.value = false
   }
@@ -660,7 +641,6 @@ const moveToProject = async () => {
       showError('이동 실패', result.error || '프로젝트로 이동 중 오류가 발생했습니다.')
     }
   } catch (error) {
-    console.error('프로젝트로 이동 실패:', error)
     showError('이동 실패', '프로젝트로 이동 중 오류가 발생했습니다.')
   }
 }
@@ -689,11 +669,9 @@ const deleteItem = async (item) => {
   try {
     const result = await driveStore.deleteItem(item.id, item.type)
     if (!result.success) {
-      console.error('아이템 삭제 실패:', result.error)
       alert('삭제에 실패했습니다.')
     }
   } catch (error) {
-    console.error('아이템 삭제 중 오류:', error)
     alert('삭제 중 오류가 발생했습니다.')
   }
 }
@@ -733,9 +711,7 @@ const flattenedFolders = computed(() => {
     })
   }
   
-  console.log('allFolders.value:', allFolders.value) // 디버깅용
   flatten(buildFolderHierarchy(allFolders.value))
-  console.log('flattenedFolders result:', result) // 디버깅용
   return result
 })
 
@@ -1079,8 +1055,12 @@ const closeModals = () => {
   newFolderParentLocation.value = null
 }
 
+// 이전 채널 추적
+const previousChannel = ref(null)
+
 // 생명주기
 onMounted(() => {
+  previousChannel.value = props.currentChannel
   loadDriveItems()
   
   // 전역 클릭 이벤트로 편집 모드 취소
@@ -1090,6 +1070,12 @@ onMounted(() => {
 onUnmounted(() => {
   // 이벤트 리스너 정리
   document.removeEventListener('click', handleGlobalClick)
+  
+  // 컴포넌트가 언마운트될 때 경로 초기화
+  if (props.currentChannel === 'drive') {
+    driveStore.currentPath = []
+    driveStore.currentParentId = null
+  }
 })
 
 // 전역 클릭 핸들러
@@ -1112,15 +1098,12 @@ const handleGlobalClick = (event) => {
 // API 연동 메서드들
 const loadDriveItems = async () => {
   if (!currentDriveChannelSeq.value) {
-    console.error('driveChannelSeq가 없습니다. 워크스페이스를 확인하세요.')
     return
   }
   
   try {
-    console.log('드라이브 로드 시작:', currentDriveChannelSeq.value)
     await driveStore.loadItems(currentDriveChannelSeq.value, null)
   } catch (error) {
-    console.error('목록 조회 실패:', error)
     showError('목록 조회 실패', '드라이브 목록을 불러오는 중 오류가 발생했습니다.')
   }
 }
@@ -1131,6 +1114,20 @@ watch(() => workspaceStore.currentWorkspace, () => {
     loadDriveItems()
   }
 }, { deep: true })
+
+// 드라이브 채널에서 다른 곳으로 이동할 때 경로 초기화
+watch(() => props.currentChannel, (newChannel, oldChannel) => {
+  console.log('🔍 PersonalDrive 채널 변경 감지:', { oldChannel, newChannel })
+  // 드라이브에서 벗어날 때 경로 초기화
+  if (oldChannel === 'drive' && newChannel !== 'drive') {
+    console.log('📁 드라이브 경로 초기화:', driveStore.currentPath)
+    driveStore.currentPath = []
+    driveStore.currentParentId = null
+    console.log('✅ 경로 초기화 완료')
+  }
+  // 이전 채널 업데이트
+  previousChannel.value = newChannel
+})
 </script>
 
 <template>

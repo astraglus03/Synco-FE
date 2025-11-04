@@ -29,6 +29,20 @@ export const useMeetingStore = defineStore('meeting', () => {
   const chatMessages = ref([])
   const currentRoomDetail = ref(null)
   
+  // 페이지네이션 정보
+  const activeRoomsPagination = ref({
+    page: 0,
+    size: 10,
+    totalElements: 0,
+    totalPages: 0
+  })
+  const endedRoomsPagination = ref({
+    page: 0,
+    size: 10,
+    totalElements: 0,
+    totalPages: 0
+  })
+  
   // 현재 미팅 상태
   const isCurrentlyInMeeting = ref(false)
   const currentMeetingData = ref(null)
@@ -106,22 +120,26 @@ export const useMeetingStore = defineStore('meeting', () => {
     }
   }
 
-  const loadActiveRooms = async (workSpaceSeq) => {
+  const loadActiveRooms = async (workSpaceSeq, page = 0, size = 10) => {
     try {
       isLoading.value = true
       error.value = null
       
-      console.log('📋 loadActiveRooms 호출:')
-      console.log('  - workSpaceSeq:', workSpaceSeq)
-      console.log('  - currentMemberSeq.value:', currentMemberSeq.value)
+      const response = await meetingApi.getActiveRooms(workSpaceSeq, currentMemberSeq.value, page, size)
+      const pageData = response.data || response
       
-      const response = await meetingApi.getActiveRooms(workSpaceSeq, currentMemberSeq.value)
-      activeRooms.value = response.data.content.map(room => new RoomActiveListDto(room))
+      activeRooms.value = pageData.content.map(room => new RoomActiveListDto(room))
       
-      console.log('📋 활성 회의 목록 업데이트:', activeRooms.value)
+      // 페이지네이션 정보 업데이트
+      activeRoomsPagination.value = {
+        page: pageData.number || page,
+        size: pageData.size || size,
+        totalElements: pageData.totalElements || 0,
+        totalPages: pageData.totalPages || 0
+      }
+      
       return activeRooms.value
     } catch (err) {
-      console.error('📋 loadActiveRooms 실패:', err)
       error.value = err.message || '활성 회의 목록을 불러오는데 실패했습니다.'
       throw err
     } finally {
@@ -196,7 +214,6 @@ export const useMeetingStore = defineStore('meeting', () => {
       }
       
       error.value = errorMessage
-      console.error('❌ 회의 생성 에러:', errorMessage)
       throw err
     } finally {
       isCreating.value = false
@@ -253,7 +270,6 @@ export const useMeetingStore = defineStore('meeting', () => {
       }
       
       error.value = errorMessage
-      console.error('❌ 회의 참여 에러:', errorMessage)
       throw err
     } finally {
       isJoining.value = false
@@ -286,7 +302,6 @@ export const useMeetingStore = defineStore('meeting', () => {
       
       return chatMessages.value
     } catch (err) {
-      console.error('채팅 메시지 로드 실패:', err)
       return []
     }
   }
@@ -433,12 +448,20 @@ export const useMeetingStore = defineStore('meeting', () => {
       error.value = null
       
       const response = await meetingApi.getEndedRooms(workSpaceSeq, currentMemberSeq.value, page, size)
-      endedRooms.value = response.data.content.map(room => new RoomEndedListDto(room))
+      const pageData = response.data || response
       
-      console.log('📋 종료된 회의 목록 업데이트:', endedRooms.value)
+      endedRooms.value = pageData.content.map(room => new RoomEndedListDto(room))
+      
+      // 페이지네이션 정보 업데이트
+      endedRoomsPagination.value = {
+        page: pageData.number || page,
+        size: pageData.size || size,
+        totalElements: pageData.totalElements || 0,
+        totalPages: pageData.totalPages || 0
+      }
+      
       return endedRooms.value
     } catch (err) {
-      console.error('📋 loadEndedRooms 실패:', err)
       error.value = err.message || '종료된 회의 목록을 불러오는데 실패했습니다.'
       throw err
     } finally {
@@ -456,7 +479,6 @@ export const useMeetingStore = defineStore('meeting', () => {
       
       return currentRoomDetail.value
     } catch (err) {
-      console.error('📋 loadRoomDetail 실패:', err)
       error.value = err.message || '회의 상세 정보를 불러오는데 실패했습니다.'
       throw err
     } finally {
@@ -487,6 +509,18 @@ export const useMeetingStore = defineStore('meeting', () => {
     channels.value = []
     activeRooms.value = []
     endedRooms.value = []
+    activeRoomsPagination.value = {
+      page: 0,
+      size: 10,
+      totalElements: 0,
+      totalPages: 0
+    }
+    endedRoomsPagination.value = {
+      page: 0,
+      size: 10,
+      totalElements: 0,
+      totalPages: 0
+    }
     currentChannel.value = null
     currentRoom.value = null
     channelMembers.value = []
@@ -511,6 +545,8 @@ export const useMeetingStore = defineStore('meeting', () => {
     channels,
     activeRooms,
     endedRooms,
+    activeRoomsPagination,
+    endedRoomsPagination,
     currentChannel,
     currentRoom,
     channelMembers,

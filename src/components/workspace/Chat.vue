@@ -9,7 +9,7 @@ import { useRoute } from "vue-router";
 import FileAttachmentModal from "./FileAttachmentModal.vue";
 import SockJS from "sockjs-client";
 import Stomp from "webstomp-client";
-import axios from "axios";
+import apiClient from "@/utils/api";
 import { getChannelMembers, updateLastRead } from "@/api/chat/chatApi";
 
 // ✅ 현재 사용자가 멘션된 메시지인지 확인
@@ -152,6 +152,9 @@ const fileLimitMessage = ref("");
 
 // 첨부된 파일들
 const attachedFiles = ref([]);
+
+// 이미지 확장 상태 관리 (메시지 ID별로)
+const expandedImages = ref({});
 
 // 파일 첨부 제한 설정
 const MAX_FILES = 20;
@@ -308,16 +311,17 @@ const connectWebsocket = () => {
 
               if (tempMsgIndex !== -1) {
                 // 🟩 temp_ 메시지 → 실제 chatMessageSeq로 교체
+                const createdAt = parsed.createdAt ? new Date(parsed.createdAt) : messages.value[tempMsgIndex].createdAt || new Date();
                 messages.value[tempMsgIndex].id = parsed.chatMessageSeq;
                 messages.value[tempMsgIndex].replyToSeq =
                   parsed.replyToSeq || null;
                 messages.value[tempMsgIndex].profileImageUrl =
                   parsed.senderProfileImageUrl || null;
-                messages.value[tempMsgIndex].time =
-                  new Date().toLocaleTimeString("ko-KR", {
-                    hour: "2-digit",
-                    minute: "2-digit",
-                  });
+                messages.value[tempMsgIndex].createdAt = createdAt; // ✅ createdAt 업데이트
+                messages.value[tempMsgIndex].time = createdAt.toLocaleTimeString("ko-KR", {
+                  hour: "2-digit",
+                  minute: "2-digit",
+                });
 
                 // 🟩 교체했으면 새로 push하지 않도록 return
                 return;
@@ -337,14 +341,16 @@ const connectWebsocket = () => {
             }));
 
             // 💬 메시지 구조 변환 (사용자 정보 포함)
+            const createdAt = parsed.createdAt ? new Date(parsed.createdAt) : new Date();
             const formattedMessage = {
               id: parsed.chatMessageSeq || Date.now(), // ✅ 백엔드에서 받은 실제 chatMessageSeq 사용
               user: parsed.senderName || parsed.senderSeq, // ✅ 백엔드에서 받은 실제 senderName 사용
               content: parsed.chatMessageText,
-              time: new Date().toLocaleTimeString("ko-KR", {
+              time: createdAt.toLocaleTimeString("ko-KR", {
                 hour: "2-digit",
                 minute: "2-digit",
               }),
+              createdAt: createdAt, // ✅ 시간 비교를 위한 원본 Date 객체
               avatar:
                 parsed.senderProfileImageUrl &&
                 parsed.senderProfileImageUrl.trim() !== ""
@@ -379,16 +385,6 @@ const connectWebsocket = () => {
               messages.value.push(formattedMessage);
               scrollToBottom();
 
-              // ✅ 1:1 채팅 목록의 unreadCount 실시간 업데이트를 위한 이벤트 발생
-              // 현재 채팅방이 아니면 unreadCount 증가
-              if (parsed.channelSeq && parsed.channelSeq !== channelSeq.value) {
-                emitter.emit('increment-direct-message-unread', {
-                  channelSeq: parsed.channelSeq
-                });
-              } else if (parsed.channelSeq === channelSeq.value) {
-                // 현재 채팅방이면 이미 읽은 것으로 간주하므로 이벤트 발생 안 함
-                // (채널 접속 시 이미 읽음 처리됨)
-              }
             }
           } catch (e) {
             console.error("메시지 파싱 실패:", e, message.body);
@@ -410,19 +406,11 @@ const connectWebsocket = () => {
 // ✅ WebSocket 연결 해제
 const disconnectWebsocket = async () => {
   try {
-    // 🟡 읽음 처리 API 호출
+    // 🟡 읽음 처리 API 호출 (인터셉터가 자동으로 토큰 추가)
     if (channelSeq.value && !isNaN(channelSeq.value) && channelSeq.value > 0) {
-      await axios.post(
-        `${import.meta.env.VITE_API_URL}/chat-service/chat/channels/${
-          channelSeq.value
-        }/read`,
-        {},
-        {
-          headers: {
-            "X-Member-Seq": memberSeq.value,
-            Authorization: `Bearer ${token.value}`,
-          },
-        }
+      await apiClient.post(
+        `/chat-service/chat/channels/${channelSeq.value}/read`,
+        {}
       );
       console.log("✅ 마지막 읽은 메시지 업데이트 완료");
     } else {
@@ -452,12 +440,22 @@ const disconnectWebsocket = async () => {
   }
 };
 
-// 스크롤을 맨 아래로
-const scrollToBottom = () => {
-  setTimeout(() => {
+// 스크롤을 맨 아래로 (부드럽게)
+const scrollToBottom = (smooth = false) => {
+  nextTick(() => {
     const chatBox = document.querySelector(".messages-container");
-    if (chatBox) chatBox.scrollTop = chatBox.scrollHeight;
-  }, 100);
+    if (chatBox) {
+      const isNearBottom = chatBox.scrollHeight - chatBox.scrollTop - chatBox.clientHeight < 100;
+      
+      // 하단 근처에 있거나 강제 스크롤 요청 시에만 스크롤
+      if (isNearBottom || smooth) {
+        chatBox.scrollTo({
+          top: chatBox.scrollHeight,
+          behavior: smooth ? 'smooth' : 'auto'
+        });
+      }
+    }
+  });
 };
 
 // ✅ 파일 업로드 (S3 REST API 호출)
@@ -467,17 +465,16 @@ const uploadFilesToS3 = async () => {
   const formData = new FormData();
   attachedFiles.value.forEach((file) => formData.append("files", file));
 
-  const url = `${import.meta.env.VITE_API_URL}/chat-service/chat/files/upload/${
-    channelSeq.value
-  }`;
-
   try {
-    const res = await axios.post(url, formData, {
-      headers: {
-        "Content-Type": "multipart/form-data",
-        Authorization: `Bearer ${token.value}`,
-      },
-    });
+    const res = await apiClient.post(
+      `/chat-service/chat/files/upload/${channelSeq.value}`,
+      formData,
+      {
+        headers: {
+          "Content-Type": "multipart/form-data",
+        },
+      }
+    );
 
     console.log("✅ 파일 업로드 성공:", res.data);
 
@@ -581,14 +578,16 @@ const sendMessage = async () => {
     };
 
     // 2️⃣ 즉시 화면에 표시 (로컬 메시지)
+    const now = new Date();
     const localMessage = {
       id: `temp_${Date.now()}`, // ✅ 임시 ID 사용 (백엔드에서 실제 ID로 업데이트됨)
       user: currentUserName,
       content: newMessage.value,
-      time: new Date().toLocaleTimeString("ko-KR", {
+      time: now.toLocaleTimeString("ko-KR", {
         hour: "2-digit",
         minute: "2-digit",
       }),
+      createdAt: now, // ✅ 시간 비교를 위한 원본 Date 객체
       avatar: currentUserName.charAt(0),
       profileImageUrl: currentUserProfileImage,
       senderSeq: memberSeq.value,
@@ -603,7 +602,6 @@ const sendMessage = async () => {
       replyToSeq: replyToMessage.value?.id || null, // ✅ 답장 대상 메시지 ID 추가
     };
     messages.value.push(localMessage);
-    scrollToBottom();
 
     console.log("📤 보내는 메시지:", message);
 
@@ -640,7 +638,26 @@ const sendMessage = async () => {
       showReplyInput.value = false;
     }
 
-    scrollToBottom();
+    // 메시지 추가 후 DOM 업데이트를 기다린 후 스크롤 (자신이 보낸 메시지는 강제 스크롤)
+    scrollToBottom(true);
+
+    // ✅ 1:1 채팅 목록의 마지막 메시지 업데이트 이벤트 발생
+    if (channelSeq.value) {
+      // 백엔드 형식에 맞춰서: 파일이 있으면 "[파일]", 텍스트가 있으면 텍스트
+      let messageContent = "";
+      if (uploadedUrls.length > 0) {
+        messageContent = "[파일]"; // 백엔드와 동일한 형식
+      } else if (localMessage.content && localMessage.content.trim()) {
+        messageContent = localMessage.content;
+      }
+      
+      if (messageContent) {
+        emitter.emit("update-direct-message", {
+          channelSeq: channelSeq.value,
+          lastMessage: messageContent,
+        });
+      }
+    }
   } finally {
     // 전송 완료/실패 무관하게 플래그 해제
     isSending.value = false;
@@ -650,15 +667,9 @@ const sendMessage = async () => {
 // ✅ 메시지 삭제 (하드 삭제)
 const deleteMessage = async (message) => {
   try {
-    const url = `${import.meta.env.VITE_API_URL}/chat-service/chat/messages/${
-      message.id
-    }`;
-    const res = await axios.delete(url, {
-      headers: {
-        "X-Member-Seq": memberSeq.value,
-        Authorization: `Bearer ${token.value}`,
-      },
-    });
+    const res = await apiClient.delete(
+      `/chat-service/chat/messages/${message.id}`
+    );
 
     console.log("✅ 메시지 삭제 성공:", res.data);
 
@@ -696,16 +707,9 @@ const loadMoreMessages = async (lastId = null) => {
   try {
     console.log("📥 이전 메시지 로드 시작 - lastId:", lastId);
 
-    const url = `${import.meta.env.VITE_API_URL}/chat-service/chat/channels/${
-      channelSeq.value
-    }/messages${lastId ? `?lastId=${lastId}` : ""}`;
+    const url = `/chat-service/chat/channels/${channelSeq.value}/messages${lastId ? `?lastId=${lastId}` : ""}`;
 
-    const res = await axios.get(url, {
-      headers: {
-        Authorization: `Bearer ${token.value}`,
-        "X-Member-Seq": memberSeq.value,
-      },
-    });
+    const res = await apiClient.get(url);
 
     // 백엔드는 ResponseDto로 감싸져 있지 않을 수 있으므로 직접 배열인지 확인
     let loadedMessages = res.data;
@@ -734,26 +738,30 @@ const loadMoreMessages = async (lastId = null) => {
     console.log("📨 로드된 메시지 개수:", loadedMessages.length);
 
     // 메시지 맵핑 → WebSocket 수신 형식과 동일하게 변환
-    const formatted = loadedMessages.map((m) => ({
-      id: m.chatMessageSeq,
-      user: m.senderName,
-      content: m.chatMessageText,
-      time: new Date(m.createdAt).toLocaleTimeString("ko-KR", {
-        hour: "2-digit",
-        minute: "2-digit",
-      }),
-      profileImageUrl: m.senderProfileImageUrl || null,
-      senderSeq: m.senderSeq,
-      isOwn: Number(m.senderSeq) === Number(memberSeq.value), // ✅ 타입 변환 후 비교
-      unread: 0,
-      files: (m.chatMessageFileUrls || "")
-        .split(",")
-        .filter(Boolean)
-        .map((url) => ({ name: url.split("/").pop(), url, type: "file" })),
-      messageType: m.messageType || "TEXT",
-      replyToSeq: m.replyToSeq || null,
-      isNewMessage: false, // ✅ 이전 메시지는 false
-    }));
+    const formatted = loadedMessages.map((m) => {
+      const createdAt = new Date(m.createdAt);
+      return {
+        id: m.chatMessageSeq,
+        user: m.senderName,
+        content: m.chatMessageText,
+        time: createdAt.toLocaleTimeString("ko-KR", {
+          hour: "2-digit",
+          minute: "2-digit",
+        }),
+        createdAt: createdAt, // ✅ 시간 비교를 위한 원본 Date 객체
+        profileImageUrl: m.senderProfileImageUrl || null,
+        senderSeq: m.senderSeq,
+        isOwn: Number(m.senderSeq) === Number(memberSeq.value), // ✅ 타입 변환 후 비교
+        unread: 0,
+        files: (m.chatMessageFileUrls || "")
+          .split(",")
+          .filter(Boolean)
+          .map((url) => ({ name: url.split("/").pop(), url, type: "file" })),
+        messageType: m.messageType || "TEXT",
+        replyToSeq: m.replyToSeq || null,
+        isNewMessage: false, // ✅ 이전 메시지는 false
+      };
+    });
 
     // ✅ 스크롤 위치 저장
     const container = document.querySelector(".messages-container");
@@ -804,9 +812,11 @@ const loadMoreMessages = async (lastId = null) => {
         console.log("📍 스크롤 위치 복원 - 차이:", heightDifference);
       }
     } else {
-      // 처음 로드하는 경우 맨 아래로 스크롤
+      // 최초 접속 시: 맨 아래로 강제 스크롤 (구분선이 없을 때)
       await new Promise((resolve) => setTimeout(resolve, 50)); // DOM 업데이트 대기
-      scrollToBottom();
+      if (container) {
+        container.scrollTop = container.scrollHeight;
+      }
       console.log("📍 최초 접속 - 맨 아래로 스크롤");
     }
   } catch (e) {
@@ -834,16 +844,9 @@ const loadMessagesAfterLastRead = async () => {
   try {
     console.log("📥 새 메시지 로드 시작 (마지막 읽은 메시지 이후)");
 
-    const url = `${import.meta.env.VITE_API_URL}/chat-service/chat/channels/${
-      channelSeq.value
-    }/messages/after-last-read`;
+    const url = `/chat-service/chat/channels/${channelSeq.value}/messages/after-last-read`;
 
-    const res = await axios.get(url, {
-      headers: {
-        Authorization: `Bearer ${token.value}`,
-        "X-Member-Seq": memberSeq.value,
-      },
-    });
+    const res = await apiClient.get(url);
 
     let loadedMessages = res.data;
 
@@ -1437,6 +1440,79 @@ const isImageUrl = (url) => {
   }
 };
 
+// URL에서 파일 확장자로 아이콘 결정
+const getFileIconFromUrl = (url) => {
+  if (!url) return "mdi-file";
+  try {
+    const lower = url.split("?")[0].toLowerCase();
+    if (lower.includes(".pdf")) return "mdi-file-pdf-box";
+    if (lower.includes(".doc") || lower.includes(".docx")) return "mdi-file-word-box";
+    if (lower.includes(".xls") || lower.includes(".xlsx") || lower.includes(".csv")) return "mdi-file-excel-box";
+    if (lower.includes(".ppt") || lower.includes(".pptx")) return "mdi-file-powerpoint-box";
+    if (lower.includes(".zip") || lower.includes(".rar") || lower.includes(".7z")) return "mdi-folder-zip";
+    if (lower.includes(".txt")) return "mdi-file-document-outline";
+    if (lower.includes(".mp4") || lower.includes(".avi") || lower.includes(".mov") || lower.includes(".mkv")) return "mdi-file-video";
+    if (lower.includes(".mp3") || lower.includes(".wav") || lower.includes(".flac")) return "mdi-file-music";
+    return "mdi-file";
+  } catch (e) {
+    return "mdi-file";
+  }
+};
+
+// 파일 타입에 따른 아이콘 색상 클래스
+const getFileIconClass = (url) => {
+  if (!url) return "file-icon-default";
+  try {
+    const lower = url.split("?")[0].toLowerCase();
+    if (lower.includes(".pdf")) return "file-icon-pdf";
+    if (lower.includes(".doc") || lower.includes(".docx")) return "file-icon-word";
+    if (lower.includes(".xls") || lower.includes(".xlsx") || lower.includes(".csv")) return "file-icon-excel";
+    if (lower.includes(".ppt") || lower.includes(".pptx")) return "file-icon-ppt";
+    if (lower.includes(".zip") || lower.includes(".rar") || lower.includes(".7z")) return "file-icon-zip";
+    if (lower.includes(".txt")) return "file-icon-text";
+    if (lower.includes(".mp4") || lower.includes(".avi") || lower.includes(".mov") || lower.includes(".mkv")) return "file-icon-video";
+    if (lower.includes(".mp3") || lower.includes(".wav") || lower.includes(".flac")) return "file-icon-audio";
+    return "file-icon-default";
+  } catch (e) {
+    return "file-icon-default";
+  }
+};
+
+// 이미지 파일만 필터링
+const getImageFiles = (files) => {
+  if (!Array.isArray(files)) return [];
+  return files.filter((file) => isImageUrl(file.url));
+};
+
+// 일반 파일만 필터링
+const getFileFiles = (files) => {
+  if (!Array.isArray(files)) return [];
+  return files.filter((file) => !isImageUrl(file.url));
+};
+
+// 표시할 이미지 목록 (20개 제한 또는 모두)
+const getVisibleImages = (message) => {
+  const imageFiles = getImageFiles(message.files);
+  if (imageFiles.length <= 20) return imageFiles;
+  if (getExpandedImages(message.id)) return imageFiles;
+  return imageFiles.slice(0, 20);
+};
+
+// 이미지 확장 상태 확인
+const getExpandedImages = (messageId) => {
+  return expandedImages.value[messageId] || false;
+};
+
+// 이미지 확장
+const expandImages = (messageId) => {
+  expandedImages.value[messageId] = true;
+};
+
+// 이미지 접기
+const collapseImages = (messageId) => {
+  expandedImages.value[messageId] = false;
+};
+
 const removeAttachedFile = (index) => {
   attachedFiles.value.splice(index, 1);
 };
@@ -1591,6 +1667,42 @@ const sendTypingStopEvent = () => {
 // ✅ 구분선 표시 여부 판단 (비활성화)
 const shouldShowDivider = (message, index) => {
   // 구분선 표시 안함
+  return false;
+};
+
+// ✅ 시간 표시 여부 판단 (카카오톡 방식: 같은 시간대의 연속 메시지는 마지막에만 표시)
+const shouldShowTime = (message, index) => {
+  // 마지막 메시지면 항상 시간 표시
+  if (index === messages.value.length - 1) {
+    return true;
+  }
+
+  const nextMessage = messages.value[index + 1];
+  if (!nextMessage || !message.createdAt || !nextMessage.createdAt) {
+    return true;
+  }
+
+  // 시간 비교 (같은 시:분인지 확인)
+  const currentTime = message.createdAt;
+  const nextTime = nextMessage.createdAt;
+  
+  const currentMinutes = currentTime.getHours() * 60 + currentTime.getMinutes();
+  const nextMinutes = nextTime.getHours() * 60 + nextTime.getMinutes();
+
+  // 다음 메시지와 시간이 다르면 표시
+  if (currentMinutes !== nextMinutes) {
+    return true;
+  }
+
+  // 다음 메시지가 다른 사용자거나, 내 메시지 <-> 상대방 메시지 전환 시 표시
+  if (
+    message.user !== nextMessage.user ||
+    message.isOwn !== nextMessage.isOwn
+  ) {
+    return true;
+  }
+
+  // 같은 시간대의 연속 메시지는 표시하지 않음
   return false;
 };
 
@@ -1966,7 +2078,12 @@ onUnmounted(() => {
               }"
               @contextmenu="handleMessageRightClick(message, $event)"
             >
-              <div class="message-content">
+              <div 
+                class="message-content"
+                :class="{
+                  'has-files-content': Array.isArray(message.files) && message.files.length > 0,
+                }"
+              >
                 <!-- ✅ 아바타: 항상 표시하되, 연속된 메시지는 투명하게 -->
                 <div
                   v-if="!message.isOwn"
@@ -2047,6 +2164,7 @@ onUnmounted(() => {
                     class="message-bubble"
                     :class="{
                       mentioned: isMentionedMessage(message),
+                      'has-files': Array.isArray(message.files) && message.files.length > 0,
                     }"
                   >
                     <div
@@ -2062,38 +2180,81 @@ onUnmounted(() => {
                       "
                       class="message-files"
                     >
-                      <div
-                        v-for="(file, i) in message.files"
-                        :key="i"
-                        class="message-file-item"
-                      >
-                        <!-- 이미지면 썸네일, 아니면 아이콘+링크 -->
-                        <template v-if="isImageUrl(file.url)">
+                      <!-- 이미지 파일들을 그리드로 표시 -->
+                      <template v-if="getImageFiles(message.files).length > 0">
+                        <div class="images-grid-container">
+                          <div class="images-grid">
+                            <a
+                              v-for="(file, i) in getVisibleImages(message)"
+                              :key="i"
+                              :href="file.url"
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              class="image-grid-item"
+                            >
+                              <div class="image-card-grid">
+                                <div class="image-wrapper-grid">
+                                  <img
+                                    :src="file.url"
+                                    :alt="file.name"
+                                    class="image-thumb-grid"
+                                    @error="$event.target.style.display='none'"
+                                  />
+                                  <div class="image-overlay-grid">
+                                    <v-icon color="white" size="20">mdi-magnify-plus</v-icon>
+                                  </div>
+                                </div>
+                              </div>
+                            </a>
+                          </div>
+                          <!-- 더보기 버튼 -->
+                          <div 
+                            v-if="getImageFiles(message.files).length > 20 && !getExpandedImages(message.id)"
+                            class="show-more-images"
+                            @click="expandImages(message.id)"
+                          >
+                            <v-icon>mdi-chevron-down</v-icon>
+                            <span>더보기 ({{ getImageFiles(message.files).length - 20 }}개)</span>
+                          </div>
+                          <!-- 접기 버튼 -->
+                          <div 
+                            v-if="getImageFiles(message.files).length > 20 && getExpandedImages(message.id)"
+                            class="show-more-images"
+                            @click="collapseImages(message.id)"
+                          >
+                            <v-icon>mdi-chevron-up</v-icon>
+                            <span>접기</span>
+                          </div>
+                        </div>
+                      </template>
+                      
+                      <!-- 일반 파일들을 리스트로 표시 -->
+                      <template v-for="(file, i) in getFileFiles(message.files)" :key="`file-${i}`">
+                        <div class="message-file-item">
                           <a
                             :href="file.url"
                             target="_blank"
                             rel="noopener noreferrer"
-                            class="image-thumb-link"
+                            class="file-card-link"
                           >
-                            <img
-                              :src="file.url"
-                              :alt="file.name"
-                              class="image-thumb"
-                            />
+                            <div class="file-card">
+                              <div class="file-icon-wrapper">
+                                <v-icon :class="getFileIconClass(file.url)">
+                                  {{ getFileIconFromUrl(file.url) }}
+                                </v-icon>
+                              </div>
+                              <div class="file-info">
+                                <div class="file-name-text">{{ file.name }}</div>
+                                <div class="file-size-text">
+                                  <v-icon size="12" class="file-size-icon">mdi-download</v-icon>
+                                  파일 다운로드
+                                </div>
+                              </div>
+                              <v-icon size="20" class="file-action-icon">mdi-open-in-new</v-icon>
+                            </div>
                           </a>
-                        </template>
-                        <template v-else>
-                          <v-icon class="mr-2">mdi-file</v-icon>
-                          <a
-                            :href="file.url"
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            class="file-name"
-                          >
-                            {{ file.name }}
-                          </a>
-                        </template>
-                      </div>
+                        </div>
+                      </template>
                     </div>
                   </div>
 
@@ -2105,7 +2266,12 @@ onUnmounted(() => {
                     >
                       <!-- {{ message.unread }} -->
                     </div>
-                    <div class="message-time">{{ message.time }}</div>
+                    <div 
+                      v-if="shouldShowTime(message, index)"
+                      class="message-time"
+                    >
+                      {{ message.time }}
+                    </div>
                   </div>
                 </div>
               </div>
@@ -2426,15 +2592,19 @@ onUnmounted(() => {
 </template>
 
 <style scoped>
+/* ============================================
+   레이아웃
+   ============================================ */
+
 .team-chat {
   height: calc(100vh - 60px);
   background: rgb(var(--v-theme-background));
-  display: flex; /* 사이드바를 위한 flex 레이아웃 추가 */
+  display: flex;
 }
 
 .chat-area {
-  flex: 1; /* width: 100% 대신 flex: 1 사용 */
-  min-width: 0; /* flex shrink 방지 */
+  flex: 1;
+  min-width: 0;
   height: 100%;
   display: flex;
   flex-direction: column;
@@ -2473,6 +2643,10 @@ onUnmounted(() => {
   color: rgb(var(--v-theme-on-surface));
 }
 
+/* ============================================
+   메시지 목록
+   ============================================ */
+
 .messages-container {
   flex: 1;
   overflow-y: auto;
@@ -2482,13 +2656,18 @@ onUnmounted(() => {
 .messages-list {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 4px;
 }
 
 .message-item {
   display: flex;
   justify-content: flex-start;
-  margin-bottom: 8px;
+  margin-bottom: 0;
+  cursor: context-menu;
+}
+
+.message-item:hover {
+  background: rgba(var(--v-theme-on-surface), 0.02);
 }
 
 .message-item.own-message {
@@ -2500,7 +2679,7 @@ onUnmounted(() => {
 }
 
 .message-item.first-in-group {
-  margin-top: 16px;
+  margin-top: 8px;
 }
 
 .message-content {
@@ -2511,13 +2690,17 @@ onUnmounted(() => {
   gap: 8px;
 }
 
+.message-content.has-files-content {
+  max-width: 35%;
+}
+
 .message-item.own-message .message-content {
   flex-direction: row-reverse;
 }
 
 .message-group {
   position: relative;
-  padding-right: 70px; /* 기본: 오른쪽에 공간 확보 (메타 폭 + 여유) */
+  padding-right: 70px;
 }
 
 .message-item.own-message .message-group {
@@ -2530,26 +2713,25 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 40px; /* 아바타 크기 고정 */
+  width: 40px;
   height: 40px;
-  border-radius: 50%; /* 동그라미 모양 */
-  overflow: hidden; /* 이미지를 원 안에 자름 */
-  background-color: #f2f2f2; /* 이미지 없을 때 배경색 */
-  flex-shrink: 0; /* 아바타 크기 고정 - 축소 방지 */
-  min-width: 40px; /* 최소 너비 보장 */
-  min-height: 40px; /* 최소 높이 보장 */
+  border-radius: 50%;
+  overflow: hidden;
+  background-color: #f2f2f2;
+  flex-shrink: 0;
+  min-width: 40px;
+  min-height: 40px;
 }
 
-/* ✅ 연속된 메시지에서 아바타 투명하게 */
 .message-avatar.avatar-hidden {
   opacity: 0;
   pointer-events: none;
 }
 
 .avatar-image {
-  width: 100%; /* 부모 영역에 맞춰 */
+  width: 100%;
   height: 100%;
-  object-fit: cover; /* 비율 유지하며 꽉 채움 */
+  object-fit: cover;
 }
 
 .message-bubble {
@@ -2568,12 +2750,18 @@ onUnmounted(() => {
   border-radius: 4px 18px 18px 18px;
 }
 
+/* 내가 보낸 메시지 버블 */
 .message-item.own-message .message-bubble {
-  background: rgb(var(--v-theme-primary));
-  color: #ffffff !important;
+  background: rgba(59, 130, 246, 0.15);
+  color: #000000;
   font-weight: 600;
-  border: 1px solid rgba(var(--v-theme-primary), 0.3);
+  border: 1px solid rgba(59, 130, 246, 0.25);
   border-radius: 18px 18px 4px 18px;
+  backdrop-filter: blur(10px);
+}
+
+.v-theme--dark .message-item.own-message .message-bubble {
+  color: #ffffff;
 }
 
 .message-item.own-message.consecutive .message-bubble {
@@ -2612,14 +2800,15 @@ onUnmounted(() => {
   padding: 0px 0px;
 }
 
-/* 메시지 입력 컨테이너 */
+/* ============================================
+   메시지 입력 영역
+   ============================================ */
+
 .message-input-container {
   position: relative;
   background: rgb(var(--v-theme-surface));
   border-top: 1px solid rgba(var(--v-theme-on-surface), 0.1);
 }
-
-/* 첨부파일 메뉴 */
 .attachment-menu {
   position: absolute;
   bottom: 100%;
@@ -2706,17 +2895,16 @@ onUnmounted(() => {
   background: rgba(var(--v-theme-primary), 0.05);
 }
 
-/* 입력 액션 버튼들 */
 .input-actions {
   display: flex;
   align-items: center;
 }
 
 .attachment-btn {
-  width: 52px !important;
-  height: 52px !important;
-  min-width: 52px !important;
-  min-height: 52px !important;
+  width: 52px;
+  height: 52px;
+  min-width: 52px;
+  min-height: 52px;
   border-radius: 12px;
   transition: all 0.2s ease;
   color: rgba(var(--v-theme-on-surface), 0.6);
@@ -2733,14 +2921,6 @@ onUnmounted(() => {
   background: rgb(var(--v-theme-primary));
   color: white;
   transform: rotate(45deg);
-}
-
-/* 입력 필드 */
-.input-field {
-  flex: 1;
-  position: relative;
-  cursor: text;
-  width: 100%;
 }
 
 /* 멘션 하이라이트 오버레이 */
@@ -2762,110 +2942,49 @@ onUnmounted(() => {
   box-sizing: border-box;
 }
 
-:deep(.mention-overlay .mention-highlight) {
-  color: #6366f1 !important;
-  background: rgba(99, 102, 241, 0.1) !important;
-  padding: 1px 4px !important;
-  border-radius: 6px !important;
-  font-weight: 500 !important;
-  display: inline !important;
-  border: none !important;
-  font-size: 0.95em !important;
+/* 멘션 하이라이트 공통 스타일 */
+.mention-highlight {
+  background: rgba(99, 102, 241, 0.1);
+  color: #6366f1;
+  padding: 1px 4px;
+  border-radius: 6px;
+  font-weight: 500;
+  display: inline;
+  border: none;
+  font-size: 0.95em;
 }
 
-/* 오버레이에서 멘션이 아닌 텍스트는 완전히 투명하게 */
+/* 멘션 오버레이 (입력 필드용) */
 .mention-overlay {
-  color: transparent !important;
+  color: transparent;
 }
 
 .mention-overlay * {
-  color: transparent !important;
+  color: transparent;
 }
 
 .mention-overlay .mention-highlight {
-  color: #6366f1 !important;
-}
-
-:deep(.mention-highlight) {
-  background: rgba(99, 102, 241, 0.1) !important;
-  color: #6366f1 !important;
-  padding: 1px 4px !important;
-  border-radius: 6px !important;
-  font-weight: 500 !important;
-  display: inline !important;
-  border: none !important;
-  font-size: 0.95em !important;
-}
-
-/* 전역 멘션 하이라이트 스타일 */
-.mention-highlight {
-  background: rgba(99, 102, 241, 0.1) !important;
-  color: #6366f1 !important;
-  padding: 1px 4px !important;
-  border-radius: 6px !important;
-  font-weight: 500 !important;
-  display: inline !important;
-  border: none !important;
-  font-size: 0.95em !important;
+  color: #6366f1;
 }
 
 /* 메시지 내 멘션 하이라이트 */
+.message-text .mention-highlight,
 :deep(.message-text .mention-highlight) {
-  background: #e0e7ff !important;
-  color: #4f46e5 !important;
-  padding: 1px 4px !important;
-  border-radius: 6px !important;
-  font-weight: 500 !important;
-  font-size: inherit !important;
-  display: inline !important;
-  border: none !important;
-}
-
-/* 더 강력한 선택자 */
-.team-chat .mention-highlight {
-  background: rgba(99, 102, 241, 0.1) !important;
-  color: #6366f1 !important;
-  padding: 1px 4px !important;
-  border-radius: 6px !important;
-  font-weight: 500 !important;
-  display: inline !important;
-  border: none !important;
-  font-size: 0.95em !important;
-}
-
-.team-chat .message-text .mention-highlight {
-  background: #e0e7ff !important;
-  color: #4f46e5 !important;
-  padding: 1px 4px !important;
-  border-radius: 6px !important;
-  font-weight: 500 !important;
-  display: inline !important;
-  border: none !important;
-  font-size: inherit !important;
-}
-
-.team-chat .mention-overlay .mention-highlight {
-  background: rgba(99, 102, 241, 0.1) !important;
-  color: #6366f1 !important;
-  padding: 1px 4px !important;
-  border-radius: 6px !important;
-  font-weight: 500 !important;
-  display: inline !important;
-  border: none !important;
-  font-size: 0.95em !important;
+  background: #e0e7ff;
+  color: #4f46e5;
+  font-size: inherit;
 }
 
 /* 답장 미리보기 내 멘션 하이라이트 */
+.reply-text .mention-highlight,
+.reply-preview-text .mention-highlight,
 :deep(.reply-text .mention-highlight),
 :deep(.reply-preview-text .mention-highlight) {
-  background: rgba(99, 102, 241, 0.08) !important;
-  color: #6366f1 !important;
-  padding: 1px 3px !important;
-  border-radius: 4px !important;
-  font-weight: 500 !important;
-  font-size: inherit !important;
-  display: inline !important;
-  border: none !important;
+  background: rgba(99, 102, 241, 0.08);
+  color: #6366f1;
+  padding: 1px 3px;
+  border-radius: 4px;
+  font-size: inherit;
 }
 
 .message-textarea {
@@ -2885,26 +3004,24 @@ onUnmounted(() => {
   overflow: hidden;
 }
 
-/* Vuetify textarea의 기본 하이라이트 비활성화 */
+/* Vuetify textarea 스타일 */
 .message-textarea :deep(.v-field__input) {
-  background: transparent !important;
-  color: rgb(var(--v-theme-on-surface)) !important;
-  caret-color: rgb(var(--v-theme-on-surface)) !important;
+  background: transparent;
+  color: rgb(var(--v-theme-on-surface));
+  caret-color: rgb(var(--v-theme-on-surface));
   position: relative;
   z-index: 1;
 }
 
 .message-textarea :deep(.v-field__input::selection) {
-  background: rgba(var(--v-theme-primary), 0.2) !important;
-  color: rgb(var(--v-theme-on-surface)) !important;
+  background: rgba(var(--v-theme-primary), 0.2);
+  color: rgb(var(--v-theme-on-surface));
 }
 
 .message-textarea :deep(.v-field__input::-moz-selection) {
-  background: rgba(var(--v-theme-primary), 0.2) !important;
-  color: rgb(var(--v-theme-on-surface)) !important;
+  background: rgba(var(--v-theme-primary), 0.2);
+  color: rgb(var(--v-theme-on-surface));
 }
-
-/* 멘션 부분만 textarea에서 숨기기 - 정규식으로 멘션 부분을 공백으로 대체 */
 
 .message-textarea:focus {
   background: white;
@@ -2918,17 +3035,16 @@ onUnmounted(() => {
   line-height: 1.4;
 }
 
-/* 전송 액션 버튼들 */
 .send-actions {
   display: flex;
   align-items: center;
 }
 
 .send-btn {
-  width: 52px !important;
-  height: 52px !important;
-  min-width: 52px !important;
-  min-height: 52px !important;
+  width: 52px;
+  height: 52px;
+  min-width: 52px;
+  min-height: 52px;
   border-radius: 8px;
   transition: all 0.2s ease;
   background: rgb(var(--v-theme-primary));
@@ -3114,7 +3230,7 @@ onUnmounted(() => {
 }
 
 .icon-circle .v-icon {
-  color: white !important;
+  color: white;
   z-index: 1;
 }
 
@@ -3213,8 +3329,8 @@ onUnmounted(() => {
   height: 52px;
   font-size: 16px;
   letter-spacing: -0.2px;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
-  color: white !important;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
   box-shadow: 0 4px 16px rgba(102, 126, 234, 0.3);
   transition: all 0.3s ease;
   position: relative;
@@ -3356,49 +3472,347 @@ onUnmounted(() => {
 
 /* 메시지 내 파일 표시 */
 .message-files {
-  margin-top: 8px;
-  margin-bottom: 8px;
-  border-top: none;
+  margin-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
 }
 
 .message-file-item {
   display: flex;
-  align-items: center;
-  padding: 6px 8px;
-  background: rgba(var(--v-theme-on-surface), 0.05);
-  border-radius: 6px;
-  margin-bottom: 4px;
-  font-size: 13px;
+  width: 100%;
 }
 
-/* 이미지 썸네일 */
-.image-thumb-link {
-  display: inline-block;
-  border-radius: 8px;
+/* 이미지 그리드 컨테이너 */
+.images-grid-container {
+  width: 100%;
+  margin-bottom: 8px;
+}
+
+.images-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+  max-width: 100%;
+}
+
+.image-grid-item {
+  text-decoration: none;
+  color: inherit;
+  display: block;
+  position: relative;
+  aspect-ratio: 1;
   overflow: hidden;
-  line-height: 0;
+  border-radius: 6px;
+  background: rgba(var(--v-theme-on-surface), 0.05);
+}
+
+.image-card-grid {
+  width: 100%;
+  height: 100%;
+  position: relative;
+  overflow: hidden;
+  border-radius: 6px;
+  transition: transform 0.2s ease;
+}
+
+.image-grid-item:hover .image-card-grid {
+  transform: scale(1.02);
+}
+
+.image-wrapper-grid {
+  width: 100%;
+  height: 100%;
+  position: relative;
+  overflow: hidden;
+}
+
+.image-thumb-grid {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  transition: transform 0.3s ease;
+}
+
+.image-grid-item:hover .image-thumb-grid {
+  transform: scale(1.08);
+}
+
+.image-overlay-grid {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.image-grid-item:hover .image-overlay-grid {
+  opacity: 1;
+}
+
+/* 더보기 버튼 */
+.show-more-images {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 10px 16px;
+  margin-top: 8px;
+  background: rgba(var(--v-theme-primary), 0.08);
+  border: 1px solid rgba(var(--v-theme-primary), 0.2);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-size: 13px;
+  font-weight: 500;
+  color: rgb(var(--v-theme-primary));
+  user-select: none;
+}
+
+.show-more-images:hover {
+  background: rgba(var(--v-theme-primary), 0.12);
+  border-color: rgba(var(--v-theme-primary), 0.3);
+  transform: translateY(-1px);
+}
+
+.show-more-images .v-icon {
+  font-size: 18px;
+}
+
+/* 이미지 카드 링크 */
+.image-card-link {
+  text-decoration: none;
+  color: inherit;
+  display: block;
+  width: 100%;
+  max-width: 320px;
+}
+
+/* 이미지 카드 */
+.image-card {
+  background: rgba(var(--v-theme-surface), 0.8);
+  border: 1px solid rgba(var(--v-theme-on-surface), 0.12);
+  border-radius: 12px;
+  overflow: hidden;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  backdrop-filter: blur(10px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.image-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+  border-color: rgba(var(--v-theme-primary), 0.3);
+}
+
+.image-wrapper {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  background: rgba(var(--v-theme-on-surface), 0.05);
 }
 
 .image-thumb {
-  width: 160px;
-  height: 160px;
+  width: 100%;
+  height: 100%;
   object-fit: cover;
   display: block;
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.image-card:hover .image-thumb {
+  transform: scale(1.05);
+}
+
+.image-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.image-card:hover .image-overlay {
+  opacity: 1;
+}
+
+.image-info {
+  padding: 10px 14px;
+  background: rgba(var(--v-theme-surface), 0.95);
+}
+
+.image-name {
+  font-size: 13px;
+  font-weight: 500;
+  color: rgba(var(--v-theme-on-surface), 0.8);
+  display: -webkit-box;
+  -webkit-line-clamp: 1;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 파일 카드 링크 */
+.file-card-link {
+  text-decoration: none;
+  color: inherit;
+  display: block;
+  width: 100%;
+  max-width: 100%;
+}
+
+/* 파일 카드 */
+.file-card {
+  background: rgba(var(--v-theme-surface), 0.95);
+  border: 1px solid rgba(var(--v-theme-on-surface), 0.12);
+  border-radius: 10px;
+  padding: 10px 12px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  backdrop-filter: blur(10px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+  cursor: pointer;
+}
+
+.file-card:hover {
+  transform: translateX(4px);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+  border-color: rgba(var(--v-theme-primary), 0.3);
+  background: rgba(var(--v-theme-surface), 1);
+}
+
+.file-icon-wrapper {
+  width: 36px;
+  height: 36px;
   border-radius: 8px;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.12);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: transform 0.2s ease;
+}
+
+.file-card:hover .file-icon-wrapper {
+  transform: scale(1.05);
+}
+
+/* 파일 아이콘 색상 클래스 */
+.file-icon-pdf .v-icon {
+  color: #dc2626;
+}
+
+.file-icon-word .v-icon {
+  color: #2563eb;
+}
+
+.file-icon-excel .v-icon {
+  color: #16a34a;
+}
+
+.file-icon-ppt .v-icon {
+  color: #ea580c;
+}
+
+.file-icon-zip .v-icon {
+  color: #9333ea;
+}
+
+.file-icon-text .v-icon {
+  color: #64748b;
+}
+
+.file-icon-video .v-icon {
+  color: #e11d48;
+}
+
+.file-icon-audio .v-icon {
+  color: #7c3aed;
+}
+
+.file-icon-default .v-icon {
+  color: rgba(var(--v-theme-on-surface), 0.6);
+}
+
+.file-icon-wrapper .v-icon {
+  font-size: 22px;
+}
+
+.file-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.file-name-text {
+  font-size: 13px;
+  font-weight: 600;
+  color: rgb(var(--v-theme-on-surface));
+  display: -webkit-box;
+  -webkit-line-clamp: 1;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.file-size-text {
+  font-size: 11px;
+  color: rgba(var(--v-theme-on-surface), 0.6);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.file-size-icon {
+  font-size: 14px;
+}
+
+.file-action-icon {
+  color: rgba(var(--v-theme-on-surface), 0.4);
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+}
+
+.file-card:hover .file-action-icon {
+  color: rgb(var(--v-theme-primary));
+  transform: translateX(2px);
 }
 
 .message-file-item:last-child {
   margin-bottom: 0;
 }
 
-.message-file-item .file-name {
-  font-size: 13px;
-  margin-right: 6px;
+/* 자신의 메시지에서 파일 카드 색상 조정 */
+.message-item.own-message .file-card {
+  background: rgba(var(--v-theme-primary), 0.08);
+  border-color: rgba(var(--v-theme-primary), 0.2);
 }
 
-.message-file-item .file-size {
-  font-size: 11px;
+.message-item.own-message .file-card:hover {
+  background: rgba(var(--v-theme-primary), 0.12);
+  border-color: rgba(var(--v-theme-primary), 0.35);
+}
+
+.message-item.own-message .image-card {
+  background: rgba(var(--v-theme-primary), 0.08);
+  border-color: rgba(var(--v-theme-primary), 0.2);
 }
 
 /* 반응형 디자인 */
@@ -3411,12 +3825,16 @@ onUnmounted(() => {
     padding: 12px 16px;
   }
 
-  .message-input {
-    padding: 12px 16px;
+  .images-grid {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 6px;
   }
+}
 
-  .message-content {
-    max-width: 85%;
+@media (max-width: 480px) {
+  .images-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 4px;
   }
 
   .attachment-menu {
@@ -3670,7 +4088,7 @@ onUnmounted(() => {
 }
 
 .mention-item-selected {
-  background: rgba(var(--v-theme-primary), 0.15) !important;
+  background: rgba(var(--v-theme-primary), 0.15);
 }
 
 .mention-info {
@@ -3691,75 +4109,46 @@ onUnmounted(() => {
   color: rgba(var(--v-theme-on-surface), 0.6);
 }
 
-/* 메시지 우클릭 호버 효과 */
-.message-item {
-  cursor: context-menu;
-}
 
-.message-item:hover {
-  background: rgba(var(--v-theme-on-surface), 0.02);
-}
-
-.message-textarea :deep(.v-field) {
-  width: 100% !important;
-  max-width: 100% !important;
-}
-
-.message-textarea :deep(.v-field__input) {
-  width: 100% !important;
-  max-width: 100% !important;
-  display: block !important;
-  white-space: pre-wrap !important;
-  word-break: break-word !important;
-  box-sizing: border-box !important;
-}
-
-.message-textarea :deep(textarea) {
-  width: 100% !important;
-  max-width: 100% !important;
-  resize: none !important;
-  line-height: 52px !important;
-  overflow-x: hidden !important;
-  box-sizing: border-box !important;
-  padding-top: 16px !important;
-  padding-bottom: 16px !important;
-}
-
+/* Vuetify 입력 필드 레이아웃 */
 .input-field {
-  flex: 1 1 auto !important;
-  min-width: 0 !important;
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
-/* 🚨 Vuetify 내부 display 강제 덮어쓰기 */
 .message-textarea :deep(.v-input),
 .message-textarea :deep(.v-input__control),
 .message-textarea :deep(.v-field),
 .message-textarea :deep(.v-field__input),
 .message-textarea :deep(textarea) {
-  width: 100% !important;
-  max-width: 100% !important;
-  min-width: 100% !important;
-  flex: 1 1 auto !important;
-  display: block !important;
-  box-sizing: border-box !important;
-  white-space: pre-wrap !important;
-  word-break: break-word !important;
-  overflow-wrap: break-word !important;
+  width: 100%;
+  max-width: 100%;
+  min-width: 100%;
+  flex: 1 1 auto;
+  display: block;
+  box-sizing: border-box;
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-wrap: break-word;
 }
 
-/* ✅ 내가 멘션된 메시지 배경 하이라이트 (강조 버전) */
+.message-textarea :deep(textarea) {
+  resize: none;
+  line-height: 52px;
+  overflow-x: hidden;
+  padding-top: 16px;
+  padding-bottom: 16px;
+}
+
+/* 멘션된 메시지 배경 하이라이트 */
 .message-bubble.mentioned {
-  background: linear-gradient(
-    135deg,
-    #ede9fe,
-    #ddd6fe
-  ) !important; /* 보라빛 그라데이션 */
-  box-shadow: 0 0 10px rgba(124, 58, 237, 0.5) !important; /* 외곽광 */
+  background: linear-gradient(135deg, #ede9fe, #ddd6fe);
+  box-shadow: 0 0 10px rgba(124, 58, 237, 0.5);
   animation: mentionGlow 2s ease-in-out infinite alternate;
   transition: all 0.3s ease;
 }
 
-/* 💡 하이라이트 애니메이션 */
+/* 멘션 하이라이트 애니메이션 */
 @keyframes mentionGlow {
   0% {
     box-shadow: 0 0 8px rgba(124, 58, 237, 0.3);
@@ -3772,13 +4161,13 @@ onUnmounted(() => {
   }
 }
 
-/* 🟣 메시지 텍스트 색도 살짝 강조 */
+/* 멘션된 메시지 텍스트 강조 */
 .message-bubble.mentioned .message-text {
-  color: #4c1d95 !important;
+  color: #4c1d95;
   font-weight: 600;
 }
 
-/* ✅ 구분선 스타일 */
+/* 구분선 */
 .message-divider {
   display: flex;
   align-items: center;
