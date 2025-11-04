@@ -108,11 +108,6 @@ const channels = computed(() => {
       channelData: channel,
     })) || [];
 
-  console.log(
-    "📋 Store에서 가져온 채널 데이터:",
-    workspaceMemberStore.chatChannels
-  );
-  console.log("📋 변환된 채널 목록:", channelList);
 
   return channelList;
 });
@@ -212,11 +207,6 @@ const isConnecting = ref(false)
 
 // ✅ WebSocket 연결
 const connectWebsocket = () => {
-  console.log("🔌 WebSocket 연결 시도 시작");
-  console.log("- token:", token.value ? "있음" : "없음");
-  console.log("- channelSeq:", channelSeq.value);
-  console.log("- memberSeq:", memberSeq.value);
-  console.log("- channelSeq 타입:", typeof channelSeq.value);
 
   // ✅ channelSeq 유효성 검사 추가
   if (!channelSeq.value || isNaN(channelSeq.value) || channelSeq.value <= 0) {
@@ -231,12 +221,10 @@ const connectWebsocket = () => {
 
   // ✅ 이미 연결 중이거나 연결되어 있으면 return (중복 호출 방지)
   if (isConnecting.value) {
-    console.log("⏸️ WebSocket 연결 중이므로 중복 호출 스킵");
     return;
   }
 
   if (stompClient.value && stompClient.value.connected) {
-    console.log("✅ WebSocket 이미 연결됨");
     return;
   }
 
@@ -245,7 +233,6 @@ const connectWebsocket = () => {
 
   // ✅ 기존 연결이 끊어진 상태면 정리
   if (stompClient.value && !stompClient.value.connected) {
-    console.log("🔌 기존 연결이 끊어진 상태 - 정리 후 재연결");
     try {
       if (subscription.value) {
         subscription.value.unsubscribe();
@@ -268,9 +255,7 @@ const connectWebsocket = () => {
   stompClient.value.connect(
     { Authorization: `Bearer ${token.value}` },
     () => {
-      console.log("✅ WebSocket 연결 성공!");
-      console.log("🔍 구독할 채널 Seq:", channelSeq.value);
-      console.log("🔍 구독 경로:", `/topic/${channelSeq.value}`);
+      // WebSocket 연결 성공
       
       // 연결 완료 후 플래그 해제
       isConnecting.value = false
@@ -280,11 +265,9 @@ const connectWebsocket = () => {
         (message) => {
           try {
             const parsed = JSON.parse(message.body);
-            console.log("📩 메시지 수신:", parsed);
 
             // ✅ TYPING 이벤트 처리
             if (parsed.action === "TYPING") {
-              console.log("⌨️ 타이핑 이벤트 수신:", parsed);
 
               // 자신의 타이핑 이벤트는 무시
               if (Number(parsed.senderSeq) === Number(memberSeq.value)) {
@@ -307,7 +290,6 @@ const connectWebsocket = () => {
 
             // ✅ 삭제 이벤트 처리 추가 (190줄 위치에 추가!)
             if (parsed.action === "DELETE") {
-              console.log("🗑️ 삭제된 메시지:", parsed.chatMessageSeq);
               messages.value = messages.value.filter(
                 (msg) => msg.id !== parsed.chatMessageSeq
               );
@@ -406,7 +388,6 @@ const connectWebsocket = () => {
                 const channelSeqStr = String(channelSeq.value);
                 if (notificationStore.getChannelNotificationCount(channelSeqStr) > 0) {
                   notificationStore.clearChannelNotificationCount(channelSeqStr);
-                  console.log(`✅ Chat.vue: 현재 채널(${channelSeqStr}) 메시지 수신, 알림 초기화`);
                 }
               }
             }
@@ -439,7 +420,6 @@ const disconnectWebsocket = async () => {
         `/chat-service/chat/channels/${channelSeq.value}/read`,
         {}
       );
-      console.log("✅ 마지막 읽은 메시지 업데이트 완료");
     } else {
       console.warn(
         "⚠️ channelSeq가 유효하지 않아 읽음 처리 건너뜀:",
@@ -456,9 +436,7 @@ const disconnectWebsocket = async () => {
       subscription.value = null;
     }
     if (stompClient.value && stompClient.value.connected) {
-      stompClient.value.disconnect(() => {
-        console.log("🔌 WebSocket 연결 해제 완료");
-      });
+      stompClient.value.disconnect();
     }
   } catch (e) {
     console.warn("WebSocket 해제 중 오류:", e);
@@ -505,8 +483,6 @@ const uploadFilesToS3 = async () => {
       }
     );
 
-    console.log("✅ 파일 업로드 성공:", res.data);
-
     // ✅ 배열만 추출하도록 보정
     const urls = Array.isArray(res.data)
       ? res.data
@@ -523,17 +499,13 @@ const uploadFilesToS3 = async () => {
 
 // ✅ 메시지 전송
 const sendMessage = async () => {
-  console.log("============= 메시지 전송 ===============", memberSeq.value);
-
   // 중복 전송 방지
   if (isSending.value) {
-    console.warn("이미 전송 중입니다. 잠시만 기다려주세요.");
     return;
   }
 
   // ✅ WebSocket 연결 확인 및 재연결 시도
   if (!stompClient.value || !stompClient.value.connected) {
-    console.warn("⚠️ WebSocket 연결이 없습니다. 재연결 시도...");
 
     if (!channelSeq.value || !token.value) {
       console.error("❌ 채널 또는 토큰이 없습니다.");
@@ -560,8 +532,6 @@ const sendMessage = async () => {
       alert("채팅 연결에 실패했습니다. 페이지를 새로고침해주세요.");
       return;
     }
-
-    console.log("✅ WebSocket 재연결 성공");
   }
 
   if (newMessage.value.trim() === "" && attachedFiles.value.length === 0)
@@ -632,14 +602,7 @@ const sendMessage = async () => {
     };
     messages.value.push(localMessage);
 
-    console.log("📤 보내는 메시지:", message);
-
     // 3️⃣ WebSocket 전송
-    console.log("📤 메시지 전송 시도...");
-    console.log("🔍 전송할 채널 Seq:", channelSeq.value);
-    console.log("🔍 전송 경로:", `/publish/${channelSeq.value}`);
-    console.log("🔍 메시지 내용:", message);
-
     stompClient.value.send(
       `/publish/${channelSeq.value}`,
       JSON.stringify(message),
@@ -700,8 +663,6 @@ const deleteMessage = async (message) => {
       `/chat-service/chat/messages/${message.id}`
     );
 
-    console.log("✅ 메시지 삭제 성공:", res.data);
-
     // 로컬 메시지 목록에서도 제거
     messages.value = messages.value.filter((m) => m.id !== message.id);
     showContextMenu.value = false;
@@ -722,7 +683,6 @@ const createChannel = () => {
         unread: 0,
       };
       channels.value.push(newChannel);
-      console.log("새 채널 생성:", newChannel);
     }
   }
 };
@@ -734,8 +694,6 @@ const loadMoreMessages = async (lastId = null) => {
   isLoadingMessages.value = true;
 
   try {
-    console.log("📥 이전 메시지 로드 시작 - lastId:", lastId);
-
     const url = `/chat-service/chat/channels/${channelSeq.value}/messages${lastId ? `?lastId=${lastId}` : ""}`;
 
     const res = await apiClient.get(url);
@@ -758,13 +716,10 @@ const loadMoreMessages = async (lastId = null) => {
 
     // 로드할 메시지가 없으면 종료
     if (!loadedMessages || loadedMessages.length === 0) {
-      console.log("📭 더 이상 로드할 메시지가 없습니다.");
       hasMoreMessages.value = false;
       isLoadingMessages.value = false;
       return;
     }
-
-    console.log("📨 로드된 메시지 개수:", loadedMessages.length);
 
     // 메시지 맵핑 → WebSocket 수신 형식과 동일하게 변환
     const formatted = loadedMessages.map((m) => {
@@ -803,8 +758,6 @@ const loadMoreMessages = async (lastId = null) => {
 
     // ✅ 재접속 시(lastReadMessageSeq.value가 있으면): 구분선 위치 복원
     if (lastReadMessageSeq.value) {
-      console.log("📍 재접속 - 구분선 위치로 스크롤 복원");
-
       // DOM 업데이트 대기
       await new Promise((resolve) => setTimeout(resolve, 50));
 
@@ -816,13 +769,11 @@ const loadMoreMessages = async (lastId = null) => {
         const divider = firstNewMessage.previousElementSibling;
         if (divider && divider.classList.contains("message-divider")) {
           divider.scrollIntoView({ behavior: "instant", block: "start" });
-          console.log("📍 구분선 위치로 스크롤 복원 완료");
         } else {
           firstNewMessage.scrollIntoView({
             behavior: "instant",
             block: "start",
           });
-          console.log("📍 새 메시지 위치로 스크롤 복원 완료");
         }
       }
 
@@ -838,7 +789,6 @@ const loadMoreMessages = async (lastId = null) => {
         const newScrollHeight = container.scrollHeight;
         const heightDifference = newScrollHeight - oldScrollHeight;
         container.scrollTop = heightDifference; // 새로운 컨텐츠 높이만큼 스크롤
-        console.log("📍 스크롤 위치 복원 - 차이:", heightDifference);
       }
     } else {
       // 최초 접속 시: 맨 아래로 강제 스크롤 (구분선이 없을 때)
@@ -846,7 +796,6 @@ const loadMoreMessages = async (lastId = null) => {
       if (container) {
         container.scrollTop = container.scrollHeight;
       }
-      console.log("📍 최초 접속 - 맨 아래로 스크롤");
     }
   } catch (e) {
     console.error("❌ 메시지 로드 실패:", e);
@@ -871,8 +820,6 @@ const loadMessagesAfterLastRead = async () => {
   isLoadingMessages.value = true;
 
   try {
-    console.log("📥 새 메시지 로드 시작 (마지막 읽은 메시지 이후)");
-
     const url = `/chat-service/chat/channels/${channelSeq.value}/messages/after-last-read`;
 
     const res = await apiClient.get(url);
@@ -891,15 +838,10 @@ const loadMessagesAfterLastRead = async () => {
     }
 
     if (!loadedMessages || loadedMessages.length === 0) {
-      console.log(
-        "📭 새 메시지가 없습니다. (최초 접속 또는 읽을 새 메시지 없음)"
-      );
       lastReadMessageSeq.value = null;
       isLoadingMessages.value = false;
       return [];
     }
-
-    console.log("📨 로드된 새 메시지 개수:", loadedMessages.length);
 
     // 메시지 맵핑
     const formatted = loadedMessages.map((m) => ({
@@ -928,8 +870,6 @@ const loadMessagesAfterLastRead = async () => {
     // ✅ 새 메시지가 없으면 → 최초 접속 또는 읽을 새 메시지 없음 (lastReadSeq가 null)
     if (formatted.length > 0) {
       lastReadMessageSeq.value = formatted[0].id;
-      console.log("📍 마지막 읽은 메시지 seq:", lastReadMessageSeq.value);
-      console.log("🔄 재접속 감지 - 구분선 표시 예정");
     }
 
     isLoadingMessages.value = false;
@@ -955,12 +895,10 @@ const loadMessagesAfterLastRead = async () => {
 const changeChannel = async (channelId) => {
   // 중복 호출 방지
   if (isChangingChannel.value) {
-    console.log("⏸️ 이미 채널 변경 중이므로 중복 호출 스킵");
     return;
   }
 
   if (currentChannel.value === channelId) {
-    console.log("⏸️ 같은 채널이므로 스킵:", channelId);
     return;
   }
 
@@ -969,9 +907,6 @@ const changeChannel = async (channelId) => {
 
   try {
     sendTypingStopEvent();
-
-    console.log("🔄 채널 변경:", currentChannel.value, "→", channelId);
-    console.log("🔍 새로운 채널 Seq:", channelId);
 
     // ✅ channelSeq 유효성 검사
     const parsedChannelSeq = parseInt(channelId);
@@ -994,9 +929,6 @@ const changeChannel = async (channelId) => {
   isLoadingMessages.value = false;
   lastReadMessageSeq.value = null; // ✅ 마지막 읽은 메시지 초기화
 
-  console.log("✅ 채널 변경 완료 - 현재 채널 Seq:", channelSeq.value);
-  console.log("🔍 channelSeq 타입:", typeof channelSeq.value);
-
   try {
     // ✅ 1단계: 마지막 읽은 이후의 새 메시지 로드
     const newMessages = await loadMessagesAfterLastRead();
@@ -1005,7 +937,6 @@ const changeChannel = async (channelId) => {
     // 메시지 로드 후에 읽음 처리 (프로젝트/개인 워크스페이스 모두 동일)
     try {
       await updateLastRead(channelSeq.value);
-      console.log("✅ 읽음 상태 업데이트 완료");
     } catch (error) {
       console.warn("⚠️ 읽음 상태 업데이트 실패:", error);
       // 읽음 상태 업데이트 실패해도 메시지 로드는 계속 진행
@@ -1031,20 +962,17 @@ const changeChannel = async (channelId) => {
           if (divider && divider.classList.contains("message-divider")) {
             // 구분선으로 스크롤
             divider.scrollIntoView({ behavior: "instant", block: "start" });
-            console.log("📍 구분선 위치로 스크롤 완료 (상단)");
           } else {
             // 구분선이 없으면 메시지 상단으로 스크롤
             firstNewMessage.scrollIntoView({
               behavior: "instant",
               block: "start",
             });
-            console.log("📍 새 메시지 위치로 스크롤 완료");
           }
         }
       }
     } else {
       // 🆕 최초 접속: 모든 메시지 로드 후 맨 아래로 스크롤
-      console.log("🆕 최초 접속 감지 - 모든 메시지 로드");
     }
   } catch (error) {
     console.error("❌ loadMessagesAfterLastRead 실패:", error);
@@ -1058,7 +986,6 @@ const changeChannel = async (channelId) => {
   const lastId = lastReadMessageSeq.value || null;
   try {
     await loadMoreMessages(lastId);
-    console.log("✅ 이전 메시지 로드 완료");
   } catch (error) {
     console.error("❌ loadMoreMessages 실패:", error);
     // 에러 발생 시에도 사용자에게 알림
@@ -1081,11 +1008,9 @@ const isChangingChannel = ref(false)
 
 // 하위 채널 선택 이벤트 처리 (event bus용)
 const handleSubChannelSelect = ({ parentId, subChannelId }) => {
-  console.log("📣 select-chat-channel 이벤트:", parentId, subChannelId);
   if (parentId === "chat") {
     // 이미 채널 변경 중이면 스킵
     if (isChangingChannel.value) {
-      console.log("⏸️ 채널 변경 중이므로 event bus 이벤트 스킵");
       return;
     }
     changeChannel(subChannelId);
@@ -1215,7 +1140,6 @@ const closeContextMenu = () => {
 };
 
 const startReply = (message) => {
-  console.log("💬 답장 대상 message:", message);
   replyToMessage.value = message;
   showReplyInput.value = true;
   newMessage.value = ""; // 답장은 @ 입력 없이 답장 대상만 표시
@@ -1233,8 +1157,6 @@ const startReply = (message) => {
 const copyMessage = (message) => {
   navigator.clipboard.writeText(message.content);
   closeContextMenu();
-  // 복사 완료 알림 (선택사항)
-  console.log("메시지가 클립보드에 복사되었습니다.");
 };
 
 // 답장 메시지 표시 관련 함수들
@@ -1288,10 +1210,6 @@ const handleScroll = async (e) => {
   // 스크롤이 최상단에 있고 메시지가 있을 때만 로드
   if (container.scrollTop === 0 && messages.value.length > 0) {
     const oldest = messages.value[0];
-    console.log(
-      "🔄 최상단 스크롤 감지 - 이전 메시지 로드 시작 - oldest.id:",
-      oldest.id
-    );
     await loadMoreMessages(oldest.id);
   }
 };
@@ -1319,7 +1237,6 @@ const loadChannelMembers = () => {
           }))
           .filter((member) => Number(member.id) !== Number(memberSeq.value));
 
-        console.log("✅ 프로젝트 채널 멤버 목록:", mentionList.value);
         return;
       }
     }
@@ -1331,7 +1248,6 @@ const loadChannelMembers = () => {
       // 다른 방법 필요: 백엔드 API 호출 또는 전역 상태 관리
       // 임시로 빈 배열로 설정 (나중에 개선 가능)
       mentionList.value = [];
-      console.log("⚠️ 개인 워크스페이스: 멘션 기능은 추후 구현 예정");
       return;
     }
 
@@ -1380,12 +1296,10 @@ const handleMessageInput = (event) => {
     // 입력 내용이 있으면 → 타이핑 시작 이벤트 전송
     // 이미 인터벌이 실행 중이면 스킵
     if (!typingInterval) {
-      console.log("⌨️ [타이핑] 입력 내용 있음 → 시작");
       sendTypingStartEvent();
     }
   } else {
     // 입력 내용이 없으면 → 타이핑 종료 이벤트 전송
-    console.log("⌨️ [타이핑] 입력 내용 없음 → 종료");
     sendTypingStopEvent();
   }
 };
@@ -1644,7 +1558,6 @@ const sendTypingStartEvent = () => {
         { Authorization: `Bearer ${token.value}` }
       );
 
-      console.log("⌨️ [타이핑 중] 이벤트 전송");
       // lastTypingSent = Date.now();
     };
 
@@ -1700,7 +1613,6 @@ const sendTypingStopEvent = () => {
     { Authorization: `Bearer ${token.value}` }
   );
 
-  console.log("⌨️ [종료] 이벤트:", stopEvent);
   lastTypingSent = 0;
 };
 
@@ -1805,8 +1717,6 @@ const loadChatUserInfo = async () => {
       memberSeq: otherMember.memberSeq,
       commonWorkspaces: commonWorkspaces // ✅ 워크스페이스 정보 (이름 포함)
     };
-
-    console.log("✅ 1:1 채팅 상대방 정보 로드 완료:", chatUserInfo.value);
   } catch (e) {
     console.error("❌ 1:1 채팅 사용자 정보 로드 실패:", e);
     chatUserInfo.value = null;
@@ -1826,7 +1736,6 @@ watch(
 
 // 이벤트 리스너 등록/해제
 onMounted(async () => {
-  console.log("📥 listener mounted!");
   emitter.on("select-chat-channel", handleSubChannelSelect);
   window.addEventListener("click", closeContextMenu);
 
@@ -1846,14 +1755,8 @@ onMounted(async () => {
     memberSeq.value = payload.sub; // 일부 시스템은 sub를 member ID로 씀
   }
 
-  console.log("🟢 Chat 시작");
-  console.log("- memberSeq:", memberSeq.value);
-  console.log("- workspaceType:", props.workspaceType);
-  console.log("- JWT payload:", payload);
-
   // ✅ 프로젝트 워크스페이스: Store 초기화 대기
   if (props.workspaceType === "project") {
-    console.log("📦 프로젝트 워크스페이스: Store 초기화 대기");
     await waitForStore();
 
     // ✅ 채널 목록이 비어있으면 종료
@@ -1861,25 +1764,16 @@ onMounted(async () => {
       console.warn("⚠️ 채널 목록이 비어있습니다.");
       return;
     }
-  } else {
-    console.log("📦 개인 워크스페이스: Store 초기화 건너뜀");
   }
 
   // ✅ URL에서 채널 ID 가져오기 (새로고침 시 유지)
   const urlChannelId = route.params.subChannel?.toString();
-  console.log("🔍 URL 채널 ID:", urlChannelId);
-  console.log("🔍 route.params:", route.params);
   // ✅ 초기 채널 설정
   let initialChannel;
 
   if (props.workspaceType === "personal") {
     // 개인 워크스페이스: props.selectedChannel을 channelSeq로 사용
     initialChannel = urlChannelId || props.selectedChannel;
-    console.log("🔍 개인 워크스페이스 채널 선택:", {
-      urlChannelId,
-      selectedChannel: props.selectedChannel,
-      initialChannel,
-    });
 
     if (!initialChannel) {
       console.warn("⚠️ 개인 워크스페이스: 채널이 선택되지 않았습니다.");
@@ -1908,14 +1802,6 @@ onMounted(async () => {
 
   channelSeq.value = parsedChannelSeq;
 
-  console.log("🔍 최초 채널 선택 완료:", {
-    urlChannelId,
-    selectedChannel: props.selectedChannel,
-    initialChannel,
-    channelSeq: channelSeq.value,
-    workspaceType: props.workspaceType,
-  });
-
   // ✅ 채널 참여 멤버 목록 초기화 (백엔드 API 호출)
   await loadChannelMembers();
 
@@ -1924,22 +1810,18 @@ onMounted(async () => {
     hasLoadedInitialChannel.value = true;
 
     try {
-      console.log("📥 메시지 로드 시작...");
-
       // ✅ 1. 마지막 읽은 이후의 새 메시지 로드 시도
       const newMessages = await loadMessagesAfterLastRead();
 
       // ✅ 2. 채널 접속 시 읽음 상태 업데이트 (최신 메시지로)
       try {
         await updateLastRead(channelSeq.value);
-        console.log("✅ 읽음 상태 업데이트 완료");
       } catch (error) {
         console.warn("⚠️ 읽음 상태 업데이트 실패:", error);
       }
 
       // ✅ 3. 재접속 여부에 따른 처리
       if (newMessages.length > 0 && lastReadMessageSeq.value) {
-        console.log("🔄 재접속 감지 - 새 메시지 있음");
         messages.value = newMessages;
 
         await new Promise((resolve) => setTimeout(resolve, 50));
@@ -1953,34 +1835,24 @@ onMounted(async () => {
             const divider = firstNewMessage.previousElementSibling;
             if (divider && divider.classList.contains("message-divider")) {
               divider.scrollIntoView({ behavior: "instant", block: "start" });
-              console.log("📍 구분선 위치로 스크롤 완료 (상단)");
             } else {
               firstNewMessage.scrollIntoView({
                 behavior: "instant",
                 block: "start",
               });
-              console.log("📍 새 메시지 위치로 스크롤 완료");
             }
           }
         }
-      } else {
-        console.log("🆕 최초 접속 감지 - 모든 메시지 로드");
       }
 
       // ✅ 3. 이전 메시지 로드
       const lastId = lastReadMessageSeq.value || null;
       await loadMoreMessages(lastId);
-
-      console.log("✅ 메시지 로드 완료");
     } catch (error) {
       console.error("❌ 채널 로드 중 오류:", error);
     }
 
     // ✅ 4. WebSocket 연결
-    console.log("🔌 WebSocket 연결 시작...");
-    console.log("- channelSeq:", channelSeq.value);
-    console.log("- token:", token.value ? "있음" : "없음");
-    console.log("- memberSeq:", memberSeq.value);
     connectWebsocket();
   } else {
     console.error("❌ memberSeq 또는 채널이 유효하지 않습니다.", {
@@ -2002,27 +1874,18 @@ onMounted(async () => {
 watch(
   () => props.selectedChannel,
   (newChannelId) => {
-    console.log("🔔 selectedChannel props 변경 감지:", newChannelId);
     if (!newChannelId) return;
 
     if (currentChannel.value === newChannelId) {
-      console.log("🚫 같은 채널이므로 skip");
       return;
     }
 
     // 이미 채널 변경 중이면 스킵 (event bus 이벤트가 이미 처리했을 수 있음)
     if (isChangingChannel.value) {
-      console.log("⏸️ 채널 변경 중이므로 props 변경 스킵");
       return;
     }
 
     // props로 다른 채널이 오면 전환
-    console.log(
-      "🔄 props에 따라 채널 전환:",
-      currentChannel.value,
-      "→",
-      newChannelId
-    );
     changeChannel(newChannelId);
   },
   { immediate: false }

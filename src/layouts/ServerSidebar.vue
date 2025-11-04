@@ -113,22 +113,6 @@ const workspaceNotificationMap = computed(() => {
       const channels = channelsCache[workspace.workSpaceSeq] || []
       const count = notificationStore.getWorkspaceChatNotificationCount(channels)
       map[workspace.id] = count > 0
-      
-      // 디버그 로그 (알림이 있거나 채널이 있는 경우만)
-      if (count > 0 || channels.length > 0) {
-        console.log('[ServerSidebar] 워크스페이스 알림 체크:', {
-          workspaceId: workspace.id,
-          workSpaceSeq: workspace.workSpaceSeq,
-          채널수: channels.length,
-          알림개수: count,
-          hasNotification: count > 0,
-          현재워크스페이스: currentWs,
-          채널목록: channels.map(c => ({
-            channelSeq: c.channelSeq,
-            알림: notificationStore.getChannelNotificationCount(c.channelSeq)
-          }))
-        })
-      }
     })
   
   return map
@@ -451,7 +435,6 @@ onMounted(() => {
     loadPersonalDirectMessages()
     // 반응성 트리거 업데이트 (UI 강제 리렌더링)
     notificationUpdateTrigger.value++
-    console.log('[ServerSidebar] 알림 변경 감지, UI 업데이트 트리거:', notificationUpdateTrigger.value)
   }, { deep: true })
   
   // 워크스페이스 목록이 변경되면 알림 상태 업데이트
