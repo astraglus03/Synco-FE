@@ -949,6 +949,11 @@ const changeChannel = async (channelId) => {
   isLoadingMessages.value = false;
   lastReadMessageSeq.value = null; // ✅ 마지막 읽은 메시지 초기화
 
+  // ✅ 1:1 채팅일 때 상대방 정보 로드
+  if (isPersonalChat.value) {
+    await loadChatUserInfo(channelSeq.value);
+  }
+
   try {
     // ✅ 1단계: 마지막 읽은 이후의 새 메시지 로드
     const newMessages = await loadMessagesAfterLastRead();
@@ -1679,13 +1684,15 @@ const shouldShowTime = (message, index) => {
 };
 
 // 1:1 채팅 상대방 정보 가져오기 
-const loadChatUserInfo = async () => {
-  if (!isPersonalChat.value || !props.selectedChannel) return;
+const loadChatUserInfo = async (targetChannelSeq = null) => {
+  // targetChannelSeq가 제공되면 그것을 사용, 없으면 props.selectedChannel 사용
+  const channelSeqToUse = targetChannelSeq || props.selectedChannel;
+  
+  if (!isPersonalChat.value || !channelSeqToUse) return;
 
   try {
-    const channelSeq = parseInt(props.selectedChannel);
+    const channelSeq = parseInt(channelSeqToUse);
     if (!channelSeq || isNaN(channelSeq)) {
-      console.error("❌ 유효하지 않은 channelSeq:", props.selectedChannel);
       return;
     }
 
@@ -1693,7 +1700,6 @@ const loadChatUserInfo = async () => {
     const members = await getChannelMembers(channelSeq);
     
     if (!members || members.length === 0) {
-      console.warn("⚠️ 채널 멤버를 찾을 수 없습니다.");
       return;
     }
 
@@ -1703,7 +1709,6 @@ const loadChatUserInfo = async () => {
     );
 
     if (!otherMember) {
-      console.warn("⚠️ 상대방을 찾을 수 없습니다.");
       return;
     }
 
@@ -1738,7 +1743,6 @@ const loadChatUserInfo = async () => {
       commonWorkspaces: commonWorkspaces // ✅ 워크스페이스 정보 (이름 포함)
     };
   } catch (e) {
-    console.error("❌ 1:1 채팅 사용자 정보 로드 실패:", e);
     chatUserInfo.value = null;
   }
 };
@@ -1824,6 +1828,11 @@ onMounted(async () => {
 
   // ✅ 채널 참여 멤버 목록 초기화 (백엔드 API 호출)
   await loadChannelMembers();
+
+  // ✅ 1:1 채팅일 때 상대방 정보 로드
+  if (isPersonalChat.value) {
+    await loadChatUserInfo(channelSeq.value);
+  }
 
   // ✅ memberSeq와 channelSeq가 유효할 때만 채널 로드
   if (memberSeq.value > 0 && currentChannel.value && channelSeq.value > 0) {
