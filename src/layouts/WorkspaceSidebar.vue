@@ -1223,13 +1223,9 @@ const selectSubChannel = (parentId, subChannelId) => {
   }
 
   // 항상 부모로 emit (URL 변경)
+  // MainLayout에서 URL 변경 → MainContent에서 props.selectedChannel 변경 → Chat.vue의 watch가 감지
+  // 따라서 event bus 이벤트는 중복이므로 제거
   emit("select-subchannel", parentId, subChannelId);
-
-  // chat 채널인 경우 event bus로도 이벤트 발생 (Chat.vue에서 받기 위해)
-  if (parentId === "chat") {
-    console.log("🔔 Event bus로 채널 선택 발생:", parentId, subChannelId);
-    emitter.emit("select-chat-channel", { parentId, subChannelId });
-  }
 };
 
 // 접힌 상태에서 채팅 채널 클릭 시 처리
@@ -1269,12 +1265,9 @@ const selectDirectMessage = (channelSeq) => {
   // 메인 채널을 'chat'으로 설정
   emit("select-channel", "chat"); // 탭 UI 상태 변경(chat 탭으로)
 
-  // channelSeq를 문자열로 변환하여 전달
-  emitter.emit("select-chat-channel", {
-    // Chat.vue에 채널 변경 이벤트 전달
-    parentId: "chat",
-    subChannelId: channelSeq.toString(),
-  });
+  // 하위 채널 선택 (URL 변경 → props.selectedChannel 변경 → Chat.vue의 watch가 감지)
+  // event bus 이벤트는 중복이므로 제거
+  emit("select-subchannel", "chat", parsedChannelSeq.toString());
 };
 
 // 사용자 상태 색상

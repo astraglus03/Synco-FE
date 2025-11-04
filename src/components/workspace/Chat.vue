@@ -207,6 +207,9 @@ const isPersonalChat = computed(() => {
   return props.workspaceType === "personal";
 });
 
+// WebSocket 연결 중 플래그 (중복 호출 방지)
+const isConnecting = ref(false)
+
 // ✅ WebSocket 연결
 const connectWebsocket = () => {
   console.log("🔌 WebSocket 연결 시도 시작");
@@ -226,13 +229,19 @@ const connectWebsocket = () => {
     return;
   }
 
-  console.log("토큰 확인:", token.value);
+  // ✅ 이미 연결 중이거나 연결되어 있으면 return (중복 호출 방지)
+  if (isConnecting.value) {
+    console.log("⏸️ WebSocket 연결 중이므로 중복 호출 스킵");
+    return;
+  }
 
-  // ✅ 이미 연결되어 있으면 return
   if (stompClient.value && stompClient.value.connected) {
     console.log("✅ WebSocket 이미 연결됨");
     return;
   }
+
+  // 연결 중 플래그 설정
+  isConnecting.value = true
 
   // ✅ 기존 연결이 끊어진 상태면 정리
   if (stompClient.value && !stompClient.value.connected) {
@@ -262,6 +271,9 @@ const connectWebsocket = () => {
       console.log("✅ WebSocket 연결 성공!");
       console.log("🔍 구독할 채널 Seq:", channelSeq.value);
       console.log("🔍 구독 경로:", `/topic/${channelSeq.value}`);
+      
+      // 연결 완료 후 플래그 해제
+      isConnecting.value = false
 
       subscription.value = stompClient.value.subscribe(
         `/topic/${channelSeq.value}`,
@@ -407,6 +419,9 @@ const connectWebsocket = () => {
     },
     (error) => {
       console.error("❌ WebSocket 연결 실패:", error);
+      // 연결 실패 시 플래그 해제
+      isConnecting.value = false
+      
       if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
         reconnectAttempts++;
         setTimeout(() => connectWebsocket(), RECONNECT_DELAY);
@@ -449,6 +464,8 @@ const disconnectWebsocket = async () => {
     console.warn("WebSocket 해제 중 오류:", e);
   } finally {
     stompClient.value = null;
+    // 연결 해제 시 플래그도 해제
+    isConnecting.value = false;
   }
 };
 
@@ -936,37 +953,36 @@ const loadMessagesAfterLastRead = async () => {
 
 // 채널 변경 시 WebSocket 재연결
 const changeChannel = async (channelId) => {
-  sendTypingStopEvent();
-
-  if (currentChannel.value === channelId) return;
-
-  console.log("🔄 채널 변경:", currentChannel.value, "→", channelId);
-  console.log("🔍 새로운 채널 Seq:", channelId);
-
-  // ✅ channelSeq 유효성 검사
-  const parsedChannelSeq = parseInt(channelId);
-  if (isNaN(parsedChannelSeq) || parsedChannelSeq <= 0) {
-    console.error("❌ 유효하지 않은 channelSeq:", channelId);
+  // 중복 호출 방지
+  if (isChangingChannel.value) {
+    console.log("⏸️ 이미 채널 변경 중이므로 중복 호출 스킵");
     return;
   }
 
-  // ✅ 기존 연결 해제 (channelSeq가 유효할 때만)
-  if (channelSeq.value && !isNaN(channelSeq.value) && channelSeq.value > 0) {
-    disconnectWebsocket();
-  } else {
-    // 기존 channelSeq가 없으면 WebSocket만 정리
-    try {
-      if (subscription.value) {
-        subscription.value.unsubscribe();
-        subscription.value = null;
-      }
-      if (stompClient.value && stompClient.value.connected) {
-        stompClient.value.disconnect();
-      }
-    } catch (e) {
-      console.warn("WebSocket 해제 중 오류:", e);
-    }
+  if (currentChannel.value === channelId) {
+    console.log("⏸️ 같은 채널이므로 스킵:", channelId);
+    return;
   }
+
+  // 채널 변경 시작
+  isChangingChannel.value = true;
+
+  try {
+    sendTypingStopEvent();
+
+    console.log("🔄 채널 변경:", currentChannel.value, "→", channelId);
+    console.log("🔍 새로운 채널 Seq:", channelId);
+
+    // ✅ channelSeq 유효성 검사
+    const parsedChannelSeq = parseInt(channelId);
+    if (isNaN(parsedChannelSeq) || parsedChannelSeq <= 0) {
+      console.error("❌ 유효하지 않은 channelSeq:", channelId);
+      isChangingChannel.value = false;
+      return;
+    }
+
+  // ✅ 기존 연결 해제 (채널 변경 시 항상 호출)
+  await disconnectWebsocket();
 
   // 새 채널로 변경
   currentChannel.value = channelId;
@@ -1049,17 +1065,29 @@ const changeChannel = async (channelId) => {
     alert("메시지를 불러오는 중 오류가 발생했습니다.");
   }
 
-  // 새 채널로 연결
-  connectWebsocket();
+    // 새 채널로 연결
+    connectWebsocket();
+  } finally {
+    // 채널 변경 완료
+    isChangingChannel.value = false;
+  }
 };
 
 // ✅ 로드 상태 플래그 - 중복 로드 방지
 const hasLoadedInitialChannel = ref(false);
 
+// 채널 변경 중복 방지 플래그
+const isChangingChannel = ref(false)
+
 // 하위 채널 선택 이벤트 처리 (event bus용)
 const handleSubChannelSelect = ({ parentId, subChannelId }) => {
   console.log("📣 select-chat-channel 이벤트:", parentId, subChannelId);
   if (parentId === "chat") {
+    // 이미 채널 변경 중이면 스킵
+    if (isChangingChannel.value) {
+      console.log("⏸️ 채널 변경 중이므로 event bus 이벤트 스킵");
+      return;
+    }
     changeChannel(subChannelId);
   }
 };
@@ -1982,6 +2010,12 @@ watch(
       return;
     }
 
+    // 이미 채널 변경 중이면 스킵 (event bus 이벤트가 이미 처리했을 수 있음)
+    if (isChangingChannel.value) {
+      console.log("⏸️ 채널 변경 중이므로 props 변경 스킵");
+      return;
+    }
+
     // props로 다른 채널이 오면 전환
     console.log(
       "🔄 props에 따라 채널 전환:",
@@ -1994,7 +2028,7 @@ watch(
   { immediate: false }
 );
 
-onUnmounted(() => {
+onUnmounted(async () => {
   emitter.off("select-chat-channel", handleSubChannelSelect);
   window.removeEventListener("click", closeContextMenu);
 
@@ -2008,7 +2042,7 @@ onUnmounted(() => {
     console.warn("타이핑 종료 이벤트 전송 실패", e);
   }
 
-  disconnectWebsocket();
+  await disconnectWebsocket();
   const container = document.querySelector(".messages-container");
   if (container) {
     container.removeEventListener("scroll", handleScroll);

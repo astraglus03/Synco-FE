@@ -95,10 +95,8 @@ onMounted(() => {
   window.addEventListener('select-meeting-channel', handleChannelSelect)
   window.addEventListener('select-chat-channel', handleChannelSelect)
   window.addEventListener('resize', handleResize)
-    // chat 채널은 event bus 사용
-    emitter.on("select-chat-channel", ({ parentId, subChannelId }) => {
-    selectedChannel.value = subChannelId;
-  })
+  // chat 채널은 props.selectedSubChannel로만 처리 (중복 방지)
+  // WorkspaceSidebar에서 emit("select-subchannel") → MainLayout에서 URL 변경 → props.selectedSubChannel 변경 → initializeFromProps에서 selectedChannel 업데이트
 })
 
 onUnmounted(() => {
@@ -106,7 +104,6 @@ onUnmounted(() => {
   window.removeEventListener('select-meeting-channel', handleChannelSelect)
   window.removeEventListener('select-chat-channel', handleChannelSelect)
   window.removeEventListener('resize', handleResize)
-  emitter.off("select-chat-channel");
 })
 
 // 현재 표시할 컴포넌트 결정
