@@ -202,7 +202,7 @@ class SSEConnection {
     }
 
     // 5분마다 연결 상태만 확인 (메시지 시간 기반 체크 제거)
-    // 백엔드 heartbeat: 25초 주기, 타임아웃: 10일
+    // 백엔드 heartbeat: 15초 주기, 타임아웃: 10일
     // 메시지가 없어도 연결 상태만 확인하여 유지
     this.healthCheckInterval = setInterval(() => {
       // 연결 상태만 확인 (메시지 시간은 체크하지 않음)

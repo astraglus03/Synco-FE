@@ -350,11 +350,25 @@ export const useNotificationStore = defineStore('notification', () => {
       }
     }
 
+    // message가 없으면 알림을 추가하지 않음
+    let notificationMessage = data.message
+    
+    // 친구 요청 알림 특별 처리
+    if (data.type === 'FRIEND_REQUEST' || data.alarmType === 'alarm-friend') {
+      notificationMessage = data.message || (data.sender ? `${data.sender}가 친구 요청을 보냈습니다` : null)
+    }
+    
+    // message가 없으면 알림을 추가하지 않음
+    if (!notificationMessage) {
+      console.log('[알림 Store] ⏭️ message가 없어서 알림 스킵')
+      return
+    }
+
     // 알림 객체 생성
     const notification = {
       id: String(data.alarmSeq || data.id || Date.now()),
       type: notificationType,
-      message: data.message || '새로운 알림이 있습니다',
+      message: notificationMessage,
       time: '방금 전',
       read: false,
       priority: data.priority || 'normal',
@@ -366,7 +380,6 @@ export const useNotificationStore = defineStore('notification', () => {
 
     // 친구 요청 알림 특별 처리
     if (data.type === 'FRIEND_REQUEST' || data.alarmType === 'alarm-friend') {
-      notification.message = data.message || `${data.sender || '누군가'}가 친구 요청을 보냈습니다`
       notification.user = {
         name: data.sender || '알 수 없음',
         avatar: data.sender?.charAt(0) || '?',
@@ -790,27 +803,43 @@ export const useNotificationStore = defineStore('notification', () => {
         })
         
         // 알림 변환 (AlarmResDto 기준)
-        notifications.value = sortedNotifications.map((alarm, index) => {
-          // 디버깅: ynRead 값 확인
-          if (index === 0) {
-            // console.log('[알림 Store] 🔍 첫 번째 알림 원본 데이터:', alarm)
-            // console.log('[알림 Store] 🔍 ynRead 값:', alarm.ynRead)
-            // console.log('[알림 Store] 🔍 read 변환 결과:', alarm.ynRead === 'Y')
-          }
-          
-          return {
-            id: String(alarm.alarmSeq || `${alarm.receiverId}_${new Date(alarm.time).getTime()}_${index}`),
-            type: normalizeType(alarm.alarmType || alarm.type || 'UNKNOWN'),
-            message: alarm.message || '새로운 알림이 있습니다',
-            time: formatTime(alarm.time),
-            read: alarm.ynRead === 'Y', // 읽음 여부 (Y/N)
-            priority: 'normal',
-            sender: alarm.sender,
-            workSpaceSeq: alarm.workSpaceSeq,
-            alarmSeq: alarm.alarmSeq, // 읽음 처리 API 호출을 위해 필요
-            data: alarm // 원본 데이터 보관
-          }
-        })
+        // message가 없는 알림은 제외
+        notifications.value = sortedNotifications
+          .filter((alarm) => {
+            // 친구 요청의 경우 sender가 있으면 메시지 생성 가능
+            if (alarm.alarmType === 'alarm-friend' || alarm.type === 'FRIEND_REQUEST') {
+              return alarm.message || alarm.sender
+            }
+            // 그 외에는 message가 필수
+            return alarm.message
+          })
+          .map((alarm, index) => {
+            // 디버깅: ynRead 값 확인
+            if (index === 0) {
+              // console.log('[알림 Store] 🔍 첫 번째 알림 원본 데이터:', alarm)
+              // console.log('[알림 Store] 🔍 ynRead 값:', alarm.ynRead)
+              // console.log('[알림 Store] 🔍 read 변환 결과:', alarm.ynRead === 'Y')
+            }
+            
+            // message 생성 (친구 요청의 경우 특별 처리)
+            let message = alarm.message
+            if (!message && (alarm.alarmType === 'alarm-friend' || alarm.type === 'FRIEND_REQUEST')) {
+              message = alarm.sender ? `${alarm.sender}가 친구 요청을 보냈습니다` : null
+            }
+            
+            return {
+              id: String(alarm.alarmSeq || `${alarm.receiverId}_${new Date(alarm.time).getTime()}_${index}`),
+              type: normalizeType(alarm.alarmType || alarm.type || 'UNKNOWN'),
+              message: message,
+              time: formatTime(alarm.time),
+              read: alarm.ynRead === 'Y', // 읽음 여부 (Y/N)
+              priority: 'normal',
+              sender: alarm.sender,
+              workSpaceSeq: alarm.workSpaceSeq,
+              alarmSeq: alarm.alarmSeq, // 읽음 처리 API 호출을 위해 필요
+              data: alarm // 원본 데이터 보관
+            }
+          })
         
         // console.log('[알림 Store] ✅ 알림 목록 불러오기 성공:', notifications.value.length, '개')
         // console.log('[알림 Store] 📋 변환된 알림 샘플:', notifications.value[0])
