@@ -33,11 +33,6 @@ const handleResize = () => {
   windowWidth.value = window.innerWidth;
 };
 
-// 반응형 여부 확인 (화면 크기가 1024px 이하인지)
-const isResponsiveView = computed(() => {
-  return windowWidth.value <= 1024;
-});
-
 // 반응형 collapsed 상태 (화면 크기에 따라 자동 결정)
 const isCollapsedView = computed(() => {
   return (
@@ -332,7 +327,7 @@ const personalWsSubscriptions = ref([]); // 각 채널별 구독 리스트
 const connectPersonalChatWebSocket = () => {
   if (props.workspaceType !== "personal") return;
 
-  const token = localStorage.getItem("accessToken");
+  const token = localStorage.getItem("token");
   if (!token) {
     console.warn("⚠️ 토큰이 없어 WebSocket 연결 불가");
     return;
@@ -379,34 +374,40 @@ const connectPersonalChatWebSocket = () => {
                 return;
               }
 
+              // ✅ 알림 개수 증가 (현재 선택된 채팅방이 아니면)
+              // 프로젝트 채팅처럼 notificationStore의 channelNotificationCounts만 사용
+              const workspaceStore = useWorkspaceStore();
+              const currentSelectedChannel = workspaceStore.selectedSubChannel;
+              const currentMainChannel = workspaceStore.currentChannel;
+              const channelSeqStr = parsed.channelSeq?.toString();
+              
+              // 현재 선택된 채널인지 확인 (모든 워크스페이스 타입에서 체크)
+              const isCurrentlySelected = 
+                currentMainChannel === 'chat' && 
+                (currentSelectedChannel === channelSeqStr || 
+                 currentSelectedChannel?.replace('chat_', '') === channelSeqStr);
+              
+              if (!isCurrentlySelected) {
+                // notificationStore의 channelNotificationCounts에만 증가
+                const key = String(parsed.channelSeq);
+                notificationStore.channelNotificationCounts[key] = 
+                  (notificationStore.channelNotificationCounts[key] || 0) + 1;
+                console.log(`✅ ${parsed.channelSeq} 알림 개수 증가: ${notificationStore.channelNotificationCounts[key]}, 선택된 채널: ${currentSelectedChannel}`);
+              } else {
+                console.log(`⏭️ ${parsed.channelSeq}는 현재 선택된 채널이므로 알림 스킵`);
+              }
 
               // ✅ 마지막 메시지 업데이트
               const dm = directMessages.value.find(
                 (d) => d.channelSeq === parsed.channelSeq
               );
-              if (dm) {
-                // 파일이 있으면 "[파일]", 텍스트가 있으면 텍스트 (백엔드 형식)
-                let messageText = "";
-                if (parsed.chatMessageFileUrls && parsed.chatMessageFileUrls.trim()) {
-                  messageText = "[파일]";
-                } else if (parsed.chatMessageText) {
-                  messageText = parsed.chatMessageText.length > 50
+              if (dm && parsed.chatMessageText) {
+                // 메시지 텍스트가 50자 이상이면 잘라서 표시
+                const messageText =
+                  parsed.chatMessageText.length > 50
                     ? parsed.chatMessageText.substring(0, 50) + "..."
                     : parsed.chatMessageText;
-                }
-                
-                if (messageText) {
-                  dm.lastMessage = messageText;
-                  
-                  // 목록에서 해당 항목을 맨 위로 이동 (최신 메시지가 위로)
-                  const index = directMessages.value.findIndex(
-                    (d) => d.channelSeq === parsed.channelSeq
-                  );
-                  if (index > 0) {
-                    const updatedDm = directMessages.value.splice(index, 1)[0];
-                    directMessages.value.unshift(updatedDm);
-                  }
-                }
+                dm.lastMessage = messageText;
               }
             } catch (e) {
               console.error("개인 채팅 WebSocket 메시지 파싱 실패:", e);
@@ -460,21 +461,13 @@ const loadDirectMessages = async () => {
     console.log("📦 1:1 채팅 목록 API 응답:", res);
 
     // res가 이미 배열이므로 (apiGet이 data 필드만 추출)
-    // 백엔드 MyChatListResDto 구조에 맞게 매핑 (lastMessage 포함)
+    // 백엔드 MyChatListResDto 구조에 맞게 매핑
     directMessages.value = Array.isArray(res) ? res : [];
-
-    // ✅ 마지막 메시지가 50자 이상이면 잘라서 표시
-    directMessages.value.forEach((dm) => {
-      if (dm.lastMessage && dm.lastMessage.length > 50) {
-        dm.lastMessage = dm.lastMessage.substring(0, 50) + "...";
-      }
-    });
 
     console.log(
       "✅ 1:1 채팅 목록 로드 완료:",
       directMessages.value.length,
-      "개",
-      "마지막 메시지 포함"
+      "개"
     );
   } catch (e) {
     // 500 에러는 백엔드 문제이지만, 목록이 없을 때도 발생할 수 있으므로 조용히 처리
@@ -594,15 +587,24 @@ const currentChannels = computed(() => {
         workspaceMemberStore.chatChannels?.map((channel) => {
           const notificationCount =
             notificationStore.getChannelNotificationCount(channel.channelSeq);
+          const channelSeqStr = channel.channelSeq.toString();
+          // 현재 선택된 채널인지 확인
+          const isCurrentlySelected = 
+            props.currentChannel === 'chat' &&
+            (props.selectedSubChannel === channelSeqStr ||
+             props.selectedSubChannel === `chat_${channelSeqStr}` ||
+             props.selectedSubChannel?.replace('chat_', '') === channelSeqStr);
+          // 현재 선택된 채널이 아니고 알림이 있을 때만 볼드 처리
+          const hasNotification = !isCurrentlySelected && notificationStore.hasChannelNotification(
+            channel.channelSeq
+          );
           return {
             id: `chat_${channel.channelSeq}`,
             name: channel.channelName,
             type: "text",
             unread: notificationCount,
             channelData: channel,
-            hasNotification: notificationStore.hasChannelNotification(
-              channel.channelSeq
-            ),
+            hasNotification: hasNotification,
           };
         }) || [],
     },
@@ -978,33 +980,8 @@ watch(
   { deep: true, immediate: true }
 );
 
-// 1:1 채팅 목록에서 특정 채널의 unreadCount 증가
-const incrementDirectMessageUnread = (channelSeq) => {
-  const dm = directMessages.value.find((d) => d.channelSeq === channelSeq);
-  if (dm) {
-    // ✅ 현재 채팅방이 아니면 unreadCount 증가
-    // props.currentChannel은 문자열이고, channelSeq는 숫자일 수 있으므로 타입 변환 필요
-    const currentChannelStr = props.currentChannel?.toString();
-    const channelSeqStr = channelSeq?.toString();
-
-    console.log("🔍 비교:", {
-      currentChannelStr,
-      channelSeqStr,
-      dm: dm.channelName,
-    });
-
-    if (currentChannelStr !== channelSeqStr) {
-      dm.unreadCount = (dm.unreadCount || 0) + 1;
-      console.log(`✅ ${dm.channelName}의 unreadCount 증가: ${dm.unreadCount}`);
-    } else {
-      console.log(
-        `ℹ️ 현재 채팅방이므로 unreadCount 증가 안 함: ${dm.channelName}`
-      );
-    }
-  } else {
-    console.warn(`⚠️ 채널을 찾을 수 없음: channelSeq=${channelSeq}`);
-  }
-};
+// 1:1 채팅 목록에서 특정 채널의 알림 개수 증가 (프로젝트 채팅과 동일하게 notificationStore 사용)
+// 이 함수는 더 이상 사용하지 않음 (WebSocket에서 직접 notificationStore 업데이트)
 
 // ✅ directMessages가 변경될 때마다 WebSocket 재구독
 watch(
@@ -1012,11 +989,11 @@ watch(
   (newDms) => {
     if (props.workspaceType === "personal") {
       // 기존 구독 해제
-      disconnectPersonalChatWebSocket();
+      // disconnectPersonalChatWebSocket();
       // 새로 구독 (directMessages가 있을 때만)
       if (newDms && newDms.length > 0) {
         setTimeout(() => {
-          connectPersonalChatWebSocket();
+          // connectPersonalChatWebSocket();
         }, 300);
       }
     }
@@ -1054,60 +1031,22 @@ onMounted(() => {
     }
   });
 
-  // ✅ 1:1 채팅 unreadCount 실시간 증가 이벤트 리스너 추가
-  emitter.on("increment-direct-message-unread", (data) => {
-    console.log("📨 1:1 채팅 unreadCount 증가 이벤트 수신:", data);
-    if (props.workspaceType === "personal") {
-      incrementDirectMessageUnread(data.channelSeq);
-      
-      // 마지막 메시지도 함께 업데이트
-      if (data.lastMessage) {
-        const dm = directMessages.value.find(
-          (d) => d.channelSeq === data.channelSeq
-        );
-        if (dm) {
-          let messageText = data.lastMessage;
-          if (messageText !== "[파일]" && messageText.length > 50) {
-            messageText = messageText.substring(0, 50) + "...";
-          }
-          dm.lastMessage = messageText;
-          
-          // 목록에서 해당 항목을 맨 위로 이동
-          const index = directMessages.value.findIndex(
-            (d) => d.channelSeq === data.channelSeq
-          );
-          if (index > 0) {
-            const updatedDm = directMessages.value.splice(index, 1)[0];
-            directMessages.value.unshift(updatedDm);
-          }
-        }
-      }
-    }
-  });
+  // ✅ 1:1 채팅 마지막 메시지 업데이트 이벤트 리스너 (SSE 알림용)
+  // 알림 개수는 notificationStore.channelNotificationCounts에 직접 저장되므로 별도 처리 불필요
 
-  // ✅ 1:1 채팅 마지막 메시지 업데이트 이벤트 리스너 추가
-  emitter.on("update-direct-message", (data) => {
-    console.log("💬 1:1 채팅 마지막 메시지 업데이트 이벤트 수신:", data);
-    if (props.workspaceType === "personal" && data.channelSeq) {
-      const dm = directMessages.value.find(
-        (d) => d.channelSeq === data.channelSeq
-      );
+  // ✅ 1:1 채팅 마지막 메시지 업데이트 이벤트 리스너 추가 (개인 워크스페이스에서 SSE 알림용)
+  emitter.on("update-direct-message-last-message", (data) => {
+    console.log("📨 1:1 채팅 마지막 메시지 업데이트 이벤트 수신:", data);
+    if (props.workspaceType === "personal") {
+      const dm = directMessages.value.find((d) => d.channelSeq === data.channelSeq);
       if (dm && data.lastMessage) {
-        // 백엔드 형식 유지 (파일은 "[파일]", 텍스트는 텍스트)
-        let messageText = data.lastMessage;
-        if (messageText !== "[파일]" && messageText.length > 50) {
-          messageText = messageText.substring(0, 50) + "...";
-        }
+        // 마지막 메시지만 업데이트 (unreadCount는 WebSocket에서 처리하므로 여기서는 증가시키지 않음)
+        const messageText =
+          data.lastMessage.length > 50
+            ? data.lastMessage.substring(0, 50) + "..."
+            : data.lastMessage;
         dm.lastMessage = messageText;
-        
-        // 목록에서 해당 항목을 맨 위로 이동 (최신 메시지가 위로)
-        const index = directMessages.value.findIndex(
-          (d) => d.channelSeq === data.channelSeq
-        );
-        if (index > 0) {
-          const updatedDm = directMessages.value.splice(index, 1)[0];
-          directMessages.value.unshift(updatedDm);
-        }
+        console.log(`✅ ${dm.channelName}의 마지막 메시지 업데이트`);
       }
     }
   });
@@ -1115,11 +1054,13 @@ onMounted(() => {
   // 프로젝트 or 개인 워크스페이스 분기처리
   if (props.workspaceType === "project") {
     loadChannels();
+    // ✅ 프로젝트 워크스페이스에서도 1:1 채팅 알림을 받기 위해 directMessages 로드
+    loadDirectMessages();
   } else if (props.workspaceType === "personal") {
     loadDirectMessages();
     // ✅ 개인 워크스페이스일 때 WebSocket 연결 (directMessages 로드 후)
     setTimeout(() => {
-      connectPersonalChatWebSocket();
+      // connectPersonalChatWebSocket();
     }, 500);
   }
 
@@ -1139,11 +1080,10 @@ onUnmounted(() => {
 
   // 이벤트 리스너 제거
   emitter.off("refresh-direct-messages");
-  emitter.off("increment-direct-message-unread");
-  emitter.off("update-direct-message");
+  emitter.off("update-direct-message-last-message");
 
   // ✅ 개인 채팅 WebSocket 해제
-  disconnectPersonalChatWebSocket();
+  // disconnectPersonalChatWebSocket();
 });
 
 // 워크스페이스 변경 시 채널 데이터 다시 로드
@@ -1276,28 +1216,16 @@ const selectSubChannel = (parentId, subChannelId) => {
     type: typeof subChannelId,
   });
 
-  // chat 채널인 경우 channelSeq 정규화 (chat_ prefix 제거)
-  let normalizedChannelId = subChannelId;
+  // 채널 선택 시 해당 채널의 알림 개수 초기화
   if (parentId === "chat" && subChannelId) {
-    // chat_ prefix 제거하여 순수 channelSeq만 추출
-    normalizedChannelId = subChannelId.toString().replace("chat_", "");
-    
-    // 채널 선택 시 해당 채널의 알림 개수 초기화
-    notificationStore.clearChannelNotificationCount(normalizedChannelId);
+    const channelSeq = subChannelId.toString().replace("chat_", "");
+    notificationStore.clearChannelNotificationCount(channelSeq);
   }
 
-  // 항상 부모로 emit (URL 변경) - 원본 subChannelId 사용
+  // 항상 부모로 emit (URL 변경)
+  // MainLayout에서 URL 변경 → MainContent에서 props.selectedChannel 변경 → Chat.vue의 watch가 감지
+  // 따라서 event bus 이벤트는 중복이므로 제거
   emit("select-subchannel", parentId, subChannelId);
-
-  // chat 채널인 경우 event bus로도 이벤트 발생 (Chat.vue에서 받기 위해)
-  // Chat.vue에는 정규화된 channelSeq 전달
-  if (parentId === "chat") {
-    console.log("🔔 Event bus로 채널 선택 발생:", parentId, normalizedChannelId);
-    emitter.emit("select-chat-channel", { 
-      parentId, 
-      subChannelId: normalizedChannelId 
-    });
-  }
 };
 
 // 접힌 상태에서 채팅 채널 클릭 시 처리
@@ -1327,27 +1255,19 @@ const selectDirectMessage = (channelSeq) => {
     return;
   }
 
-  // ✅ 채널 접속 시 unreadCount 초기화
-  const dm = directMessages.value.find(
-    (d) => d.channelSeq === parsedChannelSeq
-  );
-  if (dm) {
-    dm.unreadCount = 0;
-    console.log(`✅ ${dm.channelName}의 unreadCount 초기화`);
-  }
-
-  // ✅ 1:1 채팅 선택 시 알림 개수 초기화
+  // ✅ 1:1 채팅 선택 시 알림 개수 초기화 (프로젝트 채팅과 동일하게)
   notificationStore.clearChannelNotificationCount(parsedChannelSeq.toString());
+
+  // ✅ workspaceStore에 선택된 채널 정보 저장 (선택된 채널 체크를 위해 필요)
+  workspaceStore.selectChannel("chat");
+  workspaceStore.selectSubChannel("chat", parsedChannelSeq.toString());
 
   // 메인 채널을 'chat'으로 설정
   emit("select-channel", "chat"); // 탭 UI 상태 변경(chat 탭으로)
 
-  // channelSeq를 문자열로 변환하여 전달
-  emitter.emit("select-chat-channel", {
-    // Chat.vue에 채널 변경 이벤트 전달
-    parentId: "chat",
-    subChannelId: channelSeq.toString(),
-  });
+  // 하위 채널 선택 (URL 변경 → props.selectedChannel 변경 → Chat.vue의 watch가 감지)
+  // event bus 이벤트는 중복이므로 제거
+  emit("select-subchannel", "chat", parsedChannelSeq.toString());
 };
 
 // 사용자 상태 색상
@@ -1380,11 +1300,7 @@ const getStatusColor = (status) => {
         v-if="workspaceType === 'project' && currentWorkspaceData"
         class="project-info"
       >
-        <div 
-          v-if="!isResponsiveView" 
-          class="toggle-button" 
-          @click="emit('toggle')"
-        >
+        <div class="toggle-button" @click="emit('toggle')">
           <v-icon>{{
             collapsed ? "mdi-chevron-right" : "mdi-chevron-left"
           }}</v-icon>
@@ -1626,16 +1542,11 @@ const getStatusColor = (status) => {
               class="subchannel-item"
               :class="{ active: selectedSubChannel === subChannel.id }"
               @click="
-                selectSubChannel(channel.id, subChannel.id)
+                selectSubChannel(channel.id, subChannel.id.replace('chat_', ''))
               "
               @mouseenter="hoveredChannel = subChannel.id"
               @mouseleave="hoveredChannel = null"
             >
-              <!-- 디스코드 스타일 알림 인디케이터 -->
-              <div
-                v-if="subChannel.hasNotification"
-                class="channel-notification-indicator"
-              ></div>
               <v-icon class="subchannel-icon">
                 {{
                   subChannel.type === "video"
@@ -1766,10 +1677,10 @@ const getStatusColor = (status) => {
               class="dm-meta"
             >
               <div
-                v-if="dm.unreadCount > 0"
+                v-if="notificationStore.getChannelNotificationCount(dm.channelSeq) > 0"
                 class="unread-badge"
               >
-                {{ dm.unreadCount }}
+                {{ notificationStore.getChannelNotificationCount(dm.channelSeq) }}
               </div>
             </div>
           </div>
@@ -2163,7 +2074,7 @@ const getStatusColor = (status) => {
   backdrop-filter: blur(6px);
   border-right: 1px solid rgba(var(--v-theme-on-surface), 0.08);
   box-shadow: 1px 0 0 rgba(var(--v-theme-on-surface), 0.04);
-  padding: 8px 0 80px 0;
+  padding: 24px 0 80px 0;
   padding-bottom: 80px;
   margin-left: 72px;
   position: fixed;
@@ -2405,35 +2316,7 @@ const getStatusColor = (status) => {
 }
 
 .subchannel-name.bold {
-  font-weight: 900; /* 더 강하게 */
-  opacity: 1 !important; /* 기본 흐린 상태에서 명료하게 */
-  color: rgb(var(--v-theme-on-surface)) !important; /* 색상 명확하게 */
-}
-
-/* 다크모드에서도 명료하게 */
-.v-theme--dark .subchannel-name.bold {
-  font-weight: 900;
-  opacity: 1 !important;
-  color: rgb(var(--v-theme-on-surface)) !important;
-}
-
-/* 디스코드 스타일 알림 인디케이터 */
-.channel-notification-indicator {
-  position: absolute;
-  left: 0;
-  top: 50%;
-  transform: translateY(-50%);
-  width: 4px;
-  height: 12px; /* 디스코드 스타일 - 낮은 높이 */
-  background: rgb(var(--v-theme-primary));
-  border-radius: 0 2px 2px 0;
-  opacity: 1;
-}
-
-/* 다크모드 대응을 위한 인디케이터 */
-.v-theme--dark .channel-notification-indicator {
-  background: rgb(var(--v-theme-primary));
-  box-shadow: 0 0 3px rgba(var(--v-theme-primary), 0.8);
+  font-weight: 700;
 }
 
 .unread-badge {
@@ -2680,127 +2563,10 @@ const getStatusColor = (status) => {
 }
 
 /* 반응형 디자인 */
-@media (max-width: 1024px) {
-  .workspace-sidebar {
-    width: 60px !important;
-    margin-left: 60px !important;
-    top: 56px;
-    padding: 8px 0 80px 0 !important;
-  }
-  
-  /* collapsed 상태일 때도 반응형에서는 최소 너비 유지 (아이콘만 표시) */
-  .workspace-sidebar.collapsed {
-    width: 60px !important;
-    margin-left: 60px !important;
-  }
-  
-  .project-info {
-    padding: 8px 0 !important;
-    justify-content: center !important;
-  }
-  
-  .project-name,
-  .leave-button {
-    display: none !important;
-  }
-  
-  .section-title {
-    padding: 0 !important;
-  }
-  
-  .section-title span {
-    display: none !important;
-  }
-  
-  .channel-item,
-  .dm-item {
-    padding: 10px 0 !important;
-    justify-content: center !important;
-    margin: 4px 0 !important;
-    gap: 0 !important;
-  }
-  
-  .channel-name,
-  .dm-name,
-  .dm-info,
-  .dm-meta {
-    display: none !important;
-  }
-  
-  .subchannel-list {
-    margin-left: 0 !important;
-  }
-  
-  .subchannel-item {
-    padding: 8px 0 !important;
-    justify-content: center !important;
-  }
-  
-  .subchannel-name {
-    display: none !important;
-  }
-  
-  .direct-messages-section {
-    display: none !important;
-  }
-}
-
 @media (max-width: 768px) {
   .workspace-sidebar {
-    width: 56px !important;
-    margin-left: 56px !important;
-    top: 56px;
-    padding: 8px 0 80px 0 !important;
-  }
-  
-  /* collapsed 상태일 때도 반응형에서는 최소 너비 유지 */
-  .workspace-sidebar.collapsed {
-    width: 56px !important;
-    margin-left: 56px !important;
-  }
-  
-  .channel-item,
-  .dm-item {
-    padding: 8px 0 !important;
-  }
-  
-  .channel-item .v-icon,
-  .dm-item .v-icon {
-    font-size: 20px !important;
-  }
-}
-
-@media (max-width: 480px) {
-  .workspace-sidebar {
-    width: 52px !important;
-    margin-left: 52px !important;
-    top: 56px;
-    padding: 8px 0 80px 0 !important;
-  }
-  
-  /* collapsed 상태일 때도 반응형에서는 최소 너비 유지 */
-  .workspace-sidebar.collapsed {
-    width: 52px !important;
-    margin-left: 52px !important;
-  }
-  
-  .channel-item,
-  .dm-item {
-    padding: 6px 0 !important;
-  }
-  
-  .channel-item .v-icon,
-  .dm-item .v-icon {
-    font-size: 18px !important;
-  }
-  
-  .toggle-button {
-    width: 20px !important;
-    height: 20px !important;
-  }
-  
-  .toggle-button .v-icon {
-    font-size: 14px !important;
+    width: 200px;
+    margin-left: 60px;
   }
 }
 
@@ -3645,14 +3411,14 @@ const getStatusColor = (status) => {
   .workspace-sidebar {
     width: 60px !important;
     min-width: 60px !important;
-    padding: 8px 0 0 0 !important;
+    padding: 16px 0 0 0 !important;
   }
 
-  /* 반응형일 때는 collapsed 상태여도 최소 너비 유지 (아이콘만 표시) */
   .workspace-sidebar.collapsed {
-    width: 60px !important;
-    min-width: 60px !important;
-    padding: 8px 0 0 0 !important;
+    width: 0 !important;
+    min-width: 0 !important;
+    padding: 0 !important;
+    overflow: hidden !important;
   }
 
   /* 프로젝트 정보 숨기기 */
@@ -3788,13 +3554,11 @@ const getStatusColor = (status) => {
   .workspace-sidebar {
     width: 56px !important;
     min-width: 56px !important;
-    padding: 8px 0 0 0 !important;
+    padding: 12px 0 0 0 !important;
   }
 
-  /* 반응형일 때는 collapsed 상태여도 최소 너비 유지 */
   .workspace-sidebar.collapsed {
-    width: 56px !important;
-    min-width: 56px !important;
+    width: 0 !important;
   }
 
   .channel-item,
@@ -3819,13 +3583,7 @@ const getStatusColor = (status) => {
   .workspace-sidebar {
     width: 52px !important;
     min-width: 52px !important;
-    padding: 8px 0 0 0 !important;
-  }
-
-  /* 반응형일 때는 collapsed 상태여도 최소 너비 유지 */
-  .workspace-sidebar.collapsed {
-    width: 52px !important;
-    min-width: 52px !important;
+    padding: 10px 0 0 0 !important;
   }
 
   .channel-item,
