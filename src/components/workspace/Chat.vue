@@ -390,6 +390,25 @@ const connectWebsocket = () => {
                   notificationStore.clearChannelNotificationCount(channelSeqStr);
                 }
               }
+
+              // ✅ 1:1 채팅일 때 사이드바 마지막 메시지 업데이트 (알림 메시지 형식)
+              if (isPersonalChat.value && parsed.channelSeq) {
+                // 알림 메시지 형식: 메시지 내용만
+                let notificationMessage = "";
+                
+                if (formattedMessage.files && formattedMessage.files.length > 0) {
+                  notificationMessage = "[파일]";
+                } else if (formattedMessage.content && formattedMessage.content.trim()) {
+                  notificationMessage = formattedMessage.content;
+                }
+                
+                if (notificationMessage) {
+                  emitter.emit("update-direct-message-last-message", {
+                    channelSeq: parsed.channelSeq,
+                    lastMessage: notificationMessage,
+                  });
+                }
+              }
             }
           } catch (e) {
             console.error("메시지 파싱 실패:", e, message.body);
@@ -633,20 +652,21 @@ const sendMessage = async () => {
     // 메시지 추가 후 DOM 업데이트를 기다린 후 스크롤 (자신이 보낸 메시지는 강제 스크롤)
     scrollToBottom(true);
 
-    // ✅ 1:1 채팅 목록의 마지막 메시지 업데이트 이벤트 발생
-    if (channelSeq.value) {
-      // 백엔드 형식에 맞춰서: 파일이 있으면 "[파일]", 텍스트가 있으면 텍스트
-      let messageContent = "";
+    // ✅ 1:1 채팅 목록의 마지막 메시지 업데이트 이벤트 발생 (알림 메시지 형식)
+    if (isPersonalChat.value && channelSeq.value) {
+      // 알림 메시지 형식: 메시지 내용만
+      let notificationMessage = "";
+      
       if (uploadedUrls.length > 0) {
-        messageContent = "[파일]"; // 백엔드와 동일한 형식
+        notificationMessage = "[파일]";
       } else if (localMessage.content && localMessage.content.trim()) {
-        messageContent = localMessage.content;
+        notificationMessage = localMessage.content;
       }
       
-      if (messageContent) {
-        emitter.emit("update-direct-message", {
+      if (notificationMessage) {
+        emitter.emit("update-direct-message-last-message", {
           channelSeq: channelSeq.value,
-          lastMessage: messageContent,
+          lastMessage: notificationMessage,
         });
       }
     }
