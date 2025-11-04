@@ -54,7 +54,7 @@ class SSEConnection {
 
     // EventSource 생성
     // 상대 경로 사용으로 프록시/동일 출처 모두 호환
-    const url = `http://localhost:8080/workspace-service/alarms/sse/connect`
+    const url = `${import.meta.env.VITE_API_URL}/workspace-service/alarms/sse/connect`
 
     console.log('[SSE] 🌐 연결 URL:', url)
     console.log('[SSE] 🔑 헤더:', {
