@@ -77,11 +77,15 @@ export const useNotificationStore = defineStore('notification', () => {
         // 여기서는 별도 workspaceSeq 필터링은 하지 않음
       }
     } else {
-      // 개인 워크스페이스: 프로젝트 전용 알림 제외
+      // 개인 워크스페이스: "전체" 탭에서는 모든 알림 표시, 특정 탭에서는 프로젝트 전용 알림 제외
       // alarm-drive(공유문서/파일 공유)와 alarm-meeting(화상회의)는 프로젝트에서만 사용
-      filtered = filtered.filter(n => 
-        n.type !== 'alarm-drive' && n.type !== 'alarm-meeting'
-      )
+      // 하지만 "전체" 탭에서는 모든 알림을 볼 수 있어야 함
+      if (activeFilter.value !== 'all') {
+        filtered = filtered.filter(n => 
+          n.type !== 'alarm-drive' && n.type !== 'alarm-meeting'
+        )
+      }
+      // "전체" 탭일 때는 필터링하지 않음 (모든 알림 표시)
     }
     
     // 2. 필터 타입별 필터링
@@ -265,6 +269,28 @@ export const useNotificationStore = defineStore('notification', () => {
 
     // 알림 타입 정규화
     const notificationType = normalizeType(data.alarmType || data.type || 'UNKNOWN')
+
+    // member-status 타입 특별 처리 (알림 목록에 추가하지 않고 emitter로 전달)
+    if (data.type === 'member-status' || notificationType === 'member-status') {
+      console.log('[알림 Store] 👤 멤버 상태 변경 이벤트 수신:', data)
+      
+      // 백엔드에서 보낸 payload 구조에 맞춰 데이터 추출
+      const memberSeq = data.memberSeq || data.data?.memberSeq
+      const activeStatus = data.activeStatus || data.status || data.data?.activeStatus || data.data?.status
+      
+      if (memberSeq && activeStatus) {
+        console.log('[알림 Store] 📤 member-status-updated 이벤트 전송:', { memberSeq, activeStatus })
+        emitter.emit('member-status-updated', {
+          memberSeq: memberSeq,
+          activeStatus: activeStatus
+        })
+      } else {
+        console.warn('[알림 Store] ⚠️ member-status 이벤트 데이터가 불완전합니다:', { memberSeq, activeStatus, 전체데이터: data })
+      }
+      
+      // member-status는 알림 목록에 추가하지 않음
+      return
+    }
 
     // alarm-chat 타입 특별 처리
     if (notificationType === 'alarm-chat') {
