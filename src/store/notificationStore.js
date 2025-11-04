@@ -51,8 +51,13 @@ export const useNotificationStore = defineStore('notification', () => {
         // 기타 타입 탭: 기존 로직 유지. 필요 시 프로젝트 범위 필터는 유지 가능
         // 여기서는 별도 workspaceSeq 필터링은 하지 않음
       }
+    } else {
+      // 개인 워크스페이스: 프로젝트 전용 알림 제외
+      // alarm-drive(공유문서/파일 공유)와 alarm-meeting(화상회의)는 프로젝트에서만 사용
+      filtered = filtered.filter(n => 
+        n.type !== 'alarm-drive' && n.type !== 'alarm-meeting'
+      )
     }
-    // 개인 워크스페이스는 전체 알림 표시 (필터링 없음)
     
     // 2. 필터 타입별 필터링
     if (activeFilter.value !== 'all' && activeFilter.value !== 'workspace') {
