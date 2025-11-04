@@ -19,9 +19,23 @@ onMounted(async () => {
   // authStore 초기화
   authStore.initializeAuth()
   
-  // 이미 로그인되어 있으면 SSE 연결 및 알림 목록 불러오기
+  // 이미 로그인되어 있으면 사용자 정보 조회 및 SSE 연결
   if (authStore.memberSeq) {
     // console.log('[App] 로그인 상태 확인 - SSE 연결 및 알림 불러오기 시작')
+    
+    // 사용자 정보 조회 (ynAlarmOffSet 포함)
+    try {
+      const { getMyPage } = await import('@/api/member/auth')
+      const userData = await getMyPage()
+      authStore.setUser({
+        ...authStore.user,
+        ...userData,
+        ynAlarmOffSet: userData.ynAlarmOffSet || 'Y'
+      })
+      console.log('[App] 사용자 정보 로드 완료, ynAlarmOffSet:', userData.ynAlarmOffSet)
+    } catch (error) {
+      console.error('[App] 사용자 정보 조회 실패:', error)
+    }
     
     // SSE 재연결 카운터 초기화 (새로고침 시)
     notificationStore.resetSSEReconnection()

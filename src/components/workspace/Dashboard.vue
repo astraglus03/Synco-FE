@@ -1781,6 +1781,16 @@ const createChart = async () => {
 
   if (!progressChart.value) return
 
+  // 기존 차트가 있으면 먼저 destroy
+  if (chartInstance) {
+    try {
+      chartInstance.destroy()
+      chartInstance = null
+    } catch (error) {
+      console.warn('[Dashboard] 차트 destroy 중 오류 (무시):', error.message)
+    }
+  }
+
   const ctx = progressChart.value.getContext('2d')
 
   const chartData = getChartData()

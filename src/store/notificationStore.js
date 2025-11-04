@@ -3,6 +3,7 @@ import { ref, computed } from 'vue'
 import sseConnection from '@/api/notification/sseApi'
 import { apiGet, apiPatch, apiDelete } from '@/utils/api'
 import { emitter } from '@/eventBus'
+import { useAuthStore } from '@/store/authStore'
 
 export const useNotificationStore = defineStore('notification', () => {
   // ===== 상태 =====
@@ -27,6 +28,11 @@ export const useNotificationStore = defineStore('notification', () => {
   
   // 채널별 알림 개수 (channelSeq -> count)
   const channelNotificationCounts = ref({})
+  
+  // 중복 요청 방지용 플래그
+  const processingMarkAsRead = ref(new Set()) // 처리 중인 notificationId
+  const isMarkingAllAsRead = ref(false) // 전체 읽음 처리 중
+  const processingMarkFilterAsRead = ref(new Set()) // 타입별 읽음 처리 중 (alarmType)
 
   // ===== Computed =====
   
@@ -135,14 +141,11 @@ export const useNotificationStore = defineStore('notification', () => {
    * SSE 메시지 핸들러 (단일 인스턴스)
    */
   const sseMessageHandler = (data) => {
-    console.log('[알림 Store] 📬 메시지 수신:', data)
-    
     // member-status 이벤트 처리 (즉시 처리, 비동기로 전파)
     if (data.type === 'member-status') {
-      console.log('[알림 Store] 👤 멤버 상태 변경 이벤트 처리:', data)
       // 동기적으로 이벤트 전파 (다음 틱까지 기다리지 않음)
-      handleMemberStatusUpdate(data).catch(error => {
-        console.error('[알림 Store] ❌ 멤버 상태 업데이트 처리 중 오류:', error)
+      handleMemberStatusUpdate(data).catch(() => {
+        // 에러 무시
       })
       return
     }
@@ -156,8 +159,6 @@ export const useNotificationStore = defineStore('notification', () => {
    */
   const handleMemberStatusUpdate = async (data) => {
     try {
-      console.log('[알림 Store] 🔍 멤버 상태 업데이트 원본 데이터:', JSON.stringify(data, null, 2))
-      
       // MemberStatusResDto 구조에 맞춰 데이터 추출
       // 백엔드에서 보내는 payload는 MemberStatusResDto 직렬화 결과
       // 가능한 필드명: memberSeq, memberId, activeStatus, status 등
@@ -168,14 +169,9 @@ export const useNotificationStore = defineStore('notification', () => {
       // memberSeq가 없고 memberId만 있는 경우, memberId로 memberSeq 조회 필요할 수 있음
       // 일단은 memberSeq 우선 사용
       
-      console.log('[알림 Store] 🔍 추출된 값:', { memberSeq, activeStatus, 전체데이터: data })
-      
       if (!memberSeq || !activeStatus) {
-        console.warn('[알림 Store] ⚠️ 멤버 상태 업데이트 데이터 불완전:', data)
         return
       }
-      
-      console.log('[알림 Store] 🔔 멤버 상태 업데이트 이벤트 전파:', { memberSeq, activeStatus })
       
       // eventBus로 이벤트 전파 (동기적으로 즉시 전파)
       // nextTick을 사용하지 않고 바로 emit하여 즉시 처리되도록 함
@@ -184,19 +180,16 @@ export const useNotificationStore = defineStore('notification', () => {
         activeStatus: String(activeStatus).toUpperCase() // 대문자로 통일 (ONLINE, OFFLINE, AWAY)
       })
       
-      console.log('[알림 Store] ✅ 이벤트 전파 완료')
-      
       // workspaceMemberStore에도 직접 업데이트 (비동기, 실패해도 무시)
       try {
         const { useWorkspaceMemberStore } = await import('@/store/workspaceMemberStore')
         const workspaceMemberStore = useWorkspaceMemberStore()
         workspaceMemberStore.updateMemberStatus(Number(memberSeq), String(activeStatus).toUpperCase())
-        console.log('[알림 Store] ✅ workspaceMemberStore 직접 업데이트 완료')
       } catch (storeError) {
-        console.warn('[알림 Store] ⚠️ workspaceMemberStore 업데이트 실패 (무시됨):', storeError)
+        // 업데이트 실패 무시
       }
     } catch (error) {
-      console.error('[알림 Store] ❌ 멤버 상태 업데이트 처리 실패:', error)
+      // 에러 무시
     }
   }
 
@@ -204,83 +197,73 @@ export const useNotificationStore = defineStore('notification', () => {
    * SSE 연결 시작
    */
   const connectSSE = () => {
-    console.log('[알림 Store] 🔌 SSE 연결 요청')
-
     // 이미 연결되어 있으면 무시
     if (sseConnection.isConnected()) {
-      console.log('[알림 Store] ✅ 이미 연결됨')
+      console.log('[알림 Store] SSE 이미 연결됨')
       sseConnected.value = true
       return
     }
 
+    console.log('[알림 Store] SSE 연결 시작')
+    
     // 메시지 콜백 등록 (중복 방지는 sseConnection에서 처리)
-    console.log('[알림 Store] 📝 콜백 등록 중...')
     sseConnection.onMessage(sseMessageHandler)
 
     // SSE 연결
-    console.log('[알림 Store] 📡 sseConnection.connect() 호출')
     sseConnection.connect()
 
-    // 연결 상태 확인 (여러 번 체크)
-    console.log('[알림 Store] ⏳ 연결 상태 확인 스케줄링...')
-    
-    // 1초 후 첫 확인
-    setTimeout(() => {
-      const status = sseConnection.getConnectionStatus()
+    // 연결 상태 확인 (주기적으로 체크)
+    const checkConnection = () => {
       const isConnected = sseConnection.isConnected()
-      console.log('[알림 Store] 📊 1초 후 연결 상태:', status, '/ isConnected:', isConnected)
-      sseConnected.value = isConnected
-    }, 1000)
-    
-    // 3초 후 재확인
-    setTimeout(() => {
-      const status = sseConnection.getConnectionStatus()
-      const isConnected = sseConnection.isConnected()
-      console.log('[알림 Store] 📊 3초 후 연결 상태:', status, '/ isConnected:', isConnected)
-      sseConnected.value = isConnected
-    }, 3000)
-    
-    // 5초 후 최종 확인
-    setTimeout(() => {
-      const status = sseConnection.getConnectionStatus()
-      const isConnected = sseConnection.isConnected()
-      console.log('[알림 Store] 📊 5초 후 연결 상태:', status, '/ isConnected:', isConnected)
-      sseConnected.value = isConnected
-      
-      if (isConnected) {
-        console.log('[알림 Store] ✅ SSE 연결 성공!')
-      } else {
-        console.error('[알림 Store] ❌ 5초 후에도 연결 안 됨!')
-        console.error('[알림 Store] 🔍 백엔드 확인 필요:')
-        console.error('[알림 Store]    1. 백엔드 서버가 실행 중인가?')
-        console.error('[알림 Store]    2. /workspace-service/alarms/sse/connect 엔드포인트가 동작하는가?')
-        console.error('[알림 Store]    3. 백엔드 로그에 오류가 있는가?')
-        console.error('[알림 Store]    4. SseEmitter를 제대로 반환하는가?')
+      if (sseConnected.value !== isConnected) {
+        console.log('[알림 Store] SSE 연결 상태 변화:', isConnected ? '연결됨' : '연결 끊김')
+        sseConnected.value = isConnected
       }
-    }, 5000)
+    }
+    
+    // 즉시 확인
+    checkConnection()
+    
+    // 1초 후 확인
+    setTimeout(checkConnection, 1000)
+    
+    // 3초 후 확인
+    setTimeout(checkConnection, 3000)
+    
+    // 5초 후 확인
+    setTimeout(checkConnection, 5000)
+    
+    // 주기적으로 연결 상태 확인 (10초마다)
+    const statusCheckInterval = setInterval(() => {
+      checkConnection()
+      // 연결되어 있으면 주기적 체크 중단
+      if (sseConnection.isConnected()) {
+        clearInterval(statusCheckInterval)
+      }
+    }, 10000)
+    
+    // 1분 후 주기적 체크 중단 (타임아웃)
+    setTimeout(() => {
+      clearInterval(statusCheckInterval)
+    }, 60000)
   }
 
   /**
    * SSE 연결 종료
    */
   const disconnectSSE = () => {
-    console.log('[알림 Store] 🔌 SSE 연결 종료 요청')
-
     // 콜백 제거
     sseConnection.offMessage(sseMessageHandler)
 
     // 연결 종료
     sseConnection.disconnect()
     sseConnected.value = false
-
-    console.log('[알림 Store] ✅ SSE 연결 종료 완료')
   }
 
   /**
    * SSE 재연결 카운터 초기화
    */
   const resetSSEReconnection = () => {
-    console.log('[알림 Store] 🔄 재연결 카운터 초기화')
     sseConnection.resetReconnection()
   }
   
@@ -288,23 +271,51 @@ export const useNotificationStore = defineStore('notification', () => {
    * 알림 처리 (SSE 메시지 → 알림 객체 변환 → 목록 추가)
    */
   const handleNotification = (data) => {
-    console.log('[알림 Store] 🔔 알림 추가 시작')
-    console.log('[알림 Store] 📦 데이터:', data)
-
     // 알림 타입 정규화
     const notificationType = normalizeType(data.alarmType || data.type || 'UNKNOWN')
 
-    // alarm-chat 타입 특별 처리
+    // alarm-chat 타입 특별 처리 (CHAT은 항상 표시)
     if (notificationType === 'alarm-chat') {
       const targetSeq = data.targetSeq || data.channelSeq || data.data?.targetSeq || data.data?.channelSeq
       if (targetSeq) {
         const key = String(targetSeq)
         // 채널별 알림 개수 증가
         channelNotificationCounts.value[key] = (channelNotificationCounts.value[key] || 0) + 1
-        console.log('[알림 Store] 📢 alarm-chat 알림, 채널:', targetSeq, '개수:', channelNotificationCounts.value[key])
         // alarm-chat은 알림 목록에 추가하지 않음
         return
       }
+    }
+    
+    // 사용자 알림 설정 확인 (CHAT 타입이 아닌 경우에만)
+    // 항상 최신 값을 읽기 위해 authStore.user.value를 사용 (ref 반응형)
+    const authStore = useAuthStore()
+    const currentUser = authStore.user?.value || authStore.user // ref이거나 일반 객체일 수 있음
+    const ynAlarmOffSet = currentUser?.ynAlarmOffSet
+    
+    console.log('[알림 Store] 알림 수신 및 필터링 확인:', {
+      type: notificationType,
+      message: data.message,
+      ynAlarmOffSet: ynAlarmOffSet,
+      userExists: !!currentUser,
+      user: currentUser
+    })
+    
+    // authStore.user가 없거나 ynAlarmOffSet이 없으면 알림을 표시 (기본값: 알림 ON)
+    if (!currentUser || ynAlarmOffSet === undefined || ynAlarmOffSet === null) {
+      console.log('[알림 Store] 알림 설정 정보가 없으므로 알림을 표시합니다 (기본값: ON)')
+      // 알림 설정 정보가 없으면 알림을 표시 (기본값: 알림 ON)
+    } else if (ynAlarmOffSet === 'N' && notificationType !== 'alarm-chat') {
+      // 알림이 꺼져있으면 ('N') 알림을 표시하지 않음 (CHAT 타입은 예외)
+      console.log('[알림 Store] 알림 설정이 OFF이므로 알림을 표시하지 않습니다:', {
+        type: notificationType,
+        message: data.message,
+        ynAlarmOffSet: ynAlarmOffSet
+      })
+      return
+    } else {
+      console.log('[알림 Store] 알림 설정이 ON이므로 알림을 표시합니다:', {
+        ynAlarmOffSet: ynAlarmOffSet
+      })
     }
 
     // 알림 객체 생성
@@ -331,8 +342,6 @@ export const useNotificationStore = defineStore('notification', () => {
       }
     }
 
-    console.log('[알림 Store] 📊 추가 전 알림 개수:', notifications.value.length)
-
     // 중복 방지: 같은 alarmSeq가 이미 있으면 갱신만 수행
     if (notification.alarmSeq) {
       const existingIndex = notifications.value.findIndex(n => String(n.alarmSeq) === String(notification.alarmSeq))
@@ -342,7 +351,6 @@ export const useNotificationStore = defineStore('notification', () => {
           ...notification,
           read: notifications.value[existingIndex].read && notification.read
         }
-        console.log('[알림 Store] 🔁 기존 알림 갱신(alarmSeq 중복)')
       } else {
         // 알림 목록 맨 앞에 추가 (최신순)
         notifications.value.unshift(notification)
@@ -351,9 +359,6 @@ export const useNotificationStore = defineStore('notification', () => {
       // alarmSeq가 없으면 안전하게 추가만
       notifications.value.unshift(notification)
     }
-
-    console.log('[알림 Store] ✅ 알림 추가 완료, 현재 개수:', notifications.value.length)
-    console.log('[알림 Store] 📋 추가된 알림:', notification.message)
 
     // 브라우저 알림 표시
     showBrowserNotification(notification)
@@ -414,6 +419,12 @@ export const useNotificationStore = defineStore('notification', () => {
    * 단건 알림 읽음 처리 (API 연동)
    */
   const markAsRead = async (notificationId) => {
+    // 중복 요청 방지
+    if (processingMarkAsRead.value.has(notificationId)) {
+      console.log('[알림 Store] 이미 처리 중인 알림:', notificationId)
+      return
+    }
+    
     try {
       const notification = notifications.value.find(n => n.id === notificationId)
       if (!notification) {
@@ -430,6 +441,7 @@ export const useNotificationStore = defineStore('notification', () => {
         return
       }
 
+      processingMarkAsRead.value.add(notificationId)
       // console.log('[알림 Store] 🔄 알림 읽음 처리 시작:', alarmSeq)
 
       // API 호출
@@ -445,10 +457,12 @@ export const useNotificationStore = defineStore('notification', () => {
       // console.error('[알림 Store] ❌ 에러 상세:', error.response?.data || error.message)
       
       // 에러가 나도 UI는 업데이트 (낙관적 업데이트)
-    const notification = notifications.value.find(n => n.id === notificationId)
-    if (notification) {
-      notification.read = true
+      const notification = notifications.value.find(n => n.id === notificationId)
+      if (notification) {
+        notification.read = true
       }
+    } finally {
+      processingMarkAsRead.value.delete(notificationId)
     }
   }
   
@@ -459,11 +473,15 @@ export const useNotificationStore = defineStore('notification', () => {
    * 프로젝트 페이지 - "프로젝트" 탭: 해당 프로젝트의 모든 알림 읽음
    */
   const markAllAsRead = async () => {
+    // 중복 요청 방지
+    if (isMarkingAllAsRead.value) {
+      console.log('[알림 Store] 이미 전체 읽음 처리 중입니다.')
+      return
+    }
+    
     try {
+      isMarkingAllAsRead.value = true
       // console.log('[알림 Store] 🔄 전체 알림 읽음 처리 시작...')
-      console.log('  - 워크스페이스 타입:', currentWorkspaceType.value)
-      console.log('  - 워크스페이스 번호:', currentWorkspaceSeq.value)
-      console.log('  - 활성 필터:', activeFilter.value)
       
       // 프로젝트 페이지의 "모든 알림" 탭은 개인 전체 읽음과 동일
       // 프로젝트 페이지의 "프로젝트" 탭만 해당 프로젝트 알림 읽음
@@ -500,7 +518,9 @@ export const useNotificationStore = defineStore('notification', () => {
       // console.error('[알림 Store] ❌ 에러 상세:', error.response?.data || error.message)
       
       // 에러가 나도 로컬 상태는 업데이트 (낙관적 업데이트)
-    notifications.value.forEach(n => n.read = true)
+      notifications.value.forEach(n => n.read = true)
+    } finally {
+      isMarkingAllAsRead.value = false
     }
   }
   
@@ -509,9 +529,15 @@ export const useNotificationStore = defineStore('notification', () => {
    * @param {string} alarmType - 알림 타입 (alarm-friend, alarm-task, etc.)
    */
   const markFilterAsRead = async (alarmType) => {
+    // 중복 요청 방지
+    if (processingMarkFilterAsRead.value.has(alarmType)) {
+      console.log('[알림 Store] 이미 타입별 읽음 처리 중입니다:', alarmType)
+      return
+    }
+    
     try {
+      processingMarkFilterAsRead.value.add(alarmType)
       // console.log('[알림 Store] 🔄 타입별 알림 읽음 처리 시작')
-      console.log('  - 알림 타입:', alarmType)
       console.log('  - 워크스페이스 타입:', currentWorkspaceType.value)
       console.log('  - 워크스페이스 번호:', currentWorkspaceSeq.value)
       
@@ -550,6 +576,8 @@ export const useNotificationStore = defineStore('notification', () => {
       notifications.value
         .filter(n => n.type === alarmType)
         .forEach(n => n.read = true)
+    } finally {
+      processingMarkFilterAsRead.value.delete(alarmType)
     }
   }
   
@@ -613,9 +641,6 @@ export const useNotificationStore = defineStore('notification', () => {
    */
   const clearAllNotifications = async () => {
     try {
-      console.log('  - 워크스페이스 타입:', currentWorkspaceType.value)
-      console.log('  - 워크스페이스 번호:', currentWorkspaceSeq.value)
-      console.log('  - 활성 필터:', activeFilter.value)
       
       // 프로젝트 페이지의 "모든 알림" 탭은 개인 전체 삭제와 동일
       // 프로젝트 페이지의 "프로젝트" 탭만 해당 프로젝트 알림 삭제
@@ -667,7 +692,6 @@ export const useNotificationStore = defineStore('notification', () => {
    */
   const deleteFilterNotifications = async (alarmType) => {
     try {
-      console.log('  - 알림 타입:', alarmType)
       console.log('  - 워크스페이스 타입:', currentWorkspaceType.value)
       console.log('  - 워크스페이스 번호:', currentWorkspaceSeq.value)
       const endpoint = currentWorkspaceType.value === 'personal' 

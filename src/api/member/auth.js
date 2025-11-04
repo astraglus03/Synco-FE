@@ -77,3 +77,10 @@ export const updateActiveStatus = async (activeStatus) => {
   return await apiPatch('/workspace-service/member/updateActiveStatus', { activeStatus })
 }
 
+// ----------------------
+// 멤버별 알림 설정 ON/OFF API
+// ----------------------
+export const alarmTurnOnOff = async (ynAlarmOffSet) => {
+  return await apiPatch('/workspace-service/member/alarmTurnOnOff', { ynAlarmOffSet })
+}
+

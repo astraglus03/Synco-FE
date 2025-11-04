@@ -529,9 +529,19 @@ const searchForNewFriends = () => {
   }, 500) // 500ms 디바운스
 }
 
+// 친구 요청 중인 memberId 추적 (중복 요청 방지)
+const sendingFriendRequests = ref(new Set())
+
 // 친구 요청 보내기
 const sendFriendRequest = async (memberId) => {
+  // 중복 요청 방지
+  if (sendingFriendRequests.value.has(memberId)) {
+    console.log('[PersonalFriends] 이미 요청 중인 memberId:', memberId)
+    return
+  }
+  
   try {
+    sendingFriendRequests.value.add(memberId)
     await friendApi.sendFriendRequest(memberId)
     
     // 검색 결과에서 해당 사용자의 상태를 'sent'로 변경
@@ -547,22 +557,36 @@ const sendFriendRequest = async (memberId) => {
   } catch (error) {
     console.error('친구 요청 실패:', error)
     alert('친구 요청에 실패했습니다.')
+  } finally {
+    sendingFriendRequests.value.delete(memberId)
   }
 }
 
+// 친구 요청 수락 중인 friendSeq 추적 (중복 요청 방지)
+const acceptingFriendRequests = ref(new Set())
+
 // 검색 결과에서 친구 요청 수락
 const acceptFriendRequestFromSearch = async (user) => {
+  const request = receivedRequests.value.find(r => r.requesterId === user.memberId)
+  if (!request) {
+    alert('요청을 찾을 수 없습니다.')
+    return
+  }
+  
+  const friendSeq = request.friendSeq
+  
+  // 중복 요청 방지
+  if (acceptingFriendRequests.value.has(friendSeq)) {
+    console.log('[PersonalFriends] 이미 수락 처리 중인 friendSeq:', friendSeq)
+    return
+  }
+  
   try {
-    const request = receivedRequests.value.find(r => r.requesterId === user.memberId)
-    if (!request) {
-      alert('요청을 찾을 수 없습니다.')
-      return
-    }
-    
-    await friendApi.acceptFriendRequest(request.friendSeq)
+    acceptingFriendRequests.value.add(friendSeq)
+    await friendApi.acceptFriendRequest(friendSeq)
     
     // 받은 요청에서 제거
-    receivedRequests.value = receivedRequests.value.filter(r => r.friendSeq !== request.friendSeq)
+    receivedRequests.value = receivedRequests.value.filter(r => r.friendSeq !== friendSeq)
     
     // 검색 결과에서 제거
     modalSearchResults.value = modalSearchResults.value.filter(u => u.memberSeq !== user.memberSeq)
@@ -574,17 +598,26 @@ const acceptFriendRequestFromSearch = async (user) => {
   } catch (error) {
     console.error('친구 요청 수락 실패:', error)
     alert('친구 요청 수락에 실패했습니다.')
+  } finally {
+    acceptingFriendRequests.value.delete(friendSeq)
   }
 }
 
 // 친구 요청 수락
 const acceptFriendRequest = async (friendSeq) => {
+  // 중복 요청 방지
+  if (acceptingFriendRequests.value.has(friendSeq)) {
+    console.log('[PersonalFriends] 이미 수락 처리 중인 friendSeq:', friendSeq)
+    return
+  }
+  
   try {
     console.log('🔍 [PersonalFriends] acceptFriendRequest 호출됨')
     console.log('🔍 [PersonalFriends] friendSeq 값:', friendSeq)
     console.log('🔍 [PersonalFriends] friendSeq 타입:', typeof friendSeq)
     console.log('🔍 [PersonalFriends] receivedRequests:', receivedRequests.value)
     
+    acceptingFriendRequests.value.add(friendSeq)
     await friendApi.acceptFriendRequest(friendSeq)
     
     // 받은 요청에서 제거
@@ -597,6 +630,8 @@ const acceptFriendRequest = async (friendSeq) => {
   } catch (error) {
     console.error('친구 요청 수락 실패:', error)
     alert('친구 요청 수락에 실패했습니다.')
+  } finally {
+    acceptingFriendRequests.value.delete(friendSeq)
   }
 }
 

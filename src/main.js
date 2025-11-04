@@ -22,6 +22,8 @@ if (localStorage.getItem('DEBUG_LOGS') !== '1') {
     const allowedKeywords = [
       '[SSE]',
       '[알림',
+      '[마이페이지]',
+      '[알림 설정]',
       'SSE 연결',
       'SSE 메시지',
       '알림 수신',
@@ -44,8 +46,12 @@ const originalConsoleWarn = console.warn
 if (localStorage.getItem('DEBUG_LOGS') !== '1') {
   console.warn = function(...args) {
     const firstArg = String(args[0] || '')
-    // SSE 및 스케줄/워크스페이스 관련 경고만 표시
-    if (firstArg.includes('[SSE]') || firstArg.includes('[Schedule]') || firstArg.includes('[Workspace')) {
+    // SSE, 스케줄, 워크스페이스, 마이페이지, 알림 설정 관련 경고만 표시
+    if (firstArg.includes('[SSE]') || 
+        firstArg.includes('[Schedule]') || 
+        firstArg.includes('[Workspace') || 
+        firstArg.includes('[마이페이지]') || 
+        firstArg.includes('[알림 설정]')) {
       originalConsoleWarn.apply(console, args)
     }
   }
