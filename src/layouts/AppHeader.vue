@@ -1,6 +1,7 @@
 <script setup>
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
+import { useTheme } from 'vuetify'
 import { useAuthStore } from '@/store/authStore'
 import { useWorkspaceStore } from '@/store/workspaceStore'
 import { useWorkspaceMemberStore } from '@/store/workspaceMemberStore'
@@ -9,6 +10,7 @@ import { Authority } from '@/models/workspace/WorkspaceModels'
 import { getWorkspaceMembers, updateWorkspace, delegateSuperAuthority, deleteWorkspace, inviteWorkspaceMembers, kickWorkspaceMember, getFriendList, searchMembers } from '@/api/workspace/workSpaceApi'
 import { acceptFriendRequest, rejectFriendRequest } from '@/api/friend/friend'
 import * as authApi from '@/api/member/auth'
+import { colors } from '@/constants/color'
 
 const props = defineProps({
   isDark: Boolean,
@@ -21,6 +23,14 @@ const workspaceStore = useWorkspaceStore()
 const workspaceMemberStore = useWorkspaceMemberStore()
 const notificationStore = useNotificationStore()
 const router = useRouter()
+const theme = useTheme()
+
+// 다크모드 여부
+const isDark = computed(() => theme.global.current.value.dark)
+
+// 다크모드 색상 computed
+const darkColors = computed(() => colors.dark)
+const lightColors = computed(() => colors.light)
 
 const emit = defineEmits(['toggle-theme', 'toggle-member-sidebar', 'toggle-notification-sidebar'])
 
@@ -431,8 +441,7 @@ const projectNotifications = ref([
 const personalFilters = ref([
   { key: 'all', label: '전체', icon: 'mdi-bell', alarmType: null },
   { key: 'friend', label: '친구 요청', icon: 'mdi-account-plus', alarmType: 'alarm-friend' },
-  { key: 'task', label: '개인 업무', icon: 'mdi-clipboard-list', alarmType: 'alarm-task' },
-  { key: 'project', label: '프로젝트', icon: 'mdi-folder-account', alarmType: 'alarm-project' }
+  { key: 'task', label: '개인 업무', icon: 'mdi-clipboard-list', alarmType: 'alarm-task' }
 ])
 
 // 프로젝트 스페이스용 필터 옵션
@@ -590,16 +599,26 @@ const deleteNotification = async (notificationId) => {
 
 // 전체 알림 삭제 (notificationStore로 위임)
 const clearAllNotifications = async () => {
-  // console.log('[AppHeader] 🗑️ 전체 삭제 호출')
-  await notificationStore.clearAllNotifications()
-  // console.log('[AppHeader] ✅ 전체 삭제 완료')
+  try {
+    // console.log('[AppHeader] 🗑️ 전체 삭제 호출')
+    await notificationStore.clearAllNotifications()
+    // console.log('[AppHeader] ✅ 전체 삭제 완료')
+  } catch (error) {
+    console.error('[AppHeader] ❌ 전체 삭제 실패:', error)
+    showCustomToast('알림 삭제 실패', '알림 삭제에 실패했습니다.', 'error')
+  }
 }
 
 // 타입별 알림 삭제 (notificationStore로 위임)
 const deleteFilterNotifications = async (alarmType) => {
-  // console.log('[AppHeader] 🗑️ 타입별 삭제 호출:', alarmType)
-  await notificationStore.deleteFilterNotifications(alarmType)
-  // console.log('[AppHeader] ✅ 타입별 삭제 완료')
+  try {
+    // console.log('[AppHeader] 🗑️ 타입별 삭제 호출:', alarmType)
+    await notificationStore.deleteFilterNotifications(alarmType)
+    // console.log('[AppHeader] ✅ 타입별 삭제 완료')
+  } catch (error) {
+    console.error('[AppHeader] ❌ 타입별 삭제 실패:', error)
+    showCustomToast('알림 삭제 실패', '알림 삭제에 실패했습니다.', 'error')
+  }
 }
 
 // 모든 알림 보기
@@ -1378,15 +1397,15 @@ const logout = async () => {
   try {
     await authApi.logout()
     
-    // authStore 초기화
-    authStore.logout()
+    // authStore 초기화 (SSE disconnect 포함)
+    await authStore.logout()
     
     // 랜딩 페이지로 이동
     window.location.href = '/'
   } catch (error) {
     console.error('로그아웃 실패:', error)
     // 실패해도 로컬 로그아웃 처리
-    authStore.logout()
+    await authStore.logout()
     window.location.href = '/'
   }
 }
@@ -3691,55 +3710,128 @@ onMounted(() => {
   box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15) !important;
 }
 
-/* 다크모드 지원 */
-.dark-header .notification-sidebar {
-  background: #1f2937 !important;
-  border-left-color: #374151 !important;
+/* 다크모드 지원 - color.js 색상 사용 */
+.v-theme--dark .notification-sidebar {
+  background: v-bind('darkColors.surface') !important;
+  border-left-color: v-bind('darkColors.scheduleBorder') !important;
 }
 
-.dark-header .notification-header {
-  background: #1f2937;
-  border-bottom-color: #374151;
+.v-theme--dark .notification-header {
+  background: v-bind('darkColors.surface');
+  border-bottom-color: v-bind('darkColors.scheduleBorder');
 }
 
-.dark-header .header-title {
-  color: #f9fafb;
+.v-theme--dark .header-title {
+  color: v-bind('darkColors.text');
 }
 
-.dark-header .notification-card {
-  background: #374151;
-  border-color: #4b5563;
+.v-theme--dark .notification-card {
+  background: v-bind('darkColors.surface');
+  border-color: v-bind('darkColors.scheduleBorder');
 }
 
-.dark-header .notification-card:hover {
-  background: #4b5563;
-  border-color: #6b7280;
+.v-theme--dark .notification-card:hover {
+  background: v-bind('darkColors.scheduleHoverBg');
+  border-color: v-bind('darkColors.scheduleBorder');
 }
 
-.dark-header .notification-card.unread {
-  background: #1e3a8a;
-  border-color: #3b82f6;
+.v-theme--dark .notification-card.unread {
+  background: rgba(59, 130, 246, 0.15);
+  border-color: v-bind('darkColors.primary');
+  border-left: 4px solid v-bind('darkColors.primary');
 }
 
-.dark-header .notification-text {
-  color: #f9fafb;
+.v-theme--dark .notification-text {
+  color: v-bind('darkColors.text');
 }
 
-.dark-header .notification-time {
-  color: #9ca3af;
+.v-theme--dark .notification-time {
+  color: v-bind('darkColors.textSecondary');
 }
 
-.dark-header .empty-title {
-  color: #f9fafb;
+.v-theme--dark .empty-title {
+  color: v-bind('darkColors.text');
 }
 
-.dark-header .empty-description {
-  color: #9ca3af;
+.v-theme--dark .empty-description {
+  color: v-bind('darkColors.textSecondary');
 }
 
-.dark-header .notification-actions-footer {
-  background: #1f2937;
-  border-top-color: #374151;
+.v-theme--dark .notification-actions-footer {
+  background: v-bind('darkColors.surface');
+  border-top-color: v-bind('darkColors.scheduleBorder');
+}
+
+.v-theme--dark .filter-tab {
+  background: v-bind('darkColors.scheduleCardBg');
+  border-color: v-bind('darkColors.scheduleBorder');
+  color: v-bind('darkColors.textSecondary');
+}
+
+.v-theme--dark .filter-tab:hover {
+  background: v-bind('darkColors.scheduleHoverBg');
+  border-color: v-bind('darkColors.scheduleBorder');
+  color: v-bind('darkColors.text');
+}
+
+.v-theme--dark .filter-tab.active {
+  background: v-bind('darkColors.primary');
+  border-color: v-bind('darkColors.primary');
+  color: white;
+}
+
+.v-theme--dark .close-button {
+  color: v-bind('darkColors.textSecondary') !important;
+  background: v-bind('darkColors.scheduleCardBg') !important;
+}
+
+.v-theme--dark .close-button:hover {
+  background: v-bind('darkColors.scheduleHoverBg') !important;
+  color: v-bind('darkColors.text') !important;
+}
+
+.v-theme--dark .empty-icon {
+  color: v-bind('darkColors.textSecondary');
+}
+
+.v-theme--dark .action-button.mark-read {
+  background: rgba(34, 197, 94, 0.15);
+  color: v-bind('darkColors.success');
+}
+
+.v-theme--dark .action-button.mark-read:hover {
+  background: rgba(34, 197, 94, 0.25);
+  color: v-bind('darkColors.success');
+}
+
+.v-theme--dark .action-button.delete {
+  background: rgba(220, 38, 38, 0.15);
+  color: v-bind('darkColors.error');
+}
+
+.v-theme--dark .action-button.delete:hover {
+  background: rgba(220, 38, 38, 0.25);
+  color: v-bind('darkColors.error');
+}
+
+.v-theme--dark .priority-badge.high { 
+  background: rgba(220, 38, 38, 0.15); 
+  color: v-bind('darkColors.error'); 
+}
+
+.v-theme--dark .priority-badge.medium { 
+  background: rgba(245, 158, 11, 0.15); 
+  color: v-bind('darkColors.warning'); 
+}
+
+.v-theme--dark .priority-badge.normal { 
+  background: rgba(59, 130, 246, 0.15); 
+  color: v-bind('darkColors.primary'); 
+}
+
+.v-theme--dark .priority-badge.low { 
+  background: v-bind('darkColors.scheduleCardBg'); 
+  color: v-bind('darkColors.textSecondary'); 
 }
 
 /* 반응형 - 개선된 버전 */

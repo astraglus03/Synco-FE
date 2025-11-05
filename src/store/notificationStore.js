@@ -1,8 +1,10 @@
 import { defineStore } from 'pinia'
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import sseConnection from '@/api/notification/sseApi'
 import { apiGet, apiPatch, apiDelete } from '@/utils/api'
 import { emitter } from '@/eventBus'
+import { useWorkspaceStore } from '@/store/workspaceStore'
+import { useAuthStore } from '@/store/authStore'
 
 export const useNotificationStore = defineStore('notification', () => {
   // ===== 상태 =====
@@ -19,6 +21,9 @@ export const useNotificationStore = defineStore('notification', () => {
   // SSE 연결 상태
   const sseConnected = ref(false)
   
+  // SSE 연결 시도 중 플래그 (중복 호출 방지)
+  const isConnectingSSE = ref(false)
+  
   // 현재 워크스페이스 타입 ('personal' | 'project')
   const currentWorkspaceType = ref('personal')
   
@@ -26,7 +31,31 @@ export const useNotificationStore = defineStore('notification', () => {
   const currentWorkspaceSeq = ref(null)
   
   // 채널별 알림 개수 (channelSeq -> count)
-  const channelNotificationCounts = ref({})
+  // 로컬 스토리지에서 복원 (새로고침 후에도 유지)
+  const loadChannelNotificationCounts = () => {
+    try {
+      const stored = localStorage.getItem('channelNotificationCounts')
+      return stored ? JSON.parse(stored) : {}
+    } catch (e) {
+      console.warn('로컬 스토리지에서 채널 알림 개수 복원 실패:', e)
+      return {}
+    }
+  }
+  
+  const saveChannelNotificationCounts = () => {
+    try {
+      localStorage.setItem('channelNotificationCounts', JSON.stringify(channelNotificationCounts.value))
+    } catch (e) {
+      console.warn('로컬 스토리지에 채널 알림 개수 저장 실패:', e)
+    }
+  }
+  
+  const channelNotificationCounts = ref(loadChannelNotificationCounts())
+  
+  // channelNotificationCounts 변경 시 자동 저장
+  watch(channelNotificationCounts, () => {
+    saveChannelNotificationCounts()
+  }, { deep: true })
 
   // ===== Computed =====
   
@@ -52,11 +81,15 @@ export const useNotificationStore = defineStore('notification', () => {
         // 여기서는 별도 workspaceSeq 필터링은 하지 않음
       }
     } else {
-      // 개인 워크스페이스: 프로젝트 전용 알림 제외
+      // 개인 워크스페이스: "전체" 탭에서는 모든 알림 표시, 특정 탭에서는 프로젝트 전용 알림 제외
       // alarm-drive(공유문서/파일 공유)와 alarm-meeting(화상회의)는 프로젝트에서만 사용
-      filtered = filtered.filter(n => 
-        n.type !== 'alarm-drive' && n.type !== 'alarm-meeting'
-      )
+      // 하지만 "전체" 탭에서는 모든 알림을 볼 수 있어야 함
+      if (activeFilter.value !== 'all') {
+        filtered = filtered.filter(n => 
+          n.type !== 'alarm-drive' && n.type !== 'alarm-meeting'
+        )
+      }
+      // "전체" 탭일 때는 필터링하지 않음 (모든 알림 표시)
     }
     
     // 2. 필터 타입별 필터링
@@ -93,11 +126,30 @@ export const useNotificationStore = defineStore('notification', () => {
   const clearChannelNotificationCount = (channelSeq) => {
     const key = String(channelSeq)
     channelNotificationCounts.value[key] = 0
+    saveChannelNotificationCounts()
   }
   
   // 특정 채널에 알림이 있는지 확인 (bold 처리용)
   const hasChannelNotification = (channelSeq) => {
     return getChannelNotificationCount(channelSeq) > 0
+  }
+  
+  // 워크스페이스별 채팅 채널 알림 개수 계산
+  // (채널 목록을 받아서 각 채널의 알림 개수를 합산)
+  const getWorkspaceChatNotificationCount = (chatChannels) => {
+    if (!chatChannels || !Array.isArray(chatChannels) || chatChannels.length === 0) {
+      return 0
+    }
+    
+    return chatChannels.reduce((total, channel) => {
+      const count = getChannelNotificationCount(channel.channelSeq)
+      return total + count
+    }, 0)
+  }
+  
+  // 워크스페이스에 채팅 알림이 있는지 확인
+  const hasWorkspaceChatNotification = (chatChannels) => {
+    return getWorkspaceChatNotificationCount(chatChannels) > 0
   }
   
   // 읽지 않은 알림 개수 (필터링된 알림 기준)
@@ -124,6 +176,18 @@ export const useNotificationStore = defineStore('notification', () => {
    * SSE 메시지 핸들러 (단일 인스턴스)
    */
   const sseMessageHandler = (data) => {
+    // SSE 에러 발생 시 연결 시도 플래그 해제
+    if (data.type === 'sse-error') {
+      isConnectingSSE.value = false
+      console.warn('[알림 Store] ⚠️ SSE 연결 에러 발생, 연결 시도 플래그 해제')
+      return
+    }
+    
+    // SSE 연결 성공 시 플래그 해제
+    if (data.type === 'sse-connected') {
+      isConnectingSSE.value = false
+    }
+    
     console.log('[알림 Store] 📬 메시지 수신:', data)
     handleNotification(data)
   }
@@ -132,7 +196,17 @@ export const useNotificationStore = defineStore('notification', () => {
    * SSE 연결 시작
    */
   const connectSSE = () => {
-    console.log('[알림 Store] 🔌 SSE 연결 요청')
+    // ID 입력 페이지에서는 SSE 연결을 시도하지 않음 (memberId가 아직 DB에 없음)
+    if (typeof window !== 'undefined' && window.location.pathname === '/oauth/member-id') {
+      console.log('[알림 Store] ⏭️ ID 입력 페이지에서는 SSE 연결을 시도하지 않습니다')
+      return
+    }
+
+    // 이미 연결 시도 중이면 무시 (중복 호출 방지)
+    if (isConnectingSSE.value) {
+      console.log('[알림 Store] ⏭️ SSE 연결 시도 중이므로 중복 호출 무시')
+      return
+    }
 
     // 이미 연결되어 있으면 무시
     if (sseConnection.isConnected()) {
@@ -140,6 +214,28 @@ export const useNotificationStore = defineStore('notification', () => {
       sseConnected.value = true
       return
     }
+
+    // 인증 정보 확인 (memberSeq가 유효한 숫자인지 확인)
+    const authStore = useAuthStore()
+    if (!authStore.memberSeq) {
+      console.warn('[알림 Store] ⚠️ memberSeq가 없어서 SSE 연결을 시도하지 않습니다')
+      return
+    }
+
+    const memberSeq = Number(authStore.memberSeq)
+    if (Number.isNaN(memberSeq) || memberSeq <= 0) {
+      console.warn('[알림 Store] ⚠️ memberSeq가 유효하지 않아서 SSE 연결을 시도하지 않습니다:', authStore.memberSeq)
+      return
+    }
+
+    if (!authStore.accessToken) {
+      console.warn('[알림 Store] ⚠️ accessToken이 없어서 SSE 연결을 시도하지 않습니다')
+      return
+    }
+
+    // 연결 시도 중 플래그 설정
+    isConnectingSSE.value = true
+    console.log('[알림 Store] 🔌 SSE 연결 요청')
 
     // 메시지 콜백 등록 (중복 방지는 sseConnection에서 처리)
     console.log('[알림 Store] 📝 콜백 등록 중...')
@@ -149,43 +245,15 @@ export const useNotificationStore = defineStore('notification', () => {
     console.log('[알림 Store] 📡 sseConnection.connect() 호출')
     sseConnection.connect()
 
-    // 연결 상태 확인 (여러 번 체크)
-    console.log('[알림 Store] ⏳ 연결 상태 확인 스케줄링...')
-    
-    // 1초 후 첫 확인
+    // 연결 상태 확인 (간단하게)
     setTimeout(() => {
       const status = sseConnection.getConnectionStatus()
       const isConnected = sseConnection.isConnected()
-      console.log('[알림 Store] 📊 1초 후 연결 상태:', status, '/ isConnected:', isConnected)
-      sseConnected.value = isConnected
-    }, 1000)
-    
-    // 3초 후 재확인
-    setTimeout(() => {
-      const status = sseConnection.getConnectionStatus()
-      const isConnected = sseConnection.isConnected()
-      console.log('[알림 Store] 📊 3초 후 연결 상태:', status, '/ isConnected:', isConnected)
-      sseConnected.value = isConnected
-    }, 3000)
-    
-    // 5초 후 최종 확인
-    setTimeout(() => {
-      const status = sseConnection.getConnectionStatus()
-      const isConnected = sseConnection.isConnected()
-      console.log('[알림 Store] 📊 5초 후 연결 상태:', status, '/ isConnected:', isConnected)
       sseConnected.value = isConnected
       
-      if (isConnected) {
-        console.log('[알림 Store] ✅ SSE 연결 성공!')
-      } else {
-        console.error('[알림 Store] ❌ 5초 후에도 연결 안 됨!')
-        console.error('[알림 Store] 🔍 백엔드 확인 필요:')
-        console.error('[알림 Store]    1. 백엔드 서버가 실행 중인가?')
-        console.error('[알림 Store]    2. /workspace-service/alarms/sse/connect 엔드포인트가 동작하는가?')
-        console.error('[알림 Store]    3. 백엔드 로그에 오류가 있는가?')
-        console.error('[알림 Store]    4. SseEmitter를 제대로 반환하는가?')
-      }
-    }, 5000)
+      // 연결 시도 플래그 해제 (성공/실패 관계없이)
+      isConnectingSSE.value = false
+    }, 2000)
   }
 
   /**
@@ -222,32 +290,147 @@ export const useNotificationStore = defineStore('notification', () => {
     // 알림 타입 정규화
     const notificationType = normalizeType(data.alarmType || data.type || 'UNKNOWN')
 
+    // member-status 타입 특별 처리 (알림 목록에 추가하지 않고 emitter로 전달)
+    if (data.type === 'member-status' || notificationType === 'member-status') {
+      console.log('[알림 Store] 👤 멤버 상태 변경 이벤트 수신:', data)
+      
+      // 백엔드에서 보낸 payload 구조에 맞춰 데이터 추출
+      const memberSeq = data.memberSeq || data.data?.memberSeq
+      const activeStatus = data.activeStatus || data.status || data.data?.activeStatus || data.data?.status
+      
+      if (memberSeq && activeStatus) {
+        console.log('[알림 Store] 📤 member-status-updated 이벤트 전송:', { memberSeq, activeStatus })
+        emitter.emit('member-status-updated', {
+          memberSeq: memberSeq,
+          activeStatus: activeStatus
+        })
+      } else {
+        console.warn('[알림 Store] ⚠️ member-status 이벤트 데이터가 불완전합니다:', { memberSeq, activeStatus, 전체데이터: data })
+      }
+      
+      // member-status는 알림 목록에 추가하지 않음
+      return
+    }
+
     // alarm-chat 타입 특별 처리
     if (notificationType === 'alarm-chat') {
       const targetSeq = data.targetSeq || data.channelSeq || data.data?.targetSeq || data.data?.channelSeq
+      const workSpaceSeq = data.workSpaceSeq || data.data?.workSpaceSeq
+      
       if (targetSeq) {
-        // ✅ 프로젝트 워크스페이스 채팅 채널: channelNotificationCounts 사용
-        // ✅ 1:1 채팅: dm.unreadCount 사용 (이벤트 발생)
-        // 워크스페이스 타입으로 구분
-        const isPersonalWorkspace = currentWorkspaceType.value === 'personal'
+        // ✅ 1:1 채팅과 프로젝트 채팅 구분
+        // workSpaceSeq가 없으면 1:1 채팅, 있으면 프로젝트 채팅
+        const isPersonalChat = !workSpaceSeq || workSpaceSeq === null || workSpaceSeq === undefined
         
-        if (isPersonalWorkspace) {
-          // 개인 워크스페이스: 1:1 채팅이므로 dm.unreadCount로만 관리
-          // channelNotificationCounts는 증가시키지 않음 (중복 방지)
+        if (isPersonalChat) {
+          // 1:1 채팅은 현재 워크스페이스 타입과 관계없이 항상 1:1 채팅으로 처리
+          // (다른 워크스페이스를 선택 중이어도 1:1 채팅 알림은 처리해야 함)
           
-          // ✅ 1:1 채팅 목록의 마지막 메시지 업데이트를 위한 이벤트 발생
-          const messageContent = data.message || data.content || data.chatMessageText || '';
+          // 현재 선택된 채널인지 확인
+          const workspaceStore = useWorkspaceStore()
+          const currentSelectedChannel = workspaceStore.selectedSubChannel
+          const currentMainChannel = workspaceStore.currentChannel
+          
+          const targetSeqStr = String(targetSeq)
+          const targetSeqNum = Number(targetSeq)
+          
+          // 1:1 채팅이 선택되어 있는지 확인
+          // ✅ 더 엄격한 체크: currentMainChannel이 'chat'이고 currentSelectedChannel이 정확히 해당 채널과 일치해야 함
+          let isCurrentlySelected = false
+          if (currentMainChannel === 'chat' && currentSelectedChannel) {
+            const selectedChannelNum = Number(String(currentSelectedChannel).replace('chat_', ''))
+            isCurrentlySelected = 
+              selectedChannelNum === targetSeqNum ||
+              currentSelectedChannel === targetSeqStr ||
+              String(currentSelectedChannel).replace('chat_', '') === targetSeqStr
+          }
+          // currentMainChannel이 'chat'이 아니거나 currentSelectedChannel이 null/빈 문자열이면 선택되지 않은 것으로 판단
+          
+          const key = String(targetSeq)
+          
+          // ✅ 선택된 채널이 아니면 알림 개수 증가
+          if (!isCurrentlySelected) {
+            channelNotificationCounts.value[key] = (channelNotificationCounts.value[key] || 0) + 1
+            console.log('[알림 Store] 📢 1:1 채팅 알림, 채널:', targetSeq, '개수:', channelNotificationCounts.value[key], '현재 선택된 채널:', currentSelectedChannel, '메인 채널:', currentMainChannel)
+          } else {
+            // 선택된 채널이면 알림 개수 증가하지 않음 (0으로 유지)
+            channelNotificationCounts.value[key] = 0
+            console.log('[알림 Store] ✅ 현재 선택된 1:1 채팅 채널이므로 알림 개수 증가 안함:', targetSeq)
+          }
+          
+          // 마지막 메시지 업데이트
+          // 다양한 필드에서 메시지 내용 추출 시도
+          const messageContent = data.data?.message ;
+          
+          console.log('[알림 Store] 📝 추출된 메시지 내용:', messageContent, '원본 데이터:', data);
+          
           if (messageContent) {
-            emitter.emit('increment-direct-message-unread', {
+            emitter.emit('update-direct-message-last-message', {
               channelSeq: targetSeq,
               lastMessage: messageContent
             });
+            console.log('[알림 Store] ✅ 마지막 메시지 업데이트 이벤트 발생:', { channelSeq: targetSeq, lastMessage: messageContent });
+          } else {
+            console.warn('[알림 Store] ⚠️ 메시지 내용을 찾을 수 없습니다. 데이터 구조:', data);
           }
         } else {
-          // 프로젝트 워크스페이스: 채팅 채널이므로 channelNotificationCounts 사용
+          // 프로젝트 채팅 채널: channelNotificationCounts 사용
+          // workSpaceSeq가 있으면 프로젝트 채팅이므로 현재 워크스페이스 타입과 관계없이 항상 처리
+          // (개인 워크스페이스에 있어도 프로젝트 채팅 알림은 쌓여야 함)
+          
+          // 현재 선택된 채널인지 확인
+          const workspaceStore = useWorkspaceStore()
+          const currentSelectedChannel = workspaceStore.selectedSubChannel
+          const currentMainChannel = workspaceStore.currentChannel
+          
+          const targetSeqStr = String(targetSeq)
+          const targetSeqNum = Number(targetSeq)
+          
+          // 프로젝트 채팅이 선택되어 있는지 확인
+          // ✅ 더 엄격한 체크: currentMainChannel이 'chat'이고 currentSelectedChannel이 정확히 해당 채널과 일치해야 함
+          let isCurrentlySelected = false
+          if (currentMainChannel === 'chat' && currentSelectedChannel) {
+            const selectedChannelNum = Number(String(currentSelectedChannel).replace('chat_', ''))
+            isCurrentlySelected = 
+              selectedChannelNum === targetSeqNum ||
+              currentSelectedChannel === targetSeqStr ||
+              currentSelectedChannel === `chat_${targetSeqStr}` ||
+              String(currentSelectedChannel).replace('chat_', '') === targetSeqStr
+          }
+          // currentMainChannel이 'chat'이 아니거나 currentSelectedChannel이 null/빈 문자열이면 선택되지 않은 것으로 판단
+          
           const key = String(targetSeq)
-          channelNotificationCounts.value[key] = (channelNotificationCounts.value[key] || 0) + 1
-          console.log('[알림 Store] 📢 프로젝트 채팅 알림, 채널:', targetSeq, '개수:', channelNotificationCounts.value[key])
+          
+          // ✅ 선택된 채널이 아니면 알림 개수 증가
+          if (!isCurrentlySelected) {
+            channelNotificationCounts.value[key] = (channelNotificationCounts.value[key] || 0) + 1
+            console.log('[알림 Store] 📢 프로젝트 채팅 알림, 채널:', targetSeq, '개수:', channelNotificationCounts.value[key], '워크스페이스:', workSpaceSeq || '미지정', '현재 선택된 채널:', currentSelectedChannel, '메인 채널:', currentMainChannel)
+          } else {
+            // 선택된 채널이면 알림 개수 증가하지 않음 (0으로 유지)
+            channelNotificationCounts.value[key] = 0
+            console.log('[알림 Store] ✅ 현재 선택된 프로젝트 채팅 채널이므로 알림 개수 증가 안함:', targetSeq)
+          }
+          
+          // 마지막 메시지 업데이트 (프로젝트 채팅도 목록에 표시되므로 업데이트 필요)
+          // 다양한 필드에서 메시지 내용 추출 시도
+          console.log('[알림 Store] 🔍 프로젝트 채팅 메시지 추출 시작, data.message:', data.message, 'data:', data);
+          
+          const messageContent = data.message || data.content || data.chatMessageText || 
+                                 data.data?.message;
+          
+          console.log('[알림 Store] 📝 추출된 메시지 내용:', messageContent);
+          
+          // 메시지 내용이 있으면 무조건 이벤트 발생 (directMessages에 있으면 업데이트, 없으면 무시)
+          if (messageContent && messageContent.trim()) {
+            console.log('[알림 Store] ✅ 메시지 내용 있음, 이벤트 발생');
+            emitter.emit('update-direct-message-last-message', {
+              channelSeq: targetSeq,
+              lastMessage: messageContent.trim()
+            });
+            console.log('[알림 Store] ✅ 프로젝트 채팅 마지막 메시지 업데이트 이벤트 발생:', { channelSeq: targetSeq, lastMessage: messageContent.trim() });
+          } else {
+            console.warn('[알림 Store] ⚠️ 메시지 내용이 없거나 비어있음:', { messageContent, data });
+          }
         }
         
         // alarm-chat은 알림 목록에 추가하지 않음
@@ -255,11 +438,25 @@ export const useNotificationStore = defineStore('notification', () => {
       }
     }
 
+    // message가 없으면 알림을 추가하지 않음
+    let notificationMessage = data.message
+    
+    // 친구 요청 알림 특별 처리
+    if (data.type === 'FRIEND_REQUEST' || data.alarmType === 'alarm-friend') {
+      notificationMessage = data.message || (data.sender ? `${data.sender}가 친구 요청을 보냈습니다` : null)
+    }
+    
+    // message가 없으면 알림을 추가하지 않음
+    if (!notificationMessage) {
+      console.log('[알림 Store] ⏭️ message가 없어서 알림 스킵')
+      return
+    }
+
     // 알림 객체 생성
     const notification = {
       id: String(data.alarmSeq || data.id || Date.now()),
       type: notificationType,
-      message: data.message || '새로운 알림이 있습니다',
+      message: notificationMessage,
       time: '방금 전',
       read: false,
       priority: data.priority || 'normal',
@@ -271,7 +468,6 @@ export const useNotificationStore = defineStore('notification', () => {
 
     // 친구 요청 알림 특별 처리
     if (data.type === 'FRIEND_REQUEST' || data.alarmType === 'alarm-friend') {
-      notification.message = data.message || `${data.sender || '누군가'}가 친구 요청을 보냈습니다`
       notification.user = {
         name: data.sender || '알 수 없음',
         avatar: data.sender?.charAt(0) || '?',
@@ -695,27 +891,43 @@ export const useNotificationStore = defineStore('notification', () => {
         })
         
         // 알림 변환 (AlarmResDto 기준)
-        notifications.value = sortedNotifications.map((alarm, index) => {
-          // 디버깅: ynRead 값 확인
-          if (index === 0) {
-            // console.log('[알림 Store] 🔍 첫 번째 알림 원본 데이터:', alarm)
-            // console.log('[알림 Store] 🔍 ynRead 값:', alarm.ynRead)
-            // console.log('[알림 Store] 🔍 read 변환 결과:', alarm.ynRead === 'Y')
-          }
-          
-          return {
-            id: String(alarm.alarmSeq || `${alarm.receiverId}_${new Date(alarm.time).getTime()}_${index}`),
-            type: normalizeType(alarm.alarmType || alarm.type || 'UNKNOWN'),
-            message: alarm.message || '새로운 알림이 있습니다',
-            time: formatTime(alarm.time),
-            read: alarm.ynRead === 'Y', // 읽음 여부 (Y/N)
-            priority: 'normal',
-            sender: alarm.sender,
-            workSpaceSeq: alarm.workSpaceSeq,
-            alarmSeq: alarm.alarmSeq, // 읽음 처리 API 호출을 위해 필요
-            data: alarm // 원본 데이터 보관
-          }
-        })
+        // message가 없는 알림은 제외
+        notifications.value = sortedNotifications
+          .filter((alarm) => {
+            // 친구 요청의 경우 sender가 있으면 메시지 생성 가능
+            if (alarm.alarmType === 'alarm-friend' || alarm.type === 'FRIEND_REQUEST') {
+              return alarm.message || alarm.sender
+            }
+            // 그 외에는 message가 필수
+            return alarm.message
+          })
+          .map((alarm, index) => {
+            // 디버깅: ynRead 값 확인
+            if (index === 0) {
+              // console.log('[알림 Store] 🔍 첫 번째 알림 원본 데이터:', alarm)
+              // console.log('[알림 Store] 🔍 ynRead 값:', alarm.ynRead)
+              // console.log('[알림 Store] 🔍 read 변환 결과:', alarm.ynRead === 'Y')
+            }
+            
+            // message 생성 (친구 요청의 경우 특별 처리)
+            let message = alarm.message
+            if (!message && (alarm.alarmType === 'alarm-friend' || alarm.type === 'FRIEND_REQUEST')) {
+              message = alarm.sender ? `${alarm.sender}가 친구 요청을 보냈습니다` : null
+            }
+            
+            return {
+              id: String(alarm.alarmSeq || `${alarm.receiverId}_${new Date(alarm.time).getTime()}_${index}`),
+              type: normalizeType(alarm.alarmType || alarm.type || 'UNKNOWN'),
+              message: message,
+              time: formatTime(alarm.time),
+              read: alarm.ynRead === 'Y', // 읽음 여부 (Y/N)
+              priority: 'normal',
+              sender: alarm.sender,
+              workSpaceSeq: alarm.workSpaceSeq,
+              alarmSeq: alarm.alarmSeq, // 읽음 처리 API 호출을 위해 필요
+              data: alarm // 원본 데이터 보관
+            }
+          })
         
         // console.log('[알림 Store] ✅ 알림 목록 불러오기 성공:', notifications.value.length, '개')
         // console.log('[알림 Store] 📋 변환된 알림 샘플:', notifications.value[0])
@@ -784,6 +996,8 @@ export const useNotificationStore = defineStore('notification', () => {
     fetchNotifications,
     getChannelNotificationCount,
     clearChannelNotificationCount,
-    hasChannelNotification
+    hasChannelNotification,
+    getWorkspaceChatNotificationCount,
+    hasWorkspaceChatNotification
   }
 })

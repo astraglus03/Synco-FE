@@ -200,10 +200,13 @@
           </div>
           <div class="setting-content">
             <v-switch
-              v-model="allNotifications"
+              :model-value="allNotifications"
               label="전체 알림"
               color="primary"
               hide-details
+              @update:model-value="handleAlarmToggle"
+              :loading="alarmLoading"
+              :disabled="alarmLoading"
             />
           </div>
         </v-card>
@@ -387,6 +390,7 @@ import { ref, onMounted, nextTick, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/store/authStore'
 import * as authApi from '@/api/member/auth'
+import { MemberResDto } from '@/models/member/MemberModels'
 
 const props = defineProps({
   currentChannel: String
@@ -414,6 +418,7 @@ const loading = ref(false)
 
 // 알림 설정 (전체 알림만)
 const allNotifications = ref(true)
+const alarmLoading = ref(false)
 
 // 프로필 수정 모드
 const editMode = ref(false)
@@ -514,7 +519,33 @@ const handlePhoneKeydown = (event) => {
 const fetchMyPage = async () => {
   try {
     loading.value = true
-    const data = await authApi.getMyPage()
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
+    console.log('[마이페이지] 정보 조회 시작')
+    
+    const responseData = await authApi.getMyPage()
+    console.log('[마이페이지] 응답 원본 데이터:', responseData)
+    console.log('[마이페이지] 응답 데이터 타입:', typeof responseData)
+    console.log('[마이페이지] 응답 데이터 키:', Object.keys(responseData || {}))
+    console.log('[마이페이지] 응답 데이터 전체 (JSON):', JSON.stringify(responseData, null, 2))
+    
+    // MemberResDto로 변환
+    const data = MemberResDto.fromJson(responseData)
+    console.log('[마이페이지] MemberResDto 변환 후:', data)
+    
+    // 멤버 상태 정보 확인
+    console.log('[마이페이지] ━━━ 멤버 상태 정보 ━━━')
+    console.log('  - memberSeq:', responseData.memberSeq, '→', data.memberSeq)
+    console.log('  - name:', responseData.name, '→', data.name)
+    console.log('  - id:', responseData.id, '→', data.id)
+    console.log('  - email:', responseData.email, '→', data.email)
+    console.log('  - telNo:', responseData.telNo, '→', data.telNo)
+    console.log('  - profileImageUrl:', responseData.profileImageUrl, '→', data.profileImageUrl)
+    console.log('  - statusMessage:', responseData.statusMessage, '→', data.statusMessage)
+    console.log('  - birthDate:', responseData.birthDate, '→', data.birthDate)
+    console.log('  - activeStatus:', responseData.activeStatus, '→', data.activeStatus)
+    console.log('  - socialType:', responseData.socialType, '→', data.socialType)
+    console.log('  - createdAt:', responseData.createdAt, '→', data.createdAt)
+    console.log('  - ynAlarmOffSet:', responseData.ynAlarmOffSet, '→', data.ynAlarmOffSet)
     
     userInfo.value = {
       name: data.name || '',
@@ -528,9 +559,74 @@ const fetchMyPage = async () => {
       joinDate: data.createdAt ? formatDateOnly(data.createdAt) : ''
     }
     
+    console.log('[마이페이지] userInfo.value 설정 완료:', userInfo.value)
+    
+    // 알림 설정 초기화 (ynAlarmOffSet: "Y"면 true, "N"이면 false)
+    // 백엔드 응답에서 직접 확인 (MemberResDto 변환 전후 모두 확인)
+    console.log('[마이페이지] ━━━ 알림 설정 초기화 ━━━')
+    console.log('  - responseData.ynAlarmOffSet:', responseData.ynAlarmOffSet, '(타입:', typeof responseData.ynAlarmOffSet, ')')
+    console.log('  - data.ynAlarmOffSet:', data.ynAlarmOffSet, '(타입:', typeof data.ynAlarmOffSet, ')')
+    
+    const ynAlarmOffSet = responseData.ynAlarmOffSet || data.ynAlarmOffSet
+    console.log('  - 최종 추출된 값:', ynAlarmOffSet, '(타입:', typeof ynAlarmOffSet, ')')
+    console.log('  - 현재 allNotifications.value:', allNotifications.value)
+    
+    // 유효한 값('Y' 또는 'N')인 경우에만 설정, 그 외에는 기본값 true(알림 ON)
+    if (ynAlarmOffSet === 'Y' || ynAlarmOffSet === 'N') {
+      const newValue = ynAlarmOffSet === 'Y'
+      console.log('  - ✅ 유효한 값으로 설정:', newValue, '(ynAlarmOffSet:', ynAlarmOffSet, ')')
+      allNotifications.value = newValue
+      
+      // authStore의 user에도 알림 설정 업데이트 (SSE 알림 필터링에 사용)
+      // ref이므로 .value로 접근하거나 일반 객체일 수 있음
+      const currentUser = authStore.user?.value || authStore.user
+      if (currentUser) {
+        authStore.setUser({
+          ...currentUser,
+          ynAlarmOffSet: ynAlarmOffSet
+        })
+        console.log('  - authStore.user.ynAlarmOffSet 업데이트 완료:', ynAlarmOffSet)
+        console.log('  - 업데이트 후 authStore.user:', authStore.user?.value || authStore.user)
+      } else {
+        // user가 없으면 새로 생성
+        authStore.setUser({
+          ynAlarmOffSet: ynAlarmOffSet
+        })
+        console.log('  - authStore.user 새로 생성 및 ynAlarmOffSet 설정:', ynAlarmOffSet)
+      }
+      
+      console.log('  - 설정 후 allNotifications.value:', allNotifications.value)
+    } else {
+      // 값이 없거나 유효하지 않은 경우 기본값: 알림 ON
+      console.warn('  - ⚠️ 유효하지 않은 값, 기본값 true로 설정')
+      console.warn('  - ⚠️ 값이 undefined인지 확인:', ynAlarmOffSet === undefined)
+      console.warn('  - ⚠️ 값이 null인지 확인:', ynAlarmOffSet === null)
+      console.warn('  - ⚠️ 값이 빈 문자열인지 확인:', ynAlarmOffSet === '')
+      allNotifications.value = true
+      
+      // 기본값도 authStore에 업데이트
+      const currentUser = authStore.user?.value || authStore.user
+      if (currentUser) {
+        authStore.setUser({
+          ...currentUser,
+          ynAlarmOffSet: 'Y'
+        })
+      } else {
+        authStore.setUser({
+          ynAlarmOffSet: 'Y'
+        })
+      }
+      
+      console.log('  - 기본값 설정 후 allNotifications.value:', allNotifications.value)
+    }
+    
     editForm.value = { ...userInfo.value }
+    console.log('[마이페이지] ✅ 정보 조회 완료')
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
   } catch (error) {
-    console.error('마이페이지 정보 조회 실패:', error)
+    console.error('[마이페이지] ❌ 정보 조회 실패:', error)
+    console.error('  - 에러 상세:', error.response?.data || error.message)
+    console.error('  - 에러 스택:', error.stack)
     showSnackbar('정보를 불러오는데 실패했습니다.', 'error')
   } finally {
     loading.value = false
@@ -750,21 +846,113 @@ const deleteAccount = async () => {
   }
 }
 
+// 알림 설정 토글 처리
+const handleAlarmToggle = async (value) => {
+  // 중복 요청 방지
+  if (alarmLoading.value) {
+    console.log('[알림 설정] 이미 처리 중입니다.')
+    return
+  }
+  
+  console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
+  console.log('[알림 설정] 토글 변경 시작')
+  console.log('  - 변경 전 값:', allNotifications.value)
+  console.log('  - 변경할 값:', value)
+  
+  const ynAlarmOffSet = value ? 'Y' : 'N' // true면 "Y", false면 "N"
+  const previousValue = allNotifications.value // 현재 값 저장 (복구용)
+  
+  console.log('  - 전송할 값 (ynAlarmOffSet):', ynAlarmOffSet)
+  console.log('  - 이전 값 (복구용):', previousValue)
+  
+  // 즉시 UI 업데이트 (낙관적 업데이트)
+  allNotifications.value = value
+  console.log('  - 즉시 UI 업데이트 완료:', allNotifications.value)
+  
+  try {
+    alarmLoading.value = true
+    console.log('  - API 호출 시작: alarmTurnOnOff')
+    await authApi.alarmTurnOnOff(ynAlarmOffSet)
+    console.log('  - API 호출 성공: alarmTurnOnOff')
+    
+    // API 성공 후 서버에서 최신 상태 확인
+    try {
+      console.log('  - 최신 상태 확인을 위해 getMyPage 호출')
+      const responseData = await authApi.getMyPage()
+      console.log('  - getMyPage 응답 원본:', responseData)
+      console.log('  - responseData.ynAlarmOffSet:', responseData.ynAlarmOffSet)
+      
+      const data = MemberResDto.fromJson(responseData)
+      console.log('  - MemberResDto 변환 후:', data)
+      console.log('  - data.ynAlarmOffSet:', data.ynAlarmOffSet)
+      
+      const latestYnAlarmOffSet = responseData.ynAlarmOffSet || data.ynAlarmOffSet
+      console.log('  - 최종 추출된 값:', latestYnAlarmOffSet)
+      
+      // 서버에서 받은 최신 값으로 동기화
+      if (latestYnAlarmOffSet === 'Y' || latestYnAlarmOffSet === 'N') {
+        const newValue = latestYnAlarmOffSet === 'Y'
+        console.log('  - 서버 값으로 동기화:', newValue, '(ynAlarmOffSet:', latestYnAlarmOffSet, ')')
+        allNotifications.value = newValue
+        
+        // authStore의 user에도 알림 설정 업데이트 (SSE 알림 필터링에 사용)
+        // ref이므로 .value로 접근하거나 일반 객체일 수 있음
+        const currentUser = authStore.user?.value || authStore.user
+        if (currentUser) {
+          authStore.setUser({
+            ...currentUser,
+            ynAlarmOffSet: latestYnAlarmOffSet
+          })
+          console.log('  - authStore.user.ynAlarmOffSet 업데이트 완료:', latestYnAlarmOffSet)
+          console.log('  - 업데이트 후 authStore.user:', authStore.user?.value || authStore.user)
+        } else {
+          // user가 없으면 새로 생성
+          authStore.setUser({
+            ynAlarmOffSet: latestYnAlarmOffSet
+          })
+          console.log('  - authStore.user 새로 생성 및 ynAlarmOffSet 설정:', latestYnAlarmOffSet)
+        }
+        
+        console.log('  - 동기화 후 allNotifications.value:', allNotifications.value)
+      } else {
+        console.warn('  - ⚠️ 유효하지 않은 값:', latestYnAlarmOffSet)
+      }
+    } catch (syncError) {
+      // 동기화 실패해도 API 호출은 성공했으므로 현재 상태 유지
+      console.warn('[알림 설정] 동기화 실패:', syncError)
+    }
+    
+    console.log('[알림 설정] ✅ 최종 상태:', allNotifications.value)
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
+    showSnackbar(value ? '알림이 켜졌습니다.' : '알림이 꺼졌습니다.', 'success')
+  } catch (error) {
+    console.error('[알림 설정] ❌ 변경 실패:', error)
+    console.error('  - 에러 상세:', error.response?.data || error.message)
+    // 실패 시 이전 값으로 복구
+    allNotifications.value = previousValue
+    console.log('  - 이전 값으로 복구:', allNotifications.value)
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
+    showSnackbar('알림 설정 변경에 실패했습니다.', 'error')
+  } finally {
+    alarmLoading.value = false
+  }
+}
+
 // 로그아웃
 const doLogout = async () => {
   try {
     loading.value = true
     await authApi.logout()
     
-    // authStore 초기화
-    authStore.logout()
+    // authStore 초기화 (SSE disconnect 포함)
+    await authStore.logout()
     
     // 랜딩 페이지로 이동
     window.location.href = '/'
   } catch (error) {
     console.error('로그아웃 실패:', error)
     // 실패해도 로컬 로그아웃 처리
-    authStore.logout()
+    await authStore.logout()
     window.location.href = '/'
   } finally {
     loading.value = false

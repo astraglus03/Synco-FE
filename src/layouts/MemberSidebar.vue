@@ -1,8 +1,9 @@
 <script setup>
-import { ref, computed, watch, onMounted } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useWorkspaceStore } from '@/store/workspaceStore'
 import { useWorkspaceMemberStore } from '@/store/workspaceMemberStore'
 import { getWorkspaceMembers } from '@/api/workspace/workSpaceApi'
+import { emitter } from '@/eventBus'
 
 const props = defineProps({
   visible: Boolean
@@ -33,14 +34,19 @@ const loadMembers = async () => {
     const members = await getWorkspaceMembers(currentWorkspace.workSpaceSeq)
     
     // 멤버 데이터 매핑 (API의 activeStatus 사용)
-    projectMembers.value = members.map(member => ({
-      id: member.memberSeq,
-      memberSeq: member.memberSeq,
-      name: member.name,
-      profileImageUrl: member.profileImageUrl,
-      avatar: member.avatarText,
-      status: member.uiStatus // API에서 받은 실제 상태 사용
-    }))
+    projectMembers.value = members.map(member => {
+      // activeStatus를 소문자로 변환하여 status에 저장
+      const status = member.activeStatus ? member.activeStatus.toLowerCase() : 
+                     (member.uiStatus || 'offline')
+      return {
+        id: member.memberSeq,
+        memberSeq: member.memberSeq,
+        name: member.name,
+        profileImageUrl: member.profileImageUrl,
+        avatar: member.avatarText || (member.name ? member.name.charAt(0) : '?'),
+        status: status
+      }
+    })
   } catch (error) {
     console.error('멤버 목록 로딩 실패:', error)
     projectMembers.value = []
@@ -73,12 +79,69 @@ watch(() => props.visible, (newVisible) => {
   }
 })
 
-// 초기 로드
+// 멤버 상태 업데이트 이벤트 핸들러
+const handleMemberStatusUpdate = ({ memberSeq, activeStatus }) => {
+  console.log('[MemberSidebar] 👤 멤버 상태 업데이트 수신:', { memberSeq, activeStatus, 현재멤버수: projectMembers.value.length, visible: props.visible })
+  
+  if (!memberSeq || !activeStatus) {
+    console.warn('[MemberSidebar] ⚠️ 잘못된 데이터:', { memberSeq, activeStatus })
+    return
+  }
+  
+  // 타입 정규화
+  const targetMemberSeq = Number(memberSeq)
+  const normalizedStatus = String(activeStatus).toUpperCase()
+  const newStatus = normalizedStatus.toLowerCase() // UI에서는 소문자 사용
+  
+  // 프로젝트 멤버 목록에서 해당 멤버 상태 업데이트
+  const memberIndex = projectMembers.value.findIndex(m => Number(m.memberSeq) === targetMemberSeq)
+  if (memberIndex > -1) {
+    const member = projectMembers.value[memberIndex]
+    console.log('[MemberSidebar] 🔄 상태 변경:', member.name, member.status, '→', newStatus)
+    
+    // 반응성을 위해 새 배열로 교체 (Vue 반응성 보장)
+    projectMembers.value = [
+      ...projectMembers.value.slice(0, memberIndex),
+      {
+        ...projectMembers.value[memberIndex],
+        status: newStatus
+      },
+      ...projectMembers.value.slice(memberIndex + 1)
+    ]
+    
+    console.log('[MemberSidebar] ✅ 멤버 상태 업데이트 완료:', projectMembers.value[memberIndex].name, projectMembers.value[memberIndex].status)
+  } else {
+    // 멤버 목록이 비어있거나 아직 로드되지 않은 경우, 사이드바가 보일 때 다시 로드
+    if (props.visible) {
+      if (projectMembers.value.length === 0) {
+        console.log('[MemberSidebar] ℹ️ 멤버 목록이 비어있음, 다시 로드 시도')
+        loadMembers()
+      } else {
+        console.log('[MemberSidebar] ℹ️ 해당 멤버를 찾을 수 없음 (memberSeq:', targetMemberSeq, ', 현재 멤버:', projectMembers.value.map(m => ({ seq: m.memberSeq, name: m.name })), ')')
+      }
+    } else {
+      console.log('[MemberSidebar] ℹ️ 사이드바가 보이지 않음, 이벤트는 수신했지만 UI 업데이트 건너뜀')
+    }
+  }
+}
+
+// 초기 로드 및 이벤트 리스너 등록
 onMounted(() => {
+  // 멤버 상태 업데이트 이벤트 리스너 등록 (컴포넌트 마운트 시 즉시 등록)
+  emitter.on('member-status-updated', handleMemberStatusUpdate)
+  
   if (props.visible) {
     loadMembers()
   }
 })
+
+onUnmounted(() => {
+  // 멤버 상태 업데이트 이벤트 리스너 제거
+  emitter.off('member-status-updated', handleMemberStatusUpdate)
+})
+
+// 사이드바가 보이지 않을 때도 이벤트를 받아서 멤버 목록이 있으면 업데이트
+// visible이 true가 될 때 멤버 목록을 다시 로드하면 최신 상태 반영
 
 // 상태별 색상
 const getStatusColor = (status) => {

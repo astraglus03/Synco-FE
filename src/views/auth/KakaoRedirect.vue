@@ -42,6 +42,7 @@
 import { onMounted } from 'vue'
 import axios from 'axios'
 import { useAuthStore } from '@/store/authStore'
+import { decodeJWT } from '@/utils/api'
 import kakaoLogo from '@/assets/images/social/kakao.png'
 
 const authStore = useAuthStore()
@@ -59,7 +60,17 @@ const sendCodeToServer = async (code) => {
     )
     const body = data?.data ?? data
     // 토큰 저장 (AT만, RT는 HttpOnly Cookie로 자동 관리)
-    if (body.accessToken) authStore.setAccessToken(body.accessToken)
+    if (body.accessToken) {
+        authStore.setAccessToken(body.accessToken)
+        // JWT 토큰에서 memberSeq 추출 및 설정 (needMemberId가 true여도 설정)
+        const payload = decodeJWT(body.accessToken)
+        if (payload?.sub) {
+            const memberSeq = parseInt(payload.sub, 10)
+            if (!Number.isNaN(memberSeq)) {
+                authStore.setMemberSeq(memberSeq)
+            }
+        }
+    }
     // if (body.user) authStore.setUser(body.user) // 소셜 로그인 user 정보 저장 주석처리
     if (body.needMemberId) {
         window.location.href = '/oauth/member-id'

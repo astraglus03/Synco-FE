@@ -215,6 +215,68 @@ export const useWorkspaceMemberStore = defineStore('workspaceMember', () => {
     currentWorkspaceSeq.value = null
   }
 
+  /**
+   * 멤버 상태 업데이트 (SSE member-status 이벤트에서 호출)
+   */
+  const updateMemberStatus = (memberSeq, activeStatus) => {
+    if (!Array.isArray(members.value)) return
+    
+    // 워크스페이스 멤버 목록에서 상태 업데이트
+    const member = members.value.find(m => 
+      Number(m.memberSeq) === Number(memberSeq)
+    )
+    
+    if (member) {
+      // activeStatus 직접 업데이트
+      member.activeStatus = activeStatus
+      
+      // uiStatus는 activeStatus를 소문자로 변환한 값 (MemberSidebar에서 사용)
+      member.uiStatus = activeStatus.toLowerCase()
+      
+      console.log('[WorkspaceMemberStore] ✅ 멤버 상태 업데이트:', {
+        memberSeq,
+        name: member.name,
+        activeStatus,
+        uiStatus: member.uiStatus
+      })
+    } else {
+      console.log('[WorkspaceMemberStore] ℹ️ 상태 변경된 멤버가 현재 워크스페이스에 없음:', memberSeq)
+    }
+    
+    // 채널 멤버 목록에서도 상태 업데이트
+    const updateChannelMemberStatus = (channelList) => {
+      if (!Array.isArray(channelList)) return
+      
+      channelList.forEach(channel => {
+        if (channel.channelMemberList && Array.isArray(channel.channelMemberList)) {
+          const channelMember = channel.channelMemberList.find(cm =>
+            Number(cm.memberSeq) === Number(memberSeq)
+          )
+          if (channelMember) {
+            channelMember.activeStatus = activeStatus
+            // participantStatus도 업데이트 (회의 등에서 사용)
+            if (channelMember.participantStatus !== undefined) {
+              channelMember.participantStatus = activeStatus
+            }
+          }
+        }
+      })
+    }
+    
+    updateChannelMemberStatus(chatChannels.value)
+    updateChannelMemberStatus(meetingChannels.value)
+    
+    // scheduleChannels는 배열이지만 구조가 다를 수 있음
+    if (Array.isArray(scheduleChannels.value)) {
+      const scheduleMember = scheduleChannels.value.find(sm =>
+        Number(sm.memberSeq) === Number(memberSeq)
+      )
+      if (scheduleMember) {
+        scheduleMember.activeStatus = activeStatus
+      }
+    }
+  }
+
   return {
     // State
     members,
@@ -243,6 +305,7 @@ export const useWorkspaceMemberStore = defineStore('workspaceMember', () => {
     loadChannels,
     updateMemberAuthority,
     updateChannelMemberAuthority,
-    clearMembers
+    clearMembers,
+    updateMemberStatus
   }
 })

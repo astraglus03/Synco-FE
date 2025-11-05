@@ -22,6 +22,7 @@ const props = defineProps({
   selectedSubChannel: String,
   memberSidebarVisible: Boolean,
   workspaceSidebarCollapsed: Boolean,
+  serverSidebarCollapsed: Boolean,
 });
 
 const emit = defineEmits(["navigate-to-channel"]);
@@ -95,10 +96,8 @@ onMounted(() => {
   window.addEventListener('select-meeting-channel', handleChannelSelect)
   window.addEventListener('select-chat-channel', handleChannelSelect)
   window.addEventListener('resize', handleResize)
-    // chat 채널은 event bus 사용
-    emitter.on("select-chat-channel", ({ parentId, subChannelId }) => {
-    selectedChannel.value = subChannelId;
-  })
+  // chat 채널은 props.selectedSubChannel로만 처리 (중복 방지)
+  // WorkspaceSidebar에서 emit("select-subchannel") → MainLayout에서 URL 변경 → props.selectedSubChannel 변경 → initializeFromProps에서 selectedChannel 업데이트
 })
 
 onUnmounted(() => {
@@ -106,7 +105,6 @@ onUnmounted(() => {
   window.removeEventListener('select-meeting-channel', handleChannelSelect)
   window.removeEventListener('select-chat-channel', handleChannelSelect)
   window.removeEventListener('resize', handleResize)
-  emitter.off("select-chat-channel");
 })
 
 // 현재 표시할 컴포넌트 결정
@@ -148,6 +146,11 @@ const contentStyle = computed(() => {
   let serverSidebarWidth = 72
   let workspaceSidebarWidth = 220
   
+  // ServerSidebar가 collapsed 상태이면 너비 0
+  if (props.serverSidebarCollapsed) {
+    serverSidebarWidth = 0
+  }
+  
   // 개인 워크스페이스는 항상 펼침, 프로젝트는 collapsed 상태 확인
   if (props.workspaceType === 'personal') {
     workspaceSidebarWidth = 220
@@ -158,7 +161,10 @@ const contentStyle = computed(() => {
   
   // 태블릿 이하에서는 사이드바 너비 조정 (개인 워크스페이스 동작 방식 참고)
   if (screenWidth <= 1024) {
-    serverSidebarWidth = 60
+    // ServerSidebar가 collapsed가 아닐 때만 너비 설정
+    if (!props.serverSidebarCollapsed) {
+      serverSidebarWidth = 60
+    }
     if (props.workspaceType === 'personal') {
       workspaceSidebarWidth = 60
     } else if (props.workspaceSidebarCollapsed) {
@@ -169,7 +175,10 @@ const contentStyle = computed(() => {
     }
   }
   if (screenWidth <= 768) {
-    serverSidebarWidth = 56
+    // ServerSidebar가 collapsed가 아닐 때만 너비 설정
+    if (!props.serverSidebarCollapsed) {
+      serverSidebarWidth = 56
+    }
     if (props.workspaceType === 'personal') {
       workspaceSidebarWidth = 56
     } else if (props.workspaceSidebarCollapsed) {
@@ -180,7 +189,10 @@ const contentStyle = computed(() => {
     }
   }
   if (screenWidth <= 480) {
-    serverSidebarWidth = 52
+    // ServerSidebar가 collapsed가 아닐 때만 너비 설정
+    if (!props.serverSidebarCollapsed) {
+      serverSidebarWidth = 52
+    }
     if (props.workspaceType === 'personal') {
       workspaceSidebarWidth = 52
     } else if (props.workspaceSidebarCollapsed) {
@@ -193,11 +205,14 @@ const contentStyle = computed(() => {
   
   const memberSidebarWidth = props.memberSidebarVisible ? 280 : 0
   
+  // 모든 화면 크기에서 사이드바 왼쪽 여백 없음
+  const sidebarLeftPadding = 0
+  
   return {
-    marginLeft: `${serverSidebarWidth + workspaceSidebarWidth}px`,
+    marginLeft: `${sidebarLeftPadding + serverSidebarWidth + workspaceSidebarWidth}px`,
     marginRight: `${memberSidebarWidth}px`,
     transition: 'margin-left 0.3s ease, margin-right 0.3s ease',
-    width: `calc(100vw - ${serverSidebarWidth + workspaceSidebarWidth + memberSidebarWidth}px)`,
+    width: `calc(100vw - ${sidebarLeftPadding + serverSidebarWidth + workspaceSidebarWidth + memberSidebarWidth}px)`,
     minWidth: screenWidth <= 768 ? '200px' : '400px'
   }
 })

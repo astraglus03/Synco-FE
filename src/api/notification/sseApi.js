@@ -1,8 +1,10 @@
 /**
  * SSE (Server-Sent Events) 연결 관리
  * - 백엔드에서 주기적으로 heartbeat (ping) 전송
- * - 무한 재연결 지원
- * - 간단하고 명확한 구조
+ * - 로그인할 때만 연결
+ * - 연결 실패 시 최대 1회만 자동 재시도 (그 이상은 재시도하지 않음)
+ * - 헬스 체크는 5분마다 실행 (연결 상태 확인만, 재연결은 하지 않음)
+ * - 500 에러 발생 시 재시도하지 않음
  */
 import { EventSourcePolyfill } from 'event-source-polyfill'
 import { useAuthStore } from '@/store/authStore'
@@ -12,6 +14,7 @@ class SSEConnection {
     this.eventSource = null
     this.messageCallbacks = []
     this.reconnectAttempts = 0
+    this.maxReconnectAttempts = 1 // 최대 재시도 횟수: 1회만
     this.reconnectTimer = null
     this.isManualDisconnect = false
     this.lastMessageTime = Date.now()
@@ -24,31 +27,29 @@ class SSEConnection {
   connect() {
     const authStore = useAuthStore()
 
-    console.log('[SSE] 🔌 연결 시도 시작')
-    console.log('[SSE] 📋 인증 정보:', {
-      hasMemberSeq: !!authStore.memberSeq,
-      memberSeq: authStore.memberSeq,
-      hasAccessToken: !!authStore.accessToken,
-      tokenLength: authStore.accessToken?.length || 0
-    })
-
     // 인증 정보 확인
     if (!authStore.memberSeq) {
-      console.error('[SSE] ❌ memberSeq가 없습니다!')
       return
     }
 
     if (!authStore.accessToken) {
-      console.error('[SSE] ❌ accessToken이 없습니다!')
       return
     }
 
-    // 이미 연결 중이면 무시
-    if (this.eventSource?.readyState === EventSource.OPEN) {
-      console.log('[SSE] ✅ 이미 연결되어 있습니다')
-      return
+    // 이미 연결 중이거나 연결 중이면 무시 (재시도 중이 아닐 때만)
+    if (this.eventSource) {
+      const state = this.eventSource.readyState
+      if (state === EventSource.OPEN || state === EventSource.CONNECTING) {
+        return
+      }
     }
-
+    
+    // 재시도 중이면 기존 타이머 정리
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer)
+      this.reconnectTimer = null
+    }
+    
     // 기존 연결 정리
     this.cleanup()
 
@@ -56,55 +57,93 @@ class SSEConnection {
     // 상대 경로 사용으로 프록시/동일 출처 모두 호환
     const url = `${import.meta.env.VITE_API_URL}/workspace-service/alarms/sse/connect`
 
-    console.log('[SSE] 🌐 연결 URL:', url)
-    console.log('[SSE] 🔑 헤더:', {
-      'X-Member-Seq': authStore.memberSeq,
-      'Authorization': `Bearer ${authStore.accessToken.substring(0, 20)}...`
-    })
-    console.log('[SSE] 🔄 재연결 시도 횟수:', this.reconnectAttempts + 1)
-
     try {
-      console.log('[SSE] 📡 EventSource 객체 생성 중...')
-      
       this.eventSource = new EventSourcePolyfill(url, {
         headers: {
           'X-Member-Seq': authStore.memberSeq.toString(),
           'Authorization': `Bearer ${authStore.accessToken}`
         },
-        heartbeatTimeout: 600000, // 10분 (백엔드 SseEmitter 타임아웃과 동일)
+        heartbeatTimeout: 864000000, // 10일 (백엔드 SseEmitter 타임아웃과 동일)
         withCredentials: true
       })
 
-      console.log('[SSE] ✅ EventSource 객체 생성 완료')
-      console.log('[SSE] 📊 초기 readyState:', this.eventSource.readyState, '(0=CONNECTING, 1=OPEN, 2=CLOSED)')
-
       // 연결 성공
       this.eventSource.onopen = () => {
-        console.log('[SSE] 🎉 onopen 이벤트 발생!')
-        console.log('[SSE] ✅ 연결 성공 (readyState:', this.eventSource.readyState, ')')
+        console.log('[SSE] 연결 성공')
+        // 연결 성공 시 재시도 카운터 초기화
         this.reconnectAttempts = 0
         this.isManualDisconnect = false
         this.lastMessageTime = Date.now()
+        // 헬스 체크 시작 (재연결은 하지 않고 상태만 확인)
         this.startHealthCheck()
+        
+        // 연결 상태 변화를 콜백에 알림
+        this.notifyCallbacks({ type: 'sse-connected' })
+      }
+
+      // 연결 오류 - 최대 1회만 재시도
+      this.eventSource.onerror = (error) => {
+        console.warn('[SSE] 연결 오류 발생:', error)
+        
+        // 500 에러 등 서버 에러인 경우 재시도하지 않음
+        if (error.status === 500) {
+          console.error('[SSE] 서버 에러 (500): SSE 연결 실패. 재시도하지 않습니다.')
+          this.notifyCallbacks({ type: 'sse-error', error: 'server-error' })
+          // CLOSED 상태가 아니면 연결 닫기
+          if (this.eventSource && this.eventSource.readyState !== EventSource.CLOSED) {
+            try {
+              this.eventSource.close()
+            } catch (e) {
+              // 닫기 실패 무시
+            }
+            this.eventSource = null
+          }
+          return
+        }
+        
+        // CLOSED 상태가 아니면 연결 닫기
+        if (this.eventSource && this.eventSource.readyState !== EventSource.CLOSED) {
+          try {
+            this.eventSource.close()
+          } catch (e) {
+            // 닫기 실패 무시
+          }
+          this.eventSource = null
+        }
+
+        // 수동 종료가 아니고, 재시도 횟수가 남아있으면 1회만 재시도
+        if (!this.isManualDisconnect && this.reconnectAttempts < this.maxReconnectAttempts) {
+          this.reconnectAttempts++
+          console.warn(`[SSE] 연결이 끊어졌습니다. 재시도 (${this.reconnectAttempts}/${this.maxReconnectAttempts})...`)
+          
+          // 약간의 지연 후 재연결 (1초)
+          this.reconnectTimer = setTimeout(() => {
+            this.reconnectTimer = null
+            this.connect()
+          }, 1000)
+        } else {
+          // 재시도 횟수 초과 또는 수동 종료
+          if (this.reconnectAttempts >= this.maxReconnectAttempts) {
+            console.warn('[SSE] 최대 재시도 횟수에 도달했습니다. 더 이상 재시도하지 않습니다.')
+          }
+          this.notifyCallbacks({ type: 'sse-error', error: 'connection-failed' })
+        }
       }
 
       // 일반 메시지 수신
       this.eventSource.onmessage = (event) => {
-        console.log('[SSE] 📨 메시지 수신:', event.data)
         this.lastMessageTime = Date.now()
         
         try {
           const data = JSON.parse(event.data)
-          console.log('[SSE] 📦 파싱 완료, 콜백 실행 (콜백 수:', this.messageCallbacks.length, ')')
           this.notifyCallbacks(data)
         } catch (error) {
-          console.error('[SSE] ❌ 메시지 파싱 실패:', error)
+          // 파싱 실패 무시
         }
       }
 
       // Heartbeat 이벤트 (백엔드 이벤트명이 ping/heartbeat 등 다를 수 있어 모두 수신)
-      const onHeartbeat = () => {
-        console.log('[SSE] 💓 heartbeat')
+      const onHeartbeat = (event) => {
         this.lastMessageTime = Date.now()
       }
       this.eventSource.addEventListener('ping', onHeartbeat)
@@ -112,102 +151,84 @@ class SSEConnection {
 
       // 백엔드 일반 알림 이벤트 (event: alarm)
       this.eventSource.addEventListener('alarm', (event) => {
-        console.log('[SSE] 🔔 alarm 이벤트 수신')
         this.lastMessageTime = Date.now()
         try {
           const data = JSON.parse(event.data)
           this.notifyCallbacks(data)
         } catch (error) {
-          console.error('[SSE] ❌ alarm 파싱 실패:', error)
+          // 파싱 실패 무시
         }
       })
 
       // 초기 연결 이벤트 (event: connect)
       this.eventSource.addEventListener('connect', (event) => {
-        console.log('[SSE] ✅ connect 이벤트 수신')
         this.lastMessageTime = Date.now()
       })
 
       // 특정 알림 타입 이벤트 (예: FRIEND_REQUEST)
       this.eventSource.addEventListener('FRIEND_REQUEST', (event) => {
-        console.log('[SSE] 👥 친구 요청 알림')
         this.lastMessageTime = Date.now()
         
         try {
           const data = JSON.parse(event.data)
           this.notifyCallbacks({ type: 'FRIEND_REQUEST', ...data })
         } catch (error) {
-          console.error('[SSE] ❌ 친구 요청 파싱 실패:', error)
+          // 파싱 실패 무시
         }
       })
 
       // 멤버 상태 변경 이벤트 (event: member-status)
       this.eventSource.addEventListener('member-status', (event) => {
-        console.log('[SSE] 👤 member-status 이벤트 수신')
         this.lastMessageTime = Date.now()
         try {
           const data = JSON.parse(event.data)
-          this.notifyCallbacks({ type: 'member-status', ...data })
+          const callbackData = { type: 'member-status', ...data }
+          this.notifyCallbacks(callbackData)
         } catch (error) {
-          console.error('[SSE] ❌ member-status 파싱 실패:', error)
+          // 파싱 실패 무시
         }
       })
 
-      // 연결 오류
-      this.eventSource.onerror = (error) => {
-        console.error('[SSE] ❌ onerror 이벤트 발생!')
-        console.error('[SSE] 📋 에러 상세:', error)
-        console.error('[SSE] 📊 readyState:', this.eventSource?.readyState)
-        
-        // 연결 닫기
-        if (this.eventSource) {
-          console.log('[SSE] 🔌 EventSource 닫는 중...')
-          this.eventSource.close()
-          this.eventSource = null
-        }
-
-        // 수동 종료가 아니면 자동 재연결
-        if (!this.isManualDisconnect) {
-          console.log('[SSE] ⏳ 자동 재연결 예약...')
-          this.scheduleReconnect()
-        } else {
-          console.log('[SSE] 🛑 수동 종료 상태이므로 재연결 안 함')
-        }
-      }
-
-      console.log('[SSE] 🎯 이벤트 핸들러 등록 완료')
-      console.log('[SSE] ⏳ 연결 대기 중... (onopen 이벤트 대기)')
+      // 연결 오류는 위에서 이미 정의됨 (중복 제거)
 
     } catch (error) {
-      console.error('[SSE] ❌ EventSource 생성 중 예외 발생!')
-      console.error('[SSE] 📋 예외 상세:', error)
-      console.error('[SSE] 📋 예외 스택:', error.stack)
-      this.scheduleReconnect()
+      console.error('[SSE] 연결 시도 중 오류 발생:', error)
+      
+      // 수동 종료가 아니고, 재시도 횟수가 남아있으면 1회만 재시도
+      if (!this.isManualDisconnect && this.reconnectAttempts < this.maxReconnectAttempts) {
+        this.reconnectAttempts++
+        console.warn(`[SSE] 연결 초기화 실패. 재시도 (${this.reconnectAttempts}/${this.maxReconnectAttempts})...`)
+        
+        // 약간의 지연 후 재연결 (1초)
+        this.reconnectTimer = setTimeout(() => {
+          this.reconnectTimer = null
+          this.connect()
+        }, 1000)
+      } else {
+        // 재시도 횟수 초과 또는 수동 종료
+        if (this.reconnectAttempts >= this.maxReconnectAttempts) {
+          console.warn('[SSE] 최대 재시도 횟수에 도달했습니다. 더 이상 재시도하지 않습니다.')
+        }
+        this.notifyCallbacks({ type: 'sse-error', error: 'connection-failed' })
+      }
     }
   }
 
   /**
-   * 재연결 스케줄링 (무한 재연결, 최대 30초 간격)
+   * 재연결 스케줄링 (사용하지 않음 - 자동 재연결 제거)
+   * 하트비트 신호를 수신하지 못해도 재연결하지 않도록 변경
+   * 로그인할 때만 연결하도록 변경
    */
   scheduleReconnect() {
-    if (this.isManualDisconnect) {
-      console.log('[SSE] 수동 종료 상태, 재연결 안 함')
-      return
-    }
-
-    this.reconnectAttempts++
-    const delay = Math.min(2000 * this.reconnectAttempts, 30000) // 2초, 4초, 6초, ... 최대 30초
-    
-    console.log(`[SSE] 🔄 ${delay / 1000}초 후 재연결 (${this.reconnectAttempts}번째 시도)`)
-
-    this.reconnectTimer = setTimeout(() => {
-      this.reconnectTimer = null
-      this.connect()
-    }, delay)
+    console.warn('[SSE] scheduleReconnect는 더 이상 사용하지 않습니다. (자동 재연결 제거)')
+    // 자동 재연결 제거: 하트비트 신호를 수신하지 못해도 재연결하지 않음
+    // 로그인할 때만 연결하도록 변경
+    return
   }
 
   /**
-   * 연결 상태 헬스 체크 시작 (3분마다)
+   * 연결 상태 헬스 체크 시작 (5분마다)
+   * 연결 상태만 확인하고 로그를 남김 (재연결은 하지 않음)
    */
   startHealthCheck() {
     // 기존 헬스 체크 제거
@@ -216,26 +237,21 @@ class SSEConnection {
       this.healthCheckInterval = null
     }
 
-    // 3분마다 연결 상태 확인 (백엔드 heartbeat: 25초 주기)
+    // 5분마다 연결 상태만 확인 (재연결은 하지 않음)
+    // 백엔드 heartbeat: 15초 주기, 타임아웃: 10일
     this.healthCheckInterval = setInterval(() => {
-      const now = Date.now()
-      const timeSinceLastMessage = now - this.lastMessageTime
-      const maxIdleTime = 180000 // 3분
+      // 연결 상태 확인
+      const isConnected = this.eventSource?.readyState === EventSource.OPEN
 
-      if (timeSinceLastMessage > maxIdleTime) {
-        console.warn('[SSE] ⚠️ 3분 동안 메시지 없음, 재연결 시도')
-        
-        if (this.eventSource) {
-          console.log('[SSE] readyState:', this.eventSource.readyState, '(0=CONNECTING, 1=OPEN, 2=CLOSED)')
-        }
-
-        // 강제 재연결
-        this.cleanup()
-        this.connect()
-      } else {
-        console.log('[SSE] ✅ 연결 정상 (마지막 메시지:', Math.floor(timeSinceLastMessage / 1000), '초 전)')
+      if (!isConnected && !this.isManualDisconnect) {
+        // 연결이 끊어진 경우 로그만 남기고 재연결하지 않음
+        console.warn('[SSE] 헬스 체크: 연결이 끊어졌습니다. (재연결하지 않음, 로그인 시에만 연결)')
+        console.warn('[SSE] 연결 상태:', this.getConnectionStatus())
+      } else if (isConnected) {
+        // 연결 정상 (로그는 필요 시에만 출력)
+        // console.log('[SSE] 헬스 체크: 연결 정상')
       }
-    }, 180000) // 3분
+    }, 300000) // 5분마다 체크
   }
 
   /**
@@ -246,9 +262,6 @@ class SSEConnection {
       // 중복 방지
       if (!this.messageCallbacks.includes(callback)) {
         this.messageCallbacks.push(callback)
-        console.log('[SSE] 📝 콜백 등록, 총:', this.messageCallbacks.length)
-      } else {
-        console.log('[SSE] ⚠️ 이미 등록된 콜백')
       }
     }
   }
@@ -260,7 +273,6 @@ class SSEConnection {
     const index = this.messageCallbacks.indexOf(callback)
     if (index > -1) {
       this.messageCallbacks.splice(index, 1)
-      console.log('[SSE] 🗑️ 콜백 제거, 남은 콜백:', this.messageCallbacks.length)
     }
   }
 
@@ -268,47 +280,59 @@ class SSEConnection {
    * 모든 콜백에 메시지 전달
    */
   notifyCallbacks(data) {
-    console.log('[SSE] 🔔 콜백 실행 시작')
-    console.log('[SSE] 📤 전달 데이터:', data)
-    console.log('[SSE] 📋 등록된 콜백 수:', this.messageCallbacks.length)
-
     if (this.messageCallbacks.length === 0) {
-      console.warn('[SSE] ⚠️ 등록된 콜백이 없습니다!')
       return
     }
 
     // 콜백 배열 복사본 사용 (반복 중 변경 방지)
     const callbacks = [...this.messageCallbacks]
     
-    callbacks.forEach((callback, index) => {
+    callbacks.forEach((callback) => {
       try {
-        console.log(`[SSE] 🎯 콜백 #${index + 1} 실행`)
         callback(data)
-        console.log(`[SSE] ✅ 콜백 #${index + 1} 성공`)
       } catch (error) {
-        console.error(`[SSE] ❌ 콜백 #${index + 1} 실패:`, error)
+        // 콜백 실행 실패 무시
       }
     })
-
-    console.log('[SSE] 🎉 모든 콜백 실행 완료')
   }
 
-  /**
-   * SSE 연결 종료
-   */
-  disconnect() {
-    console.log('[SSE] 🔌 연결 종료 요청')
-    this.isManualDisconnect = true
-    this.cleanup()
-    console.log('[SSE] ✅ 연결 종료 완료')
+/**
+ * SSE 연결 종료
+ */
+disconnect() {
+  this.isManualDisconnect = true
+  this.cleanup()
+}
+
+/**
+ * 서버에 SSE 연결 종료 알림 (로그아웃 시 호출)
+ */
+async disconnectFromServer() {
+  const authStore = useAuthStore()
+  
+  // 인증 정보가 없으면 서버 호출 불필요
+  if (!authStore.memberSeq || !authStore.accessToken) {
+    return
   }
+
+  try {
+    const response = await fetch('/workspace-service/alarms/sse/disconnect', {
+      method: 'GET',
+      headers: {
+        'X-Member-Seq': authStore.memberSeq.toString(),
+        'Authorization': `Bearer ${authStore.accessToken}`
+      },
+      credentials: 'include'
+    })
+  } catch (error) {
+    // 로그아웃 흐름을 방해하지 않도록 에러를 무시
+  }
+}
 
   /**
    * 리소스 정리
    */
   cleanup() {
-    console.log('[SSE] 🧹 리소스 정리 시작')
-
     // 재연결 타이머 제거
     if (this.reconnectTimer) {
       clearTimeout(this.reconnectTimer)
@@ -324,28 +348,29 @@ class SSEConnection {
     // EventSource 종료
     if (this.eventSource) {
       try {
+        // 모든 이벤트 리스너 제거
         this.eventSource.onopen = null
         this.eventSource.onmessage = null
         this.eventSource.onerror = null
-
+        
+        // removeEventListener로 등록된 이벤트들도 제거하려고 시도
+        // (하지만 EventSource는 removeEventListener를 지원하지 않을 수 있음)
+        
         if (this.eventSource.readyState !== EventSource.CLOSED) {
           this.eventSource.close()
         }
       } catch (error) {
-        console.error('[SSE] ❌ 정리 중 오류:', error)
+        // 정리 중 오류 무시
       }
 
       this.eventSource = null
     }
-
-    console.log('[SSE] ✅ 리소스 정리 완료')
   }
 
   /**
    * 재연결 카운터 초기화
    */
   resetReconnection() {
-    console.log('[SSE] 🔄 재연결 카운터 초기화')
     this.reconnectAttempts = 0
     this.isManualDisconnect = false
   }
@@ -354,7 +379,10 @@ class SSEConnection {
    * 연결 상태 확인
    */
   isConnected() {
-    return this.eventSource?.readyState === EventSource.OPEN
+    const isOpen = this.eventSource?.readyState === EventSource.OPEN
+    // 연결이 열려있고, 수동 종료가 아니면 연결된 것으로 간주
+    // 메시지가 없어도 연결 상태는 유지 (백엔드 타임아웃: 10일)
+    return isOpen && !this.isManualDisconnect
   }
 
   /**
@@ -375,9 +403,40 @@ class SSEConnection {
 // 싱글톤 인스턴스
 const sseConnection = new SSEConnection()
 
-// 브라우저 닫기/새로고침 시 연결 종료
-window.addEventListener('beforeunload', () => {
-  sseConnection.disconnect()
-})
+// 브라우저 닫기/새로고침 시 서버에 정상 종료 알림
+// sendBeacon을 사용하여 페이지가 닫히기 전에 서버에 알림 (비동기, 신뢰성 보장)
+if (typeof window !== 'undefined') {
+  window.addEventListener('beforeunload', () => {
+    // 연결되어 있을 때만 서버에 알림
+    if (sseConnection.isConnected()) {
+      const authStore = useAuthStore()
+      
+      // 페이지가 닫히기 전에 서버에 정상 종료 알림 (fetch with keepalive 사용)
+      if (authStore.memberSeq && authStore.accessToken) {
+        try {
+          const url = `${import.meta.env.VITE_API_URL}/workspace-service/alarms/sse/disconnect`
+          
+          // fetch with keepalive 옵션 사용 (페이지가 닫힌 후에도 요청 완료 보장)
+          fetch(url, {
+            method: 'GET',
+            headers: {
+              'X-Member-Seq': authStore.memberSeq.toString(),
+              'Authorization': `Bearer ${authStore.accessToken}`
+            },
+            credentials: 'include',
+            keepalive: true // 페이지가 닫힌 후에도 요청 완료 보장
+          }).catch(() => {
+            // 에러 무시 (페이지가 닫히는 중이므로)
+          })
+        } catch (error) {
+          // 에러 무시 (페이지가 닫히는 중이므로)
+        }
+      }
+      
+      // 클라이언트 측 연결 정리 (서버 알림은 이미 보냄)
+      sseConnection.isManualDisconnect = true
+    }
+  })
+}
 
 export default sseConnection

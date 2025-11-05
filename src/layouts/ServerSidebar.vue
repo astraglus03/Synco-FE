@@ -1,7 +1,9 @@
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue'
 import { useWorkspaceStore } from '@/store/workspaceStore'
-import { createWorkspace, getFriendList, searchMembers } from '@/api/workspace/workSpaceApi'
+import { useNotificationStore } from '@/store/notificationStore'
+import { createWorkspace, getFriendList, searchMembers, getChatChannels } from '@/api/workspace/workSpaceApi'
+import { getIndividualChatChannels } from '@/api/chat/chatApi'
 
 const props = defineProps({
   workspaces: Array,
@@ -12,6 +14,117 @@ const emit = defineEmits(['select-workspace'])
 
 // Store
 const workspaceStore = useWorkspaceStore()
+const notificationStore = useNotificationStore()
+
+// 각 워크스페이스의 채팅 채널 목록 캐시
+const workspaceChatChannelsCache = ref({})
+
+// 개인 워크스페이스의 1:1 채팅 채널 목록 캐시
+const personalDirectMessagesCache = ref([])
+
+// 워크스페이스별 채팅 채널 로드
+const loadWorkspaceChatChannels = async (workSpaceSeq) => {
+  if (!workSpaceSeq) return []
+  
+  // 캐시에 있으면 반환
+  if (workspaceChatChannelsCache.value[workSpaceSeq]) {
+    return workspaceChatChannelsCache.value[workSpaceSeq]
+  }
+  
+  try {
+    const channels = await getChatChannels(workSpaceSeq)
+    workspaceChatChannelsCache.value[workSpaceSeq] = channels || []
+    return channels || []
+  } catch (error) {
+    console.error('워크스페이스 채팅 채널 로드 실패:', error)
+    return []
+  }
+}
+
+// 개인 워크스페이스의 1:1 채팅 채널 목록 로드
+const loadPersonalDirectMessages = async () => {
+  if (personalDirectMessagesCache.value.length > 0) {
+    return personalDirectMessagesCache.value
+  }
+  
+  try {
+    const directMessages = await getIndividualChatChannels()
+    personalDirectMessagesCache.value = directMessages || []
+    return directMessages || []
+  } catch (error) {
+    console.error('개인 워크스페이스 1:1 채팅 채널 로드 실패:', error)
+    return []
+  }
+}
+
+// 워크스페이스별 알림 개수 계산 함수
+const getWorkspaceNotificationCount = (workspace) => {
+  // 현재 선택된 워크스페이스면 알림 표시 안함
+  if (props.currentWorkspace === workspace.id) {
+    return 0
+  }
+  
+  // 개인 워크스페이스인 경우 1:1 채팅 알림 개수 계산
+  if (workspace.type === 'personal') {
+    const directMessages = personalDirectMessagesCache.value || []
+    return notificationStore.getWorkspaceChatNotificationCount(directMessages)
+  }
+  
+  // 프로젝트 워크스페이스인 경우 프로젝트 채팅 알림 개수 계산
+  if (workspace.type === 'project' && workspace.workSpaceSeq) {
+    const channels = workspaceChatChannelsCache.value[workspace.workSpaceSeq] || []
+    return notificationStore.getWorkspaceChatNotificationCount(channels)
+  }
+  
+  return 0
+}
+
+// 반응성을 위한 force update 트리거
+const notificationUpdateTrigger = ref(0)
+
+// 워크스페이스별 알림 상태 computed (반응성 보장)
+const workspaceNotificationMap = computed(() => {
+  // 반응성을 위해 의존성 명시적 참조
+  const currentWs = props.currentWorkspace
+  const workspaces = props.workspaces || []
+  const notificationCounts = notificationStore.channelNotificationCounts
+  const channelsCache = workspaceChatChannelsCache.value
+  const directMessages = personalDirectMessagesCache.value
+  
+  const map = {}
+  
+  // 개인 워크스페이스
+  if (currentWs !== 'personal') {
+    const count = notificationStore.getWorkspaceChatNotificationCount(directMessages || [])
+    map['personal'] = count > 0
+  } else {
+    map['personal'] = false
+  }
+  
+  // 프로젝트 워크스페이스들
+  workspaces
+    .filter(w => w.type === 'project' && w.workSpaceSeq)
+    .forEach(workspace => {
+      if (currentWs === workspace.id) {
+        map[workspace.id] = false
+        return
+      }
+      
+      const channels = channelsCache[workspace.workSpaceSeq] || []
+      const count = notificationStore.getWorkspaceChatNotificationCount(channels)
+      map[workspace.id] = count > 0
+    })
+  
+  return map
+})
+
+// 워크스페이스에 알림이 있는지 확인 (computed 참조)
+const hasWorkspaceNotification = (workspace) => {
+  // notificationUpdateTrigger를 참조하여 반응성 보장
+  notificationUpdateTrigger.value
+  
+  return workspaceNotificationMap.value[workspace.id] || false
+}
 
 // 워크스페이스 생성 다이얼로그 상태
 const createWorkspaceDialog = ref(false)
@@ -312,6 +425,39 @@ const getWorkspaceIconColor = (workspace) => {
 // Lifecycle
 onMounted(() => {
   // MainLayout에서 워크스페이스 목록을 로드하므로 여기서는 불필요
+  // 개인 워크스페이스의 1:1 채팅 채널 목록 로드
+  loadPersonalDirectMessages()
+  
+  
+  // 알림이 변경될 때마다 캐시 갱신 및 UI 업데이트
+  watch(() => notificationStore.channelNotificationCounts, () => {
+    // 알림 개수가 변경되면 1:1 채팅 목록도 다시 로드 (새로운 채팅이 생성되었을 수 있음)
+    loadPersonalDirectMessages()
+    // 반응성 트리거 업데이트 (UI 강제 리렌더링)
+    notificationUpdateTrigger.value++
+  }, { deep: true })
+  
+  // 워크스페이스 목록이 변경되면 알림 상태 업데이트
+  watch(() => props.workspaces, async (newWorkspaces) => {
+    if (!newWorkspaces || newWorkspaces.length === 0) return
+    
+    const projectWorkspaces = newWorkspaces.filter(w => w.type === 'project' && w.workSpaceSeq)
+    
+    // 아직 로드되지 않은 워크스페이스의 채널 목록 로드
+    for (const ws of projectWorkspaces) {
+      if (!workspaceChatChannelsCache.value[ws.workSpaceSeq]) {
+        await loadWorkspaceChatChannels(ws.workSpaceSeq)
+      }
+    }
+    
+    // UI 업데이트 트리거
+    notificationUpdateTrigger.value++
+  }, { immediate: true, deep: true })
+  
+  // 현재 워크스페이스가 변경되면 알림 상태 업데이트
+  watch(() => props.currentWorkspace, () => {
+    notificationUpdateTrigger.value++
+  })
 })
 </script>
 
@@ -321,7 +467,10 @@ onMounted(() => {
     <!-- 홈 버튼 (개인 워크스페이스 접근용) -->
     <div 
       class="server-icon home"
-      :class="{ 'active': currentWorkspace === 'personal' }"
+      :class="{ 
+        'active': props.currentWorkspace === 'personal',
+        'has-notification': hasWorkspaceNotification({ id: 'personal', type: 'personal' })
+      }"
       @click="emit('select-workspace', 'personal')"
     >
       <v-icon>mdi-home</v-icon>
@@ -333,10 +482,13 @@ onMounted(() => {
     <!-- 프로젝트 워크스페이스 목록 (스크롤 영역) -->
     <div class="workspaces-scroll-container">
       <div 
-        v-for="workspace in workspaces.filter(w => w.type === 'project')"
+        v-for="workspace in (workspaces || []).filter(w => w.type === 'project')"
         :key="workspace.id"
         class="server-icon project"
-        :class="{ 'active': currentWorkspace === workspace.id }"
+        :class="{ 
+          'active': props.currentWorkspace === workspace.id,
+          'has-notification': hasWorkspaceNotification(workspace)
+        }"
         @click="emit('select-workspace', workspace.id)"
       >
         <img 
@@ -737,6 +889,8 @@ onMounted(() => {
   bottom: 0;
   z-index: 100;
   transition: width 0.3s ease;
+  overflow-x: hidden; /* 좌우 스크롤바 제거 */
+  overflow-y: hidden; /* 세로 스크롤은 스크롤 컨테이너에서 처리 */
 }
 
 /* 프로젝트 목록 스크롤 영역 */
@@ -745,7 +899,7 @@ onMounted(() => {
   width: 100%;
   min-height: 0; /* 중요: flex child의 스크롤을 위해 필수 */
   overflow-y: auto;
-  overflow-x: visible; /* 좌측 액티브 인디케이터가 잘리지 않도록 */
+  overflow-x: hidden; /* 좌우 스크롤바 제거 */
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -836,6 +990,27 @@ onMounted(() => {
   background: rgb(var(--v-theme-primary));
 }
 
+/* 알림 인디케이터 (오른쪽, 왼쪽 인디케이터와 동일한 스타일) */
+.server-icon::after {
+  content: '';
+  position: absolute;
+  right: -6px;
+  width: 4px;
+  height: 0;
+  background: transparent;
+  border-radius: 4px 0 0 4px;
+  top: 50%;
+  transform: translateY(-50%);
+  transition: height 0.15s ease, background 0.15s ease, right 0.15s ease;
+  z-index: 2;
+}
+
+/* 알림이 있을 때 오른쪽 인디케이터 표시 (호버처럼 작게) */
+.server-icon.has-notification::after {
+  height: 12px;
+  background: rgba(var(--v-theme-primary), 0.6);
+}
+
 .workspace-thumbnail {
   width: 100%;
   height: 100%;
@@ -875,13 +1050,26 @@ onMounted(() => {
   .server-sidebar {
     width: 60px !important;
     top: 56px;
+    padding: 12px 4px !important; /* 좌우 padding 줄여서 아이콘 공간 확보 */
+    overflow-x: hidden !important; /* 좌우 스크롤바 제거 */
+  }
+
+  .workspaces-scroll-container {
+    padding: 0 0 6px 0 !important; /* 좌우 padding 제거 */
+    overflow-x: hidden !important; /* 좌우 스크롤바 제거 */
+    width: 100% !important;
   }
   
   .server-icon {
     width: 44px;
     height: 44px;
     font-size: 16px;
-    margin-left: 6px;
+    margin-left: 0 !important; /* margin-left 제거하여 중앙 정렬 */
+  }
+
+  /* 왼쪽 인디케이터 위치 조정 */
+  .server-icon::before {
+    left: -4px !important; /* 1024px 이하에서는 좀 더 안쪽으로 */
   }
   
   .server-icon .v-icon {
@@ -893,13 +1081,26 @@ onMounted(() => {
   .server-sidebar {
     width: 56px !important;
     top: 56px;
+    padding: 12px 4px !important; /* 좌우 padding 줄여서 아이콘 공간 확보 */
+    overflow-x: hidden !important; /* 좌우 스크롤바 제거 */
+  }
+
+  .workspaces-scroll-container {
+    padding: 0 0 6px 0 !important; /* 좌우 padding 제거 */
+    overflow-x: hidden !important; /* 좌우 스크롤바 제거 */
+    width: 100% !important;
   }
   
   .server-icon {
     width: 40px;
     height: 40px;
     font-size: 14px;
-    margin-left: 6px;
+    margin-left: 0 !important; /* margin-left 제거하여 중앙 정렬 */
+  }
+
+  /* 왼쪽 인디케이터 위치 조정 */
+  .server-icon::before {
+    left: -4px !important; /* 768px 이하에서는 좀 더 안쪽으로 */
   }
   
   .server-icon .v-icon {
@@ -911,13 +1112,26 @@ onMounted(() => {
   .server-sidebar {
     width: 52px !important;
     top: 56px;
+    padding: 10px 4px !important; /* 좌우 padding 줄여서 아이콘 공간 확보 */
+    overflow-x: hidden !important; /* 좌우 스크롤바 제거 */
+  }
+
+  .workspaces-scroll-container {
+    padding: 0 0 6px 0 !important; /* 좌우 padding 제거 */
+    overflow-x: hidden !important; /* 좌우 스크롤바 제거 */
+    width: 100% !important;
   }
   
   .server-icon {
     width: 36px;
     height: 36px;
     font-size: 12px;
-    margin-left: 6px;
+    margin-left: 0 !important; /* margin-left 제거하여 중앙 정렬 */
+  }
+
+  /* 왼쪽 인디케이터 위치 조정 */
+  .server-icon::before {
+    left: -4px !important; /* 480px 이하에서는 좀 더 안쪽으로 */
   }
   
   .server-icon .v-icon {
