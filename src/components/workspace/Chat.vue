@@ -381,13 +381,48 @@ const connectWebsocket = () => {
               messages.value.push(formattedMessage);
               scrollToBottom();
 
-              // ✅ 현재 채널을 보고 있을 때 메시지를 받으면 알림 초기화
-              // (Chat.vue가 현재 보고 있는 채널이므로 알림이 있으면 안됨)
-              if (channelSeq.value && parsed.channelSeq && 
-                  Number(channelSeq.value) === Number(parsed.channelSeq)) {
+              // ✅ 현재 채널을 보고 있을 때만 메시지를 받으면 알림 초기화
+              // workspaceStore의 선택된 채널과 비교하여 실제로 선택된 채널인지 확인
+              const currentSelectedChannel = workspaceStore.selectedSubChannel;
+              const currentMainChannel = workspaceStore.currentChannel;
+              const messageChannelSeq = Number(parsed.channelSeq);
+              const messageChannelSeqStr = String(parsed.channelSeq);
+              
+              // 실제로 현재 선택된 채널인지 확인
+              let isCurrentlySelected = false;
+              if (currentMainChannel === 'chat' && currentSelectedChannel && channelSeq.value) {
+                const selectedChannelNum = Number(String(currentSelectedChannel).replace('chat_', ''));
+                isCurrentlySelected = 
+                  (selectedChannelNum === messageChannelSeq && selectedChannelNum === Number(channelSeq.value)) ||
+                  (currentSelectedChannel === messageChannelSeqStr && Number(channelSeq.value) === messageChannelSeq);
+              }
+              
+              // 실제로 선택된 채널이고 현재 보고 있는 채널일 때만 알림 초기화
+              if (isCurrentlySelected && channelSeq.value && parsed.channelSeq && 
+                  Number(channelSeq.value) === messageChannelSeq) {
                 const channelSeqStr = String(channelSeq.value);
                 if (notificationStore.getChannelNotificationCount(channelSeqStr) > 0) {
                   notificationStore.clearChannelNotificationCount(channelSeqStr);
+                  console.log('[Chat.vue] ✅ 현재 선택된 채널에서 메시지 수신, 알림 초기화:', channelSeqStr);
+                }
+              }
+
+              // ✅ 1:1 채팅일 때 사이드바 마지막 메시지 업데이트 (알림 메시지 형식)
+              if (isPersonalChat.value && parsed.channelSeq) {
+                // 알림 메시지 형식: 메시지 내용만
+                let notificationMessage = "";
+                
+                if (formattedMessage.files && formattedMessage.files.length > 0) {
+                  notificationMessage = "[파일]";
+                } else if (formattedMessage.content && formattedMessage.content.trim()) {
+                  notificationMessage = formattedMessage.content;
+                }
+                
+                if (notificationMessage) {
+                  emitter.emit("update-direct-message-last-message", {
+                    channelSeq: parsed.channelSeq,
+                    lastMessage: notificationMessage,
+                  });
                 }
               }
             }
@@ -633,20 +668,21 @@ const sendMessage = async () => {
     // 메시지 추가 후 DOM 업데이트를 기다린 후 스크롤 (자신이 보낸 메시지는 강제 스크롤)
     scrollToBottom(true);
 
-    // ✅ 1:1 채팅 목록의 마지막 메시지 업데이트 이벤트 발생
-    if (channelSeq.value) {
-      // 백엔드 형식에 맞춰서: 파일이 있으면 "[파일]", 텍스트가 있으면 텍스트
-      let messageContent = "";
+    // ✅ 1:1 채팅 목록의 마지막 메시지 업데이트 이벤트 발생 (알림 메시지 형식)
+    if (isPersonalChat.value && channelSeq.value) {
+      // 알림 메시지 형식: 메시지 내용만
+      let notificationMessage = "";
+      
       if (uploadedUrls.length > 0) {
-        messageContent = "[파일]"; // 백엔드와 동일한 형식
+        notificationMessage = "[파일]";
       } else if (localMessage.content && localMessage.content.trim()) {
-        messageContent = localMessage.content;
+        notificationMessage = localMessage.content;
       }
       
-      if (messageContent) {
-        emitter.emit("update-direct-message", {
+      if (notificationMessage) {
+        emitter.emit("update-direct-message-last-message", {
           channelSeq: channelSeq.value,
-          lastMessage: messageContent,
+          lastMessage: notificationMessage,
         });
       }
     }
@@ -928,6 +964,11 @@ const changeChannel = async (channelId) => {
   hasMoreMessages.value = true;
   isLoadingMessages.value = false;
   lastReadMessageSeq.value = null; // ✅ 마지막 읽은 메시지 초기화
+
+  // ✅ 1:1 채팅일 때 상대방 정보 로드
+  if (isPersonalChat.value) {
+    await loadChatUserInfo(channelSeq.value);
+  }
 
   try {
     // ✅ 1단계: 마지막 읽은 이후의 새 메시지 로드
@@ -1659,13 +1700,15 @@ const shouldShowTime = (message, index) => {
 };
 
 // 1:1 채팅 상대방 정보 가져오기 
-const loadChatUserInfo = async () => {
-  if (!isPersonalChat.value || !props.selectedChannel) return;
+const loadChatUserInfo = async (targetChannelSeq = null) => {
+  // targetChannelSeq가 제공되면 그것을 사용, 없으면 props.selectedChannel 사용
+  const channelSeqToUse = targetChannelSeq || props.selectedChannel;
+  
+  if (!isPersonalChat.value || !channelSeqToUse) return;
 
   try {
-    const channelSeq = parseInt(props.selectedChannel);
+    const channelSeq = parseInt(channelSeqToUse);
     if (!channelSeq || isNaN(channelSeq)) {
-      console.error("❌ 유효하지 않은 channelSeq:", props.selectedChannel);
       return;
     }
 
@@ -1673,7 +1716,6 @@ const loadChatUserInfo = async () => {
     const members = await getChannelMembers(channelSeq);
     
     if (!members || members.length === 0) {
-      console.warn("⚠️ 채널 멤버를 찾을 수 없습니다.");
       return;
     }
 
@@ -1683,7 +1725,6 @@ const loadChatUserInfo = async () => {
     );
 
     if (!otherMember) {
-      console.warn("⚠️ 상대방을 찾을 수 없습니다.");
       return;
     }
 
@@ -1718,7 +1759,6 @@ const loadChatUserInfo = async () => {
       commonWorkspaces: commonWorkspaces // ✅ 워크스페이스 정보 (이름 포함)
     };
   } catch (e) {
-    console.error("❌ 1:1 채팅 사용자 정보 로드 실패:", e);
     chatUserInfo.value = null;
   }
 };
@@ -1804,6 +1844,11 @@ onMounted(async () => {
 
   // ✅ 채널 참여 멤버 목록 초기화 (백엔드 API 호출)
   await loadChannelMembers();
+
+  // ✅ 1:1 채팅일 때 상대방 정보 로드
+  if (isPersonalChat.value) {
+    await loadChatUserInfo(channelSeq.value);
+  }
 
   // ✅ memberSeq와 channelSeq가 유효할 때만 채널 로드
   if (memberSeq.value > 0 && currentChannel.value && channelSeq.value > 0) {
