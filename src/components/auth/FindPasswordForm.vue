@@ -3,7 +3,7 @@
     <!-- 헤더 -->
     <div class="find-password-header">
       <div class="brand-logo">
-        <h1 class="brand-name">Synco</h1>
+        <img src="/synco_combined.png" alt="Synco" class="brand-logo-img" />
       </div>
       <p class="welcome-text">비밀번호를 찾아보세요</p>
     </div>
@@ -281,14 +281,11 @@ const resendEmail = async () => {
   margin-bottom: 1rem;
 }
 
-.brand-name {
-  font-size: 2rem;
-  font-weight: 700;
-  background: linear-gradient(135deg, #3b82f6 0%, #6366f1 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-  margin: 0;
+.brand-logo-img {
+  height: 2.5rem;
+  width: auto;
+  object-fit: contain;
+  display: block;
 }
 
 .welcome-text {
