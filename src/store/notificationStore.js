@@ -280,69 +280,111 @@ export const useNotificationStore = defineStore('notification', () => {
           // 1:1 채팅은 현재 워크스페이스 타입과 관계없이 항상 1:1 채팅으로 처리
           // (다른 워크스페이스를 선택 중이어도 1:1 채팅 알림은 처리해야 함)
           
-          // 현재 선택된 채널인지 확인 (모든 워크스페이스 타입에서 체크)
+          // 현재 선택된 채널인지 확인
           const workspaceStore = useWorkspaceStore()
           const currentSelectedChannel = workspaceStore.selectedSubChannel
           const currentMainChannel = workspaceStore.currentChannel
           
           const targetSeqStr = String(targetSeq)
-          // 1:1 채팅이 선택되어 있는지 확인
-          // currentMainChannel이 'chat'이고 selectedSubChannel이 channelSeq와 같으면 선택된 상태
-          const isCurrentlySelected = 
-            currentMainChannel === 'chat' && 
-            (currentSelectedChannel === targetSeqStr || 
-             currentSelectedChannel?.replace('chat_', '') === targetSeqStr)
+          const targetSeqNum = Number(targetSeq)
           
-          if (isCurrentlySelected) {
-            // 현재 선택된 1:1 채팅 채널이면 알림을 증가시키지 않음
-            console.log('[알림 Store] ⏭️ 현재 선택된 1:1 채팅 채널이므로 알림 스킵:', targetSeq, '현재 워크스페이스:', currentWorkspaceType.value)
-            return
+          // 1:1 채팅이 선택되어 있는지 확인
+          // ✅ 더 엄격한 체크: currentMainChannel이 'chat'이고 currentSelectedChannel이 정확히 해당 채널과 일치해야 함
+          let isCurrentlySelected = false
+          if (currentMainChannel === 'chat' && currentSelectedChannel) {
+            const selectedChannelNum = Number(String(currentSelectedChannel).replace('chat_', ''))
+            isCurrentlySelected = 
+              selectedChannelNum === targetSeqNum ||
+              currentSelectedChannel === targetSeqStr ||
+              String(currentSelectedChannel).replace('chat_', '') === targetSeqStr
+          }
+          // currentMainChannel이 'chat'이 아니거나 currentSelectedChannel이 null/빈 문자열이면 선택되지 않은 것으로 판단
+          
+          const key = String(targetSeq)
+          
+          // ✅ 선택된 채널이 아니면 알림 개수 증가
+          if (!isCurrentlySelected) {
+            channelNotificationCounts.value[key] = (channelNotificationCounts.value[key] || 0) + 1
+            console.log('[알림 Store] 📢 1:1 채팅 알림, 채널:', targetSeq, '개수:', channelNotificationCounts.value[key], '현재 선택된 채널:', currentSelectedChannel, '메인 채널:', currentMainChannel)
+          } else {
+            // 선택된 채널이면 알림 개수 증가하지 않음 (0으로 유지)
+            channelNotificationCounts.value[key] = 0
+            console.log('[알림 Store] ✅ 현재 선택된 1:1 채팅 채널이므로 알림 개수 증가 안함:', targetSeq)
           }
           
-          // ✅ 1:1 채팅 알림 처리
-          // 프로젝트 채팅처럼 channelNotificationCounts에만 증가
-          // (개인/프로젝트 워크스페이스 모두 동일하게 처리)
-          const key = String(targetSeq)
-          channelNotificationCounts.value[key] = (channelNotificationCounts.value[key] || 0) + 1
-          console.log('[알림 Store] 📢 1:1 채팅 알림, 채널:', targetSeq, '개수:', channelNotificationCounts.value[key])
-          
           // 마지막 메시지 업데이트
-          const messageContent = data.message || data.content || data.chatMessageText || '';
+          // 다양한 필드에서 메시지 내용 추출 시도
+          const messageContent = data.data?.message ;
+          
+          console.log('[알림 Store] 📝 추출된 메시지 내용:', messageContent, '원본 데이터:', data);
+          
           if (messageContent) {
             emitter.emit('update-direct-message-last-message', {
               channelSeq: targetSeq,
               lastMessage: messageContent
             });
+            console.log('[알림 Store] ✅ 마지막 메시지 업데이트 이벤트 발생:', { channelSeq: targetSeq, lastMessage: messageContent });
+          } else {
+            console.warn('[알림 Store] ⚠️ 메시지 내용을 찾을 수 없습니다. 데이터 구조:', data);
           }
         } else {
           // 프로젝트 채팅 채널: channelNotificationCounts 사용
           // workSpaceSeq가 있으면 프로젝트 채팅이므로 현재 워크스페이스 타입과 관계없이 항상 처리
           // (개인 워크스페이스에 있어도 프로젝트 채팅 알림은 쌓여야 함)
           
-          // 현재 선택된 채널인지 확인 (현재 워크스페이스가 프로젝트이고 해당 채널을 보고 있을 때만 스킵)
+          // 현재 선택된 채널인지 확인
           const workspaceStore = useWorkspaceStore()
           const currentSelectedChannel = workspaceStore.selectedSubChannel
           const currentMainChannel = workspaceStore.currentChannel
           
-          // 현재 선택된 채널인지 확인
-          // selectedSubChannel이 'chat_${channelSeq}' 형식이거나 그냥 channelSeq 문자열일 수 있음
           const targetSeqStr = String(targetSeq)
-          const isCurrentlySelected = 
-            currentMainChannel === 'chat' && 
-            (currentSelectedChannel === targetSeqStr || 
-             currentSelectedChannel === `chat_${targetSeqStr}` ||
-             currentSelectedChannel?.replace('chat_', '') === targetSeqStr)
+          const targetSeqNum = Number(targetSeq)
           
-          if (isCurrentlySelected) {
-            // 현재 선택된 채널이면 알림을 증가시키지 않음
-            console.log('[알림 Store] ⏭️ 현재 선택된 채널이므로 알림 스킵:', targetSeq)
-            return
+          // 프로젝트 채팅이 선택되어 있는지 확인
+          // ✅ 더 엄격한 체크: currentMainChannel이 'chat'이고 currentSelectedChannel이 정확히 해당 채널과 일치해야 함
+          let isCurrentlySelected = false
+          if (currentMainChannel === 'chat' && currentSelectedChannel) {
+            const selectedChannelNum = Number(String(currentSelectedChannel).replace('chat_', ''))
+            isCurrentlySelected = 
+              selectedChannelNum === targetSeqNum ||
+              currentSelectedChannel === targetSeqStr ||
+              currentSelectedChannel === `chat_${targetSeqStr}` ||
+              String(currentSelectedChannel).replace('chat_', '') === targetSeqStr
+          }
+          // currentMainChannel이 'chat'이 아니거나 currentSelectedChannel이 null/빈 문자열이면 선택되지 않은 것으로 판단
+          
+          const key = String(targetSeq)
+          
+          // ✅ 선택된 채널이 아니면 알림 개수 증가
+          if (!isCurrentlySelected) {
+            channelNotificationCounts.value[key] = (channelNotificationCounts.value[key] || 0) + 1
+            console.log('[알림 Store] 📢 프로젝트 채팅 알림, 채널:', targetSeq, '개수:', channelNotificationCounts.value[key], '워크스페이스:', workSpaceSeq || '미지정', '현재 선택된 채널:', currentSelectedChannel, '메인 채널:', currentMainChannel)
+          } else {
+            // 선택된 채널이면 알림 개수 증가하지 않음 (0으로 유지)
+            channelNotificationCounts.value[key] = 0
+            console.log('[알림 Store] ✅ 현재 선택된 프로젝트 채팅 채널이므로 알림 개수 증가 안함:', targetSeq)
           }
           
-          // 선택된 채널이 아니면 알림 개수 증가 (현재 워크스페이스 타입과 관계없이 항상 처리)
-          const key = String(targetSeq)
-          channelNotificationCounts.value[key] = (channelNotificationCounts.value[key] || 0) + 1
-          console.log('[알림 Store] 📢 프로젝트 채팅 알림, 채널:', targetSeq, '개수:', channelNotificationCounts.value[key], '워크스페이스:', workSpaceSeq || '미지정', '현재 워크스페이스:', currentWorkspaceType.value)
+          // 마지막 메시지 업데이트 (프로젝트 채팅도 목록에 표시되므로 업데이트 필요)
+          // 다양한 필드에서 메시지 내용 추출 시도
+          console.log('[알림 Store] 🔍 프로젝트 채팅 메시지 추출 시작, data.message:', data.message, 'data:', data);
+          
+          const messageContent = data.message || data.content || data.chatMessageText || 
+                                 data.data?.message;
+          
+          console.log('[알림 Store] 📝 추출된 메시지 내용:', messageContent);
+          
+          // 메시지 내용이 있으면 무조건 이벤트 발생 (directMessages에 있으면 업데이트, 없으면 무시)
+          if (messageContent && messageContent.trim()) {
+            console.log('[알림 Store] ✅ 메시지 내용 있음, 이벤트 발생');
+            emitter.emit('update-direct-message-last-message', {
+              channelSeq: targetSeq,
+              lastMessage: messageContent.trim()
+            });
+            console.log('[알림 Store] ✅ 프로젝트 채팅 마지막 메시지 업데이트 이벤트 발생:', { channelSeq: targetSeq, lastMessage: messageContent.trim() });
+          } else {
+            console.warn('[알림 Store] ⚠️ 메시지 내용이 없거나 비어있음:', { messageContent, data });
+          }
         }
         
         // alarm-chat은 알림 목록에 추가하지 않음

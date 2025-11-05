@@ -374,27 +374,30 @@ const connectPersonalChatWebSocket = () => {
                 return;
               }
 
-              // ✅ 알림 개수 증가 (현재 선택된 채팅방이 아니면)
-              // 프로젝트 채팅처럼 notificationStore의 channelNotificationCounts만 사용
-              const workspaceStore = useWorkspaceStore();
+              // ✅ 현재 선택된 채널인지 확인
               const currentSelectedChannel = workspaceStore.selectedSubChannel;
               const currentMainChannel = workspaceStore.currentChannel;
-              const channelSeqStr = parsed.channelSeq?.toString();
+              const targetSeqStr = String(parsed.channelSeq);
+              const targetSeqNum = Number(parsed.channelSeq);
               
-              // 현재 선택된 채널인지 확인 (모든 워크스페이스 타입에서 체크)
-              const isCurrentlySelected = 
-                currentMainChannel === 'chat' && 
-                (currentSelectedChannel === channelSeqStr || 
-                 currentSelectedChannel?.replace('chat_', '') === channelSeqStr);
-              
+              // 현재 선택된 채널인지 확인
+              let isCurrentlySelected = false;
+              if (currentMainChannel === 'chat' && currentSelectedChannel) {
+                const selectedChannelNum = Number(String(currentSelectedChannel).replace('chat_', ''));
+                isCurrentlySelected = 
+                  selectedChannelNum === targetSeqNum ||
+                  currentSelectedChannel === targetSeqStr ||
+                  String(currentSelectedChannel).replace('chat_', '') === targetSeqStr;
+              }
+
+              // ✅ 선택된 채널이 아니면 알림 개수 증가
               if (!isCurrentlySelected) {
-                // notificationStore의 channelNotificationCounts에만 증가
                 const key = String(parsed.channelSeq);
                 notificationStore.channelNotificationCounts[key] = 
                   (notificationStore.channelNotificationCounts[key] || 0) + 1;
-                console.log(`✅ ${parsed.channelSeq} 알림 개수 증가: ${notificationStore.channelNotificationCounts[key]}, 선택된 채널: ${currentSelectedChannel}`);
+                console.log(`✅ ${parsed.channelSeq} 알림 개수 증가: ${notificationStore.channelNotificationCounts[key]}, 현재 선택된 채널: ${currentSelectedChannel}, 메인 채널: ${currentMainChannel}`);
               } else {
-                console.log(`⏭️ ${parsed.channelSeq}는 현재 선택된 채널이므로 알림 스킵`);
+                console.log(`✅ ${parsed.channelSeq} 현재 선택된 채널이므로 알림 개수 증가 안함`);
               }
 
               // ✅ 마지막 메시지 업데이트
@@ -1034,20 +1037,37 @@ onMounted(() => {
   // ✅ 1:1 채팅 마지막 메시지 업데이트 이벤트 리스너 (SSE 알림용)
   // 알림 개수는 notificationStore.channelNotificationCounts에 직접 저장되므로 별도 처리 불필요
 
-  // ✅ 1:1 채팅 마지막 메시지 업데이트 이벤트 리스너 추가 (개인 워크스페이스에서 SSE 알림용)
+  // ✅ 1:1 채팅 마지막 메시지 업데이트 이벤트 리스너 추가 (개인/프로젝트 워크스페이스 모두에서 SSE 알림용)
   emitter.on("update-direct-message-last-message", (data) => {
     console.log("📨 1:1 채팅 마지막 메시지 업데이트 이벤트 수신:", data);
-    if (props.workspaceType === "personal") {
-      const dm = directMessages.value.find((d) => d.channelSeq === data.channelSeq);
-      if (dm && data.lastMessage) {
-        // 마지막 메시지만 업데이트 (unreadCount는 WebSocket에서 처리하므로 여기서는 증가시키지 않음)
+    console.log("📨 현재 워크스페이스 타입:", props.workspaceType);
+    console.log("📨 현재 directMessages 개수:", directMessages.value.length);
+    
+    // 개인/프로젝트 워크스페이스 모두에서 처리 (1:1 채팅은 모든 워크스페이스에서 표시 가능)
+    if (data.channelSeq && data.lastMessage) {
+      // channelSeq 타입 변환 (문자열/숫자 모두 처리)
+      const targetChannelSeq = Number(data.channelSeq);
+      
+      // directMessages에서 해당 채널 찾기 (channelSeq 타입 일치 처리)
+      const dm = directMessages.value.find((d) => {
+        const dmChannelSeq = Number(d.channelSeq);
+        return dmChannelSeq === targetChannelSeq;
+      });
+      
+      if (dm) {
+        // 마지막 메시지만 업데이트 (unreadCount는 notificationStore에서 처리)
         const messageText =
           data.lastMessage.length > 50
             ? data.lastMessage.substring(0, 50) + "..."
             : data.lastMessage;
         dm.lastMessage = messageText;
-        console.log(`✅ ${dm.channelName}의 마지막 메시지 업데이트`);
+        console.log(`✅ ${dm.channelName || dm.channelSeq}의 마지막 메시지 업데이트:`, messageText);
+      } else {
+        console.warn("⚠️ 해당 채널을 찾을 수 없습니다. channelSeq:", data.channelSeq);
+        console.warn("⚠️ 현재 directMessages:", directMessages.value.map(d => ({ channelSeq: d.channelSeq, name: d.channelName })));
       }
+    } else {
+      console.warn("⚠️ 이벤트 데이터가 올바르지 않습니다:", data);
     }
   });
 
