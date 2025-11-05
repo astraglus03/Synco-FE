@@ -69,6 +69,7 @@ const sharedDocTitle = ref('')
 const sharedDocLocation = ref(null)
 const sharedDocIsLocked = ref(false)
 const showFolderSelector = ref(false)
+const isCreatingSharedDoc = ref(false)
 const showDocEditor = ref(false)
 const currentDocument = ref(null)
 
@@ -501,16 +502,24 @@ const goBack = async () => {
 
 // 전체 폴더 목록 로드
 const loadAllFolders = async () => {
+  if (!currentDriveChannelSeq.value) {
+    console.warn('driveChannelSeq가 없습니다. 워크스페이스를 확인하세요.')
+    return
+  }
+  
+  // 스토어의 currentDriveChannelSeq가 설정되지 않았다면 loadItems를 먼저 호출
+  if (!driveStore.currentDriveChannelSeq) {
+    await driveStore.loadItems(currentDriveChannelSeq.value, null)
+  }
+  
   loadingFolders.value = true
   try {
     const result = await driveStore.getAllFolders()
-('getAllFolders result:', result) // 디버깅용
     if (result.success) {
       allFolders.value = result.data
-('allFolders.value set to:', allFolders.value) // 디버깅용
     }
   } catch (error) {
-('전체 폴더 목록 로드 실패:', error)
+    console.error('전체 폴더 목록 로드 실패:', error)
   } finally {
     loadingFolders.value = false
   }
@@ -712,9 +721,7 @@ const flattenedFolders = computed(() => {
     })
   }
   
-('allFolders.value:', allFolders.value) // 디버깅용
   flatten(buildFolderHierarchy(allFolders.value))
-('flattenedFolders result:', result) // 디버깅용
   return result
 })
 
@@ -950,22 +957,27 @@ const formatFileSizeFromBytes = (bytes) => {
 
 // 공유문서 생성
 const createSharedDoc = async () => {
-  if (!sharedDocTitle.value.trim()) return
+  if (!sharedDocTitle.value.trim() || isCreatingSharedDoc.value) return
   
-  // 선택한 폴더 위치를 사용
-  const parentFolderId = sharedDocLocation.value
-  
-  const result = await driveStore.createSharedDocument(sharedDocTitle.value.trim(), parentFolderId, sharedDocIsLocked.value)
-  if (result.success) {
-    // 폼 초기화
-    sharedDocTitle.value = ''
-    sharedDocLocation.value = null
-    sharedDocIsLocked.value = false
-    showSharedDocModal.value = false
-    showFolderSelector.value = false
-    // 스토어에서 이미 현재 폴더에 생성된 경우 자동으로 추가되므로 API 재호출 불필요
-  } else {
-    showError('공유문서 생성 실패', result.error || '공유문서 생성 중 오류가 발생했습니다.')
+  isCreatingSharedDoc.value = true
+  try {
+    // 선택한 폴더 위치를 사용
+    const parentFolderId = sharedDocLocation.value
+    
+    const result = await driveStore.createSharedDocument(sharedDocTitle.value.trim(), parentFolderId, sharedDocIsLocked.value)
+    if (result.success) {
+      // 폼 초기화
+      sharedDocTitle.value = ''
+      sharedDocLocation.value = null
+      sharedDocIsLocked.value = false
+      showSharedDocModal.value = false
+      showFolderSelector.value = false
+      // 스토어에서 이미 현재 폴더에 생성된 경우 자동으로 추가되므로 API 재호출 불필요
+    } else {
+      showError('공유문서 생성 실패', result.error || '공유문서 생성 중 오류가 발생했습니다.')
+    }
+  } finally {
+    isCreatingSharedDoc.value = false
   }
 }
 
@@ -1768,7 +1780,8 @@ watch(() => props.currentChannel, (newChannel, oldChannel) => {
           <v-btn 
             color="primary" 
             @click="createSharedDoc"
-            :disabled="!sharedDocTitle.trim()"
+            :disabled="!sharedDocTitle.trim() || isCreatingSharedDoc"
+            :loading="isCreatingSharedDoc"
           >
             만들기
           </v-btn>

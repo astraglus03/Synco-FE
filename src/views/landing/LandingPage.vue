@@ -5,7 +5,7 @@
       <div class="nav-container">
         <div class="nav-brand">
           <div class="logo">
-            <span class="brand-text">Synco</span>
+            <img src="/synco_logo_name.png" alt="Synco" class="brand-logo" />
           </div>
         </div>
         <div class="nav-links">
@@ -589,7 +589,7 @@ onMounted(() => {
 .nav-container {
   max-width: 1200px;
   margin: 0 auto;
-  padding: 0 2rem;
+  padding: 0 2rem 0 0;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -602,10 +602,10 @@ onMounted(() => {
   gap: 0.5rem;
 }
 
-.brand-text {
-  font-size: 1.5rem;
-  font-weight: 700;
-  color: #3b82f6;
+.brand-logo {
+  height: 5rem;
+  width: auto;
+  object-fit: contain;
 }
 
 .nav-links {

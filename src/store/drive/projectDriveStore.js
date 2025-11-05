@@ -412,6 +412,11 @@ export const useProjectDriveStore = defineStore('projectDrive', () => {
     error.value = null
 
     try {
+      if (!currentDriveChannelSeq.value) {
+        error.value = '드라이브 채널 시퀀스가 없습니다.'
+        return { success: false, error: error.value }
+      }
+
       const result = await projectDriveApi.getAllFolders(currentDriveChannelSeq.value)
       
       if (result.success) {
@@ -425,7 +430,7 @@ export const useProjectDriveStore = defineStore('projectDrive', () => {
       }
     } catch (err) {
       error.value = '전체 폴더 조회에 실패했습니다.'
-('프로젝트 드라이브 전체 폴더 조회 실패:', err)
+      console.error('프로젝트 드라이브 전체 폴더 조회 실패:', err)
       return { success: false, error: error.value }
     } finally {
       isLoading.value = false
