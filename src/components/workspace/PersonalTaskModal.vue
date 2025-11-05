@@ -283,13 +283,33 @@ const openDatePicker = (type) => {
 
 // 시작일 업데이트
 const updateStartDate = (value) => {
-  taskData.value.startDate = value
+  // v-date-picker가 Date 객체를 반환할 수 있으므로 문자열로 변환
+  if (value instanceof Date) {
+    const year = value.getFullYear()
+    const month = String(value.getMonth() + 1).padStart(2, '0')
+    const day = String(value.getDate()).padStart(2, '0')
+    taskData.value.startDate = `${year}-${month}-${day}`
+  } else if (typeof value === 'string') {
+    taskData.value.startDate = value
+  } else {
+    taskData.value.startDate = value ? String(value) : ''
+  }
   startDateMenu.value = false
 }
 
 // 종료일 업데이트
 const updateEndDate = (value) => {
-  taskData.value.endDate = value
+  // v-date-picker가 Date 객체를 반환할 수 있으므로 문자열로 변환
+  if (value instanceof Date) {
+    const year = value.getFullYear()
+    const month = String(value.getMonth() + 1).padStart(2, '0')
+    const day = String(value.getDate()).padStart(2, '0')
+    taskData.value.endDate = `${year}-${month}-${day}`
+  } else if (typeof value === 'string') {
+    taskData.value.endDate = value
+  } else {
+    taskData.value.endDate = value ? String(value) : ''
+  }
   endDateMenu.value = false
 }
 
@@ -311,6 +331,12 @@ const saveTask = async () => {
 
     if (props.isEditMode) {
       // 수정 모드
+      console.log('📝 [PersonalTaskModal] 일정 수정 요청 데이터:', {
+        taskSeq: props.editTaskData.taskSeq,
+        workSpaceSeq: props.workSpaceSeq,
+        taskData: taskData.value,
+        rawTaskData: JSON.parse(JSON.stringify(taskData.value))
+      })
       await updatePersonalTask(props.editTaskData.taskSeq, taskData.value)
       
       alert('일정이 성공적으로 수정되었습니다.')
@@ -318,6 +344,15 @@ const saveTask = async () => {
       closeModal()
     } else {
       // 생성 모드
+      console.log('➕ [PersonalTaskModal] 일정 생성 요청 데이터:', {
+        workSpaceSeq: props.workSpaceSeq,
+        taskData: taskData.value,
+        rawTaskData: JSON.parse(JSON.stringify(taskData.value)),
+        startDate: taskData.value.startDate,
+        endDate: taskData.value.endDate,
+        startDateType: typeof taskData.value.startDate,
+        endDateType: typeof taskData.value.endDate
+      })
       await createPersonalTask(props.workSpaceSeq, taskData.value)
       
       alert('일정이 성공적으로 추가되었습니다.')

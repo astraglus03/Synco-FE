@@ -5,7 +5,7 @@
       <div class="nav-container">
         <div class="nav-brand">
           <div class="logo">
-            <img src="/synco_logo_name.png" alt="Synco" class="brand-logo" />
+            <img src="/synco_combined.png" alt="Synco" class="brand-logo" />
           </div>
         </div>
         <div class="nav-links">
@@ -603,9 +603,8 @@ onMounted(() => {
 }
 
 .brand-logo {
-  height: 5rem;
-  width: auto;
-  object-fit: contain;
+  height: 32px;
+  display: block;
 }
 
 .nav-links {

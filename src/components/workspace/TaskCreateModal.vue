@@ -69,11 +69,12 @@
                     transition="scale-transition"
                     offset-y
                     min-width="290px"
+                    :disabled="isEditMode && props.editModeLimited"
                   >
                     <template v-slot:activator="{ props: menuProps }">
                       <div 
                         v-bind="menuProps"
-                        class="date-selector-card"
+                        :class="['date-selector-card', { 'disabled': isEditMode && props.editModeLimited }]"
                         @click="openDatePicker('start')"
                       >
                         <div class="date-selector-icon">
@@ -91,7 +92,8 @@
                     <v-date-picker
                       :model-value="taskData.startDate"
                       @update:model-value="updateStartDate"
-                      :max="taskData.endDate || undefined"
+                      :min="projectPeriod.startDate || undefined"
+                      :max="projectPeriod.endDate || taskData.endDate || undefined"
                       color="primary"
                       locale="ko-KR"
                     ></v-date-picker>
@@ -107,11 +109,12 @@
                     transition="scale-transition"
                     offset-y
                     min-width="290px"
+                    :disabled="isEditMode && props.editModeLimited"
                   >
                     <template v-slot:activator="{ props: menuProps }">
                       <div 
                         v-bind="menuProps"
-                        class="date-selector-card"
+                        :class="['date-selector-card', { 'disabled': isEditMode && props.editModeLimited }]"
                         @click="openDatePicker('end')"
                       >
                         <div class="date-selector-icon">
@@ -129,7 +132,8 @@
                     <v-date-picker
                       :model-value="taskData.endDate"
                       @update:model-value="updateEndDate"
-                      :min="taskData.startDate || undefined"
+                      :min="projectPeriod.startDate || taskData.startDate || undefined"
+                      :max="projectPeriod.endDate || undefined"
                       color="primary"
                       locale="ko-KR"
                     ></v-date-picker>
@@ -231,6 +235,7 @@
 import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import { getProjectMemberList, createTask as createTaskApi, updateTask as updateTaskApi } from '../../api/schedule/scheduleApi.js'
 import { useWorkspaceMemberStore } from '@/store/workspaceMemberStore'
+import { useWorkspaceStore } from '@/store/workspaceStore'
 
 const props = defineProps({
   modelValue: {
@@ -322,6 +327,21 @@ const taskStatusOptions = [
 // 멤버 목록
 const projectMembers = ref([])
 const workspaceMemberStore = useWorkspaceMemberStore()
+const workspaceStore = useWorkspaceStore()
+
+// 프로젝트 기간 (YYYY-MM-DD 형식)
+const projectPeriod = computed(() => {
+  const workspaceInfo = workspaceStore.currentWorkspaceInfo
+  if (!workspaceInfo || workspaceInfo.type !== 'project') {
+    return { startDate: null, endDate: null }
+  }
+  
+  const toYmd = (v) => (v ? String(v).slice(0, 10) : null)
+  return {
+    startDate: toYmd(workspaceInfo.startDate || workspaceInfo.projectStartDate),
+    endDate: toYmd(workspaceInfo.endDate || workspaceInfo.projectEndDate)
+  }
+})
 
 // 멤버 옵션 (v-select용)
 const memberOptions = computed(() => projectMembers.value)
@@ -375,13 +395,33 @@ const openDatePicker = (type) => {
 
 // 시작일 업데이트
 const updateStartDate = (value) => {
-  taskData.value.startDate = value
+  // v-date-picker가 Date 객체를 반환할 수 있으므로 문자열로 변환
+  if (value instanceof Date) {
+    const year = value.getFullYear()
+    const month = String(value.getMonth() + 1).padStart(2, '0')
+    const day = String(value.getDate()).padStart(2, '0')
+    taskData.value.startDate = `${year}-${month}-${day}`
+  } else if (typeof value === 'string') {
+    taskData.value.startDate = value
+  } else {
+    taskData.value.startDate = value ? String(value) : ''
+  }
   startDateMenu.value = false
 }
 
 // 종료일 업데이트
 const updateEndDate = (value) => {
-  taskData.value.endDate = value
+  // v-date-picker가 Date 객체를 반환할 수 있으므로 문자열로 변환
+  if (value instanceof Date) {
+    const year = value.getFullYear()
+    const month = String(value.getMonth() + 1).padStart(2, '0')
+    const day = String(value.getDate()).padStart(2, '0')
+    taskData.value.endDate = `${year}-${month}-${day}`
+  } else if (typeof value === 'string') {
+    taskData.value.endDate = value
+  } else {
+    taskData.value.endDate = value ? String(value) : ''
+  }
   endDateMenu.value = false
 }
 
@@ -442,6 +482,12 @@ const createTask = async () => {
 
     if (props.isEditMode) {
       // 수정 모드
+      console.log('📝 [TaskCreateModal] 업무 수정 요청 데이터:', {
+        taskSeq: props.editTaskData.taskSeq,
+        projectId: props.projectId,
+        taskData: taskData.value,
+        rawTaskData: JSON.parse(JSON.stringify(taskData.value))
+      })
       const response = await updateTaskApi(props.editTaskData.taskSeq, taskData.value)
       
       if (response.success) {
@@ -453,6 +499,15 @@ const createTask = async () => {
       }
     } else {
       // 생성 모드
+      console.log('➕ [TaskCreateModal] 업무 생성 요청 데이터:', {
+        projectId: props.projectId,
+        taskData: taskData.value,
+        rawTaskData: JSON.parse(JSON.stringify(taskData.value)),
+        startDate: taskData.value.startDate,
+        endDate: taskData.value.endDate,
+        startDateType: typeof taskData.value.startDate,
+        endDateType: typeof taskData.value.endDate
+      })
       const response = await createTaskApi(props.projectId, taskData.value)
       
       if (response.success) {
@@ -480,12 +535,13 @@ const closeModal = () => {
 
 // 폼 초기화
 const resetForm = () => {
-  const today = new Date().toISOString().split('T')[0]
+  // 프로젝트 시작일 또는 오늘 날짜 중 하나를 기본값으로 사용
+  const defaultStartDate = projectPeriod.value.startDate || new Date().toISOString().split('T')[0]
   taskData.value = {
     taskTitle: '',
     taskContent: '',
     taskStatus: 'TODO',
-    startDate: today, // 시작일은 오늘로 기본 설정
+    startDate: defaultStartDate, // 시작일은 프로젝트 시작일로 기본 설정
     endDate: '', // 종료일은 빈 값
     picMemberSeq: null,
     boardSeq: null
@@ -513,12 +569,13 @@ watch(isOpen, (newValue) => {
       }
     } else {
       // 생성 모드: 기본값으로 초기화
-      const today = new Date().toISOString().split('T')[0]
+      // 프로젝트 시작일 또는 오늘 날짜 중 하나를 기본값으로 사용
+      const defaultStartDate = projectPeriod.value.startDate || new Date().toISOString().split('T')[0]
       taskData.value = {
         taskTitle: '',
         taskContent: '',
         taskStatus: 'TODO',
-        startDate: today, // 시작일은 오늘로 기본 설정
+        startDate: defaultStartDate, // 시작일은 프로젝트 시작일로 기본 설정
         endDate: '', // 종료일은 빈 값
         picMemberSeq: null,
         boardSeq: props.showBoardSelect ? (props.boardOptions[0]?.boardSeq || null) : null
@@ -921,6 +978,19 @@ onMounted(() => {
   background: rgba(var(--v-theme-primary), 0.05);
   transform: translateY(-2px);
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.date-selector-card.disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+.date-selector-card.disabled:hover {
+  border-color: rgb(var(--v-theme-schedule-border));
+  background: rgb(var(--v-theme-schedule-card-bg));
+  transform: none;
+  box-shadow: none;
 }
 
 .date-selector-icon {

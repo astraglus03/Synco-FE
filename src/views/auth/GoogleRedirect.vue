@@ -3,7 +3,7 @@
     <div class="redirect-container">
       <!-- 브랜드 로고 -->
       <div class="brand-section">
-        <h1 class="brand-name">Synco</h1>
+        <img src="/synco_combined.png" alt="Synco" class="brand-logo-img" />
       </div>
 
       <!-- 소셜 아이콘 -->
@@ -145,16 +145,16 @@ onMounted(() => {
 /* 브랜드 섹션 */
 .brand-section {
   margin-bottom: 2rem;
+  display: flex;
+  justify-content: center;
+  align-items: center;
 }
 
-.brand-name {
-  font-size: 2.5rem;
-  font-weight: 700;
-  background: linear-gradient(135deg, #3b82f6 0%, #6366f1 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-  margin: 0;
+.brand-logo-img {
+  height: 2.5rem;
+  width: auto;
+  object-fit: contain;
+  display: block;
 }
 
 /* 소셜 아이콘 */
@@ -262,9 +262,6 @@ onMounted(() => {
     padding: 2rem 1.5rem;
   }
 
-  .brand-name {
-    font-size: 2rem;
-  }
 
   .social-icon {
     width: 60px;

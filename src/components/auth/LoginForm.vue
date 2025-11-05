@@ -3,7 +3,7 @@
     <!-- 헤더 -->
     <div class="login-header">
       <div class="brand-logo">
-        <h1 class="brand-name">Synco</h1>
+        <img src="/synco_combined.png" alt="Synco" class="brand-logo-img" />
       </div>
       <p class="welcome-text">다시 오신 것을 환영합니다!</p>
     </div>
@@ -311,14 +311,11 @@ checkAutoLogin()
   margin-bottom: 1rem;
 }
 
-.brand-name {
-  font-size: 2rem;
-  font-weight: 700;
-  background: linear-gradient(135deg, #3b82f6 0%, #6366f1 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-  margin: 0;
+.brand-logo-img {
+  height: 2.5rem;
+  width: auto;
+  object-fit: contain;
+  display: block;
 }
 
 .welcome-text {
@@ -560,9 +557,6 @@ checkAutoLogin()
     padding: 1rem;
   }
   
-  .brand-name {
-    font-size: 1.75rem;
-  }
   
   .social-buttons {
     gap: 0.5rem;

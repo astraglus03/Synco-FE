@@ -774,7 +774,14 @@ const hasChanges = computed(() => {
   // 썸네일 변경 확인
   const thumbnailChanged = thumbnailImage.value !== null
   
-  return nameChanged || thumbnailChanged
+  // 날짜 변경 확인 (스토어 값과 YYYY-MM-DD 기준 비교)
+  const toYmd = (v) => (v ? String(v).slice(0, 10) : '')
+  const storeStartYmd = toYmd(currentWorkspace.startDate || currentWorkspace.projectStartDate)
+  const storeEndYmd = toYmd(currentWorkspace.endDate || currentWorkspace.projectEndDate)
+  const startChanged = (projectStartDate.value || '') !== storeStartYmd
+  const endChanged = (projectEndDate.value || '') !== storeEndYmd
+  
+  return nameChanged || thumbnailChanged || startChanged || endChanged
 })
 
 // 워크스페이스 변경 시 팀명 업데이트
@@ -785,8 +792,10 @@ watch(() => workspaceStore.currentWorkspaceInfo, (newWorkspace) => {
     // 날짜 초기화 (백엔드 LocalDateTime → yyyy-MM-dd)
     const start = newWorkspace.startDate || newWorkspace.projectStartDate
     const end = newWorkspace.endDate || newWorkspace.projectEndDate
-    projectStartDate.value = start ? new Date(start).toISOString().split('T')[0] : ''
-    projectEndDate.value = end ? new Date(end).toISOString().split('T')[0] : ''
+    // 타임존 보정 없이 문자열 기반으로 안전하게 날짜(YYYY-MM-DD) 추출
+    const toYmd = (v) => (v ? String(v).slice(0, 10) : '')
+    projectStartDate.value = toYmd(start)
+    projectEndDate.value = toYmd(end)
   }
 }, { immediate: true })
 
@@ -1113,9 +1122,29 @@ const updateWorkspaceInfo = async () => {
   try {
     // 썸네일 이미지를 변경하지 않았으면 null 대신 undefined 전달
     const thumbnailToSend = thumbnailImage.value instanceof File ? thumbnailImage.value : undefined
-    // LocalDateTime 문자열로 변환 (00:00:00 고정)
-    const startDateToSend = projectStartDate.value ? `${projectStartDate.value}T00:00:00` : undefined
-    const endDateToSend = projectEndDate.value ? `${projectEndDate.value}T23:59:59` : undefined
+    // 날짜 정규화: 생성 로직과 동일하게 YYYY-MM-DD로 변환 후 ISO LocalDateTime 조합
+    const normalizeYmd = (value) => {
+      if (!value) return null
+      if (value instanceof Date) {
+        const y = value.getFullYear()
+        const m = String(value.getMonth() + 1).padStart(2, '0')
+        const d = String(value.getDate()).padStart(2, '0')
+        return `${y}-${m}-${d}`
+      }
+      if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value)) return value
+      const dt = new Date(value)
+      if (!isNaN(dt.getTime())) {
+        const y = dt.getFullYear()
+        const m = String(dt.getMonth() + 1).padStart(2, '0')
+        const d = String(dt.getDate()).padStart(2, '0')
+        return `${y}-${m}-${d}`
+      }
+      return null
+    }
+    const startYmd = normalizeYmd(projectStartDate.value)
+    const endYmd = normalizeYmd(projectEndDate.value)
+    const startDateToSend = startYmd ? `${startYmd}T00:00:00` : undefined
+    const endDateToSend = endYmd ? `${endYmd}T23:59:59` : undefined
     
     const updatedWorkspace = await updateWorkspace(
       currentWorkspace.workSpaceSeq,
@@ -1462,7 +1491,7 @@ onMounted(() => {
         class="logo-btn"
         @click="$router.push('/')"
       >
-        <span class="logo-text">synco</span>
+        <img src="/synco_combined.png" alt="Synco" class="logo-img" />
       </v-btn>
     </div>
 
@@ -2509,6 +2538,12 @@ onMounted(() => {
 
 .logo-text {
   font-weight: 700;
+}
+
+/* 로고 이미지 */
+.logo-img {
+  height: 28px;
+  display: block;
 }
 
 .search-container {
