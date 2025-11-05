@@ -4,6 +4,7 @@ import sseConnection from '@/api/notification/sseApi'
 import { apiGet, apiPatch, apiDelete } from '@/utils/api'
 import { emitter } from '@/eventBus'
 import { useWorkspaceStore } from '@/store/workspaceStore'
+import { useAuthStore } from '@/store/authStore'
 
 export const useNotificationStore = defineStore('notification', () => {
   // ===== 상태 =====
@@ -19,6 +20,9 @@ export const useNotificationStore = defineStore('notification', () => {
   
   // SSE 연결 상태
   const sseConnected = ref(false)
+  
+  // SSE 연결 시도 중 플래그 (중복 호출 방지)
+  const isConnectingSSE = ref(false)
   
   // 현재 워크스페이스 타입 ('personal' | 'project')
   const currentWorkspaceType = ref('personal')
@@ -172,6 +176,18 @@ export const useNotificationStore = defineStore('notification', () => {
    * SSE 메시지 핸들러 (단일 인스턴스)
    */
   const sseMessageHandler = (data) => {
+    // SSE 에러 발생 시 연결 시도 플래그 해제
+    if (data.type === 'sse-error') {
+      isConnectingSSE.value = false
+      console.warn('[알림 Store] ⚠️ SSE 연결 에러 발생, 연결 시도 플래그 해제')
+      return
+    }
+    
+    // SSE 연결 성공 시 플래그 해제
+    if (data.type === 'sse-connected') {
+      isConnectingSSE.value = false
+    }
+    
     console.log('[알림 Store] 📬 메시지 수신:', data)
     handleNotification(data)
   }
@@ -180,7 +196,17 @@ export const useNotificationStore = defineStore('notification', () => {
    * SSE 연결 시작
    */
   const connectSSE = () => {
-    console.log('[알림 Store] 🔌 SSE 연결 요청')
+    // ID 입력 페이지에서는 SSE 연결을 시도하지 않음 (memberId가 아직 DB에 없음)
+    if (typeof window !== 'undefined' && window.location.pathname === '/oauth/member-id') {
+      console.log('[알림 Store] ⏭️ ID 입력 페이지에서는 SSE 연결을 시도하지 않습니다')
+      return
+    }
+
+    // 이미 연결 시도 중이면 무시 (중복 호출 방지)
+    if (isConnectingSSE.value) {
+      console.log('[알림 Store] ⏭️ SSE 연결 시도 중이므로 중복 호출 무시')
+      return
+    }
 
     // 이미 연결되어 있으면 무시
     if (sseConnection.isConnected()) {
@@ -188,6 +214,28 @@ export const useNotificationStore = defineStore('notification', () => {
       sseConnected.value = true
       return
     }
+
+    // 인증 정보 확인 (memberSeq가 유효한 숫자인지 확인)
+    const authStore = useAuthStore()
+    if (!authStore.memberSeq) {
+      console.warn('[알림 Store] ⚠️ memberSeq가 없어서 SSE 연결을 시도하지 않습니다')
+      return
+    }
+
+    const memberSeq = Number(authStore.memberSeq)
+    if (Number.isNaN(memberSeq) || memberSeq <= 0) {
+      console.warn('[알림 Store] ⚠️ memberSeq가 유효하지 않아서 SSE 연결을 시도하지 않습니다:', authStore.memberSeq)
+      return
+    }
+
+    if (!authStore.accessToken) {
+      console.warn('[알림 Store] ⚠️ accessToken이 없어서 SSE 연결을 시도하지 않습니다')
+      return
+    }
+
+    // 연결 시도 중 플래그 설정
+    isConnectingSSE.value = true
+    console.log('[알림 Store] 🔌 SSE 연결 요청')
 
     // 메시지 콜백 등록 (중복 방지는 sseConnection에서 처리)
     console.log('[알림 Store] 📝 콜백 등록 중...')
@@ -197,43 +245,15 @@ export const useNotificationStore = defineStore('notification', () => {
     console.log('[알림 Store] 📡 sseConnection.connect() 호출')
     sseConnection.connect()
 
-    // 연결 상태 확인 (여러 번 체크)
-    console.log('[알림 Store] ⏳ 연결 상태 확인 스케줄링...')
-    
-    // 1초 후 첫 확인
+    // 연결 상태 확인 (간단하게)
     setTimeout(() => {
       const status = sseConnection.getConnectionStatus()
       const isConnected = sseConnection.isConnected()
-      console.log('[알림 Store] 📊 1초 후 연결 상태:', status, '/ isConnected:', isConnected)
-      sseConnected.value = isConnected
-    }, 1000)
-    
-    // 3초 후 재확인
-    setTimeout(() => {
-      const status = sseConnection.getConnectionStatus()
-      const isConnected = sseConnection.isConnected()
-      console.log('[알림 Store] 📊 3초 후 연결 상태:', status, '/ isConnected:', isConnected)
-      sseConnected.value = isConnected
-    }, 3000)
-    
-    // 5초 후 최종 확인
-    setTimeout(() => {
-      const status = sseConnection.getConnectionStatus()
-      const isConnected = sseConnection.isConnected()
-      console.log('[알림 Store] 📊 5초 후 연결 상태:', status, '/ isConnected:', isConnected)
       sseConnected.value = isConnected
       
-      if (isConnected) {
-        console.log('[알림 Store] ✅ SSE 연결 성공!')
-      } else {
-        console.error('[알림 Store] ❌ 5초 후에도 연결 안 됨!')
-        console.error('[알림 Store] 🔍 백엔드 확인 필요:')
-        console.error('[알림 Store]    1. 백엔드 서버가 실행 중인가?')
-        console.error('[알림 Store]    2. /workspace-service/alarms/sse/connect 엔드포인트가 동작하는가?')
-        console.error('[알림 Store]    3. 백엔드 로그에 오류가 있는가?')
-        console.error('[알림 Store]    4. SseEmitter를 제대로 반환하는가?')
-      }
-    }, 5000)
+      // 연결 시도 플래그 해제 (성공/실패 관계없이)
+      isConnectingSSE.value = false
+    }, 2000)
   }
 
   /**
