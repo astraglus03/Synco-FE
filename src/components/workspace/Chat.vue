@@ -1763,6 +1763,16 @@ const loadChatUserInfo = async (targetChannelSeq = null) => {
   }
 };
 
+// 상태별 색상 계산
+const getStatusColor = (status) => {
+  const statusMap = {
+    'ONLINE': 'success',   // 초록색 (온라인)
+    'OFFLINE': 'error',   // 빨간색 (오프라인)
+    'AWAY': 'warning',    // 주황색 (자리비움)
+  };
+  return statusMap[status] || 'error';
+};
+
 // selectedChannel 변경 시 사용자 정보 로드
 watch(
   () => props.selectedChannel,
@@ -2514,10 +2524,10 @@ onUnmounted(async () => {
         <div class="user-status">
           <v-chip 
             size="small" 
-            :color="chatUserInfo.status === 'ONLINE' ? 'success' : 'grey'"
+            :color="getStatusColor(chatUserInfo.status)"
           >
             <v-icon start>mdi-circle</v-icon>
-            {{ chatUserInfo.status === 'ONLINE' ? '온라인' : '오프라인' }}
+            {{ chatUserInfo.status === 'ONLINE' ? '온라인' : chatUserInfo.status === 'OFFLINE' ? '오프라인' : '자리비움' }}
           </v-chip>
         </div>
       </div>
