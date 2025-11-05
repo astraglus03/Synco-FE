@@ -1,6 +1,6 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRouter, useRoute } from 'vue-router'
 import { usePermissions, PERMISSIONS } from '@/composables/usePermissions'
 import { useProjectDriveStore } from '@/store/drive/projectDriveStore'
 import { useWorkspaceStore } from '@/store/workspaceStore'
@@ -17,6 +17,7 @@ const driveStore = useProjectDriveStore()
 const workspaceStore = useWorkspaceStore()
 const authStore = useAuthStore()
 const router = useRouter()
+const route = useRoute()
 
 // 뷰 모드 (list, grid)
 const viewMode = ref('grid')
@@ -445,25 +446,57 @@ const cancelRename = () => {
   editingName.value = ''
 }
 
+// ID에서 접두사 제거 (workspace_4 → 4)
+const extractId = (fullId) => {
+  if (!fullId) return fullId
+  const match = String(fullId).match(/_(\d+)$/)
+  if (match) {
+    return match[1]
+  }
+  return fullId
+}
+
+// 현재 워크스페이스 ID 추출 (URL용)
+const getWorkspaceIdForUrl = () => {
+  const currentWorkspace = workspaceStore.currentWorkspaceInfo
+  if (!currentWorkspace) return 'personal'
+  return extractId(currentWorkspace.id)
+}
+
 // 폴더 진입
-const enterFolder = (folder) => {
+const enterFolder = async (folder) => {
   driveStore.enterFolder(folder)
+  // URL 업데이트
+  const workspaceId = getWorkspaceIdForUrl()
+  await router.push(`/workspaces/${workspaceId}/drive/${folder.id}`)
 }
 
 // 브레드크럼 클릭으로 폴더 이동
 const navigateToFolder = async (folderId) => {
+  const workspaceId = getWorkspaceIdForUrl()
+  
   if (folderId === null) {
     // 홈으로 이동
     driveStore.goToRoot()
+    await router.push(`/workspaces/${workspaceId}/drive`)
   } else {
     // 특정 폴더로 이동
     await driveStore.goToFolder(folderId)
+    await router.push(`/workspaces/${workspaceId}/drive/${folderId}`)
   }
 }
 
 // 뒤로 가기
-const goBack = () => {
+const goBack = async () => {
   driveStore.goBack()
+  // URL 업데이트
+  const workspaceId = getWorkspaceIdForUrl()
+  const currentParentId = driveStore.currentParentId
+  if (currentParentId) {
+    await router.push(`/workspaces/${workspaceId}/drive/${currentParentId}`)
+  } else {
+    await router.push(`/workspaces/${workspaceId}/drive`)
+  }
 }
 
 // 전체 폴더 목록 로드
@@ -1027,9 +1060,18 @@ const closeModals = () => {
 const previousChannel = ref(null)
 
 // 생명주기
-onMounted(() => {
+onMounted(async () => {
   previousChannel.value = props.currentChannel
-  loadDriveItems()
+  
+  // URL에서 folderSeq 확인 (subChannel 파라미터)
+  const folderSeq = route.params.subChannel
+  if (folderSeq && props.currentChannel === 'drive') {
+    // goToFolder가 내부적으로 데이터를 로드하므로 loadDriveItems 호출 불필요
+    await navigateToFolder(Number(folderSeq))
+  } else {
+    // 일반적인 경우에만 loadDriveItems 호출
+    loadDriveItems()
+  }
   
   // 전역 클릭 이벤트로 편집 모드 취소
   document.addEventListener('click', handleGlobalClick)

@@ -13,6 +13,7 @@
         @blur="handleBlur"
         @keydown.enter="handleEnter"
         @keydown.escape="handleEscape"
+        @keydown.space.prevent
       />
     </div>
     
@@ -27,8 +28,8 @@
         >
           <v-icon :color="result.iconColor">{{ result.icon }}</v-icon>
           <div class="result-info">
-            <div class="result-title">{{ result.title }}</div>
-            <div class="result-subtitle">{{ result.subtitle }}</div>
+            <div class="result-title" v-html="highlight(result.title)"></div>
+            <div class="result-subtitle" v-html="highlightSubtitle(result.subtitle)"></div>
             <div class="result-type">{{ result.type }}</div>
           </div>
         </div>
@@ -107,19 +108,21 @@ const handleSearch = () => {
   }
   
   debounceTimer.value = setTimeout(async () => {
-    if (!searchQuery.value.trim()) {
+    // 공백 제거 후 검색 (스페이스 무시)
+    const q = String(searchQuery.value || '').replace(/\s+/g, '')
+    if (!q) {
       searchResults.value = []
       showResults.value = false
       return
     }
     
     try {
-      const results = await performSearch(searchQuery.value)
+      const results = await performSearch(q)
       searchResults.value = results
       showResults.value = true
       calculateDropdownPosition()
       
-      emit('search', { query: searchQuery.value, results })
+      emit('search', { query: q, results })
     } catch (error) {
       console.error('검색 오류:', error)
       searchResults.value = []
@@ -179,6 +182,73 @@ const getResultIconColor = (type) => {
     meeting: 'green'
   }
   return colorMap[type] || 'grey'
+}
+
+// HTML 이스케이프 (XSS 방지)
+const escapeHtml = (str) => {
+  if (str === null || str === undefined) return ''
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;')
+}
+
+// 키워드 하이라이트 처리
+const highlight = (text) => {
+  const raw = escapeHtml(text)
+  const keyword = String(searchQuery.value || '').trim().replace(/\s+/g, '')
+  if (!keyword) return raw
+  const escapedKeyword = keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  const re = new RegExp(escapedKeyword, 'gi')
+  return raw.replace(re, (m) => `<span class="highlight">${m}</span>`)
+}
+
+// 키워드가 포함된 부분만 추출 (subtitle용)
+const extractKeywordSnippet = (text, maxLength = 100) => {
+  if (!text) return ''
+  
+  const keyword = String(searchQuery.value || '').trim().replace(/\s+/g, '')
+  if (!keyword) {
+    // 키워드가 없으면 앞부분만 자르기
+    return text.length > maxLength ? text.substring(0, maxLength) + '...' : text
+  }
+  
+  // 대소문자 구분 없이 키워드 찾기
+  const lowerText = text.toLowerCase()
+  const lowerKeyword = keyword.toLowerCase()
+  const keywordIndex = lowerText.indexOf(lowerKeyword)
+  
+  if (keywordIndex === -1) {
+    // 키워드가 없으면 앞부분만 반환
+    return text.length > maxLength ? text.substring(0, maxLength) + '...' : text
+  }
+  
+  // 키워드 위치 기준으로 앞뒤 텍스트 추출
+  const halfLength = Math.floor(maxLength / 2)
+  const start = Math.max(0, keywordIndex - halfLength)
+  const end = Math.min(text.length, keywordIndex + keyword.length + halfLength)
+  
+  let snippet = text.substring(start, end)
+  
+  // 앞부분 생략 표시
+  if (start > 0) {
+    snippet = '...' + snippet
+  }
+  
+  // 뒷부분 생략 표시
+  if (end < text.length) {
+    snippet = snippet + '...'
+  }
+  
+  return snippet
+}
+
+// subtitle에 키워드 포함 부분만 표시하고 하이라이트
+const highlightSubtitle = (text) => {
+  const snippet = extractKeywordSnippet(text, 40) // 키워드 앞뒤 20자씩 (총 40자)
+  return highlight(snippet)
 }
 
 // Elasticsearch 검색 수행
@@ -257,15 +327,55 @@ const navigateToResult = (result) => {
   
   switch (result.type) {
     case 'message':
-      router.push(`/workspaces/${cleanWorkspaceId}/chats?messageId=${result.id}`)
+      const channelId = extractId(result.channelId)
+      router.push(`/workspaces/${cleanWorkspaceId}/chats/${channelId}`)
       break
     case 'file':
-      router.push(`/workspaces/${cleanWorkspaceId}/drive?fileId=${result.id}`)
+      // 검색 결과에서 폴더 정보를 URL 경로 파라미터로 전달
+      const fileId = extractId(result.id)
+      // channelId가 folder_3 형식이므로 숫자 추출
+      let folderId = null
+      if (result.channelId) {
+        const extracted = extractId(result.channelId)
+        // 유효한 숫자인지 확인 (NaN, null, undefined 체크)
+        if (extracted && extracted !== 'NaN' && !isNaN(extracted) && extracted !== 'null' && extracted !== 'undefined') {
+          folderId = extracted
+        }
+      }
+      // personal 워크스페이스 처리
+      const workspaceIdForUrl = currentWorkspace?.id === 'personal' ? 'personal' : cleanWorkspaceId
+      if (folderId) {
+        router.push(`/workspaces/${workspaceIdForUrl}/drive/${folderId}`)
+      } else {
+        router.push(`/workspaces/${workspaceIdForUrl}/drive`)
+      }
       break
     case 'task':
       // task ID에서 실제 ID 추출 (task_1 -> 1)
       const taskId = extractId(result.id)
-      router.push(`/workspaces/${cleanWorkspaceId}/schedule?taskId=${taskId}`)
+      // 개인 워크스페이스면 개인 캘린더로 이동 + 상세 모달 오픈, 프로젝트면 팀 일정 + 상세 모달 오픈
+      if (currentWorkspace?.id === 'personal' || currentWorkspace?.type === 'personal') {
+        router.push(`/workspaces/personal/calendar`).then(() => {
+          if (taskId) {
+            // 이벤트를 한 번만 dispatch (중복 모달 방지)
+            // 페이지 로딩을 기다리기 위해 약간의 지연 후 한 번만 실행
+            setTimeout(() => {
+              window.dispatchEvent(new CustomEvent('open-task-detail', { detail: { taskSeq: taskId } }))
+            }, 300)
+          }
+        })
+      } else {
+        const path = `/workspaces/${cleanWorkspaceId}/schedules/team-schedule`
+        router.push(path).then(() => {
+          if (taskId) {
+            // 이벤트를 한 번만 dispatch (중복 모달 방지)
+            // 페이지 로딩을 기다리기 위해 약간의 지연 후 한 번만 실행
+            setTimeout(() => {
+              window.dispatchEvent(new CustomEvent('open-task-detail', { detail: { taskSeq: taskId } }))
+            }, 300)
+          }
+        })
+      }
       break
     case 'meeting':
       // meeting ID에서 실제 ID 추출
@@ -456,6 +566,14 @@ onUnmounted(() => {
   color: rgba(var(--v-theme-on-surface), 0.7);
   font-size: 12px;
   margin-top: 2px;
+}
+
+:deep(.highlight) {
+  background: rgba(var(--v-theme-primary), 0.25);
+  color: inherit;
+  font-weight: 600;
+  padding: 0 1px;
+  border-radius: 2px;
 }
 
 .result-type {
