@@ -56,7 +56,7 @@
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/store/authStore'
-import { apiPatch } from '@/utils/api'
+import { apiPatch, decodeJWT } from '@/utils/api'
 
 const router = useRouter()
 const authStore = useAuthStore()
@@ -84,10 +84,43 @@ const submit = async () => {
       memberId: memberId.value
     }
 
-    await apiPatch('/workspace-service/member/social/memberId', requestData)
+    const response = await apiPatch('/workspace-service/member/social/memberId', requestData)
 
-    // 성공 시 대시보드 페이지로 이동
-    await router.replace('/workspaces/personal/dashboard')
+    // API 응답에서 토큰이 있으면 업데이트
+    const responseData = response?.data || response
+    let memberSeqSet = false
+    
+    if (responseData?.accessToken) {
+      authStore.setAccessToken(responseData.accessToken)
+      // JWT 토큰에서 memberSeq 추출 및 설정
+      const payload = decodeJWT(responseData.accessToken)
+      if (payload?.sub) {
+        const memberSeq = parseInt(payload.sub, 10)
+        if (!Number.isNaN(memberSeq)) {
+          authStore.setMemberSeq(memberSeq)
+          memberSeqSet = true
+        }
+      }
+    } else {
+      // 응답에 토큰이 없으면 현재 토큰에서 memberSeq 추출 시도
+      const currentToken = authStore.accessToken
+      if (currentToken && !authStore.memberSeq) {
+        const payload = decodeJWT(currentToken)
+        if (payload?.sub) {
+          const memberSeq = parseInt(payload.sub, 10)
+          if (!Number.isNaN(memberSeq)) {
+            authStore.setMemberSeq(memberSeq)
+            memberSeqSet = true
+          }
+        }
+      }
+    }
+
+    // memberSeq 설정 완료 (SSE 연결은 App.vue에서 처리하도록 페이지 이동만 수행)
+    // window.location.href로 이동하면 App.vue의 onMounted에서 memberSeq 확인 후 SSE 연결 시도
+
+    // 성공 시 대시보드 페이지로 이동 (강제 새로고침으로 App.vue 초기화 보장)
+    window.location.href = '/workspaces/personal/dashboard'
 
   } catch (error) {
     console.error('회원 ID 등록 실패:', error)

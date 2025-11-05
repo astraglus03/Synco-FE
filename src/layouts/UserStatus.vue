@@ -33,14 +33,16 @@ const fetchUserInfo = async () => {
     userStatus.value = data.activeStatus || 'OFFLINE'
     profileImageUrl.value = data.profileImageUrl || ''
     
-    // authStore에도 저장
+    // authStore에도 저장 (ynAlarmOffSet 포함)
     authStore.setUser({
       ...authStore.user,
       name: data.name,
       profileImageUrl: data.profileImageUrl,
       activeStatus: data.activeStatus,
-      socialType: data.socialType
+      socialType: data.socialType,
+      ynAlarmOffSet: data.ynAlarmOffSet || 'Y' // 알림 설정 포함
     })
+    console.log('[UserStatus] 사용자 정보 업데이트 완료, ynAlarmOffSet:', data.ynAlarmOffSet)
   } catch (error) {
     console.error('사용자 정보 조회 실패:', error)
   }

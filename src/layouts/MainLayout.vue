@@ -206,6 +206,7 @@ const handleNavigateToChannel = (channelId) => {
         :workspaces="workspaceStore.workspaces"
         :current-workspace="workspaceStore.currentWorkspace"
         @select-workspace="selectWorkspace"
+        @toggle="uiStore.toggleServerSidebar"
       />
 
       <!-- 워크스페이스 사이드바 -->
@@ -215,6 +216,7 @@ const handleNavigateToChannel = (channelId) => {
         :current-channel="workspaceStore.currentChannel"
         :current-workspace-data="workspaceStore.currentWorkspaceInfo"
         :selected-sub-channel="workspaceStore.selectedSubChannel"
+        :server-sidebar-collapsed="uiStore.serverSidebarCollapsed"
         @toggle="uiStore.toggleWorkspaceSidebar"
         @select-channel="selectChannel"
         @select-subchannel="selectSubChannel"
@@ -227,6 +229,7 @@ const handleNavigateToChannel = (channelId) => {
         :selected-sub-channel="workspaceStore.selectedSubChannel"
         :member-sidebar-visible="uiStore.memberSidebarVisible"
         :workspace-sidebar-collapsed="uiStore.workspaceSidebarCollapsed"
+        :server-sidebar-collapsed="uiStore.serverSidebarCollapsed"
         @navigate-to-channel="handleNavigateToChannel"
       />
 

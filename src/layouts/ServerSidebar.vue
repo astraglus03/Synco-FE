@@ -889,6 +889,8 @@ onMounted(() => {
   bottom: 0;
   z-index: 100;
   transition: width 0.3s ease;
+  overflow-x: hidden; /* 좌우 스크롤바 제거 */
+  overflow-y: hidden; /* 세로 스크롤은 스크롤 컨테이너에서 처리 */
 }
 
 /* 프로젝트 목록 스크롤 영역 */
@@ -897,7 +899,7 @@ onMounted(() => {
   width: 100%;
   min-height: 0; /* 중요: flex child의 스크롤을 위해 필수 */
   overflow-y: auto;
-  overflow-x: visible; /* 좌측 액티브 인디케이터가 잘리지 않도록 */
+  overflow-x: hidden; /* 좌우 스크롤바 제거 */
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -1048,13 +1050,26 @@ onMounted(() => {
   .server-sidebar {
     width: 60px !important;
     top: 56px;
+    padding: 12px 4px !important; /* 좌우 padding 줄여서 아이콘 공간 확보 */
+    overflow-x: hidden !important; /* 좌우 스크롤바 제거 */
+  }
+
+  .workspaces-scroll-container {
+    padding: 0 0 6px 0 !important; /* 좌우 padding 제거 */
+    overflow-x: hidden !important; /* 좌우 스크롤바 제거 */
+    width: 100% !important;
   }
   
   .server-icon {
     width: 44px;
     height: 44px;
     font-size: 16px;
-    margin-left: 6px;
+    margin-left: 0 !important; /* margin-left 제거하여 중앙 정렬 */
+  }
+
+  /* 왼쪽 인디케이터 위치 조정 */
+  .server-icon::before {
+    left: -4px !important; /* 1024px 이하에서는 좀 더 안쪽으로 */
   }
   
   .server-icon .v-icon {
@@ -1066,13 +1081,26 @@ onMounted(() => {
   .server-sidebar {
     width: 56px !important;
     top: 56px;
+    padding: 12px 4px !important; /* 좌우 padding 줄여서 아이콘 공간 확보 */
+    overflow-x: hidden !important; /* 좌우 스크롤바 제거 */
+  }
+
+  .workspaces-scroll-container {
+    padding: 0 0 6px 0 !important; /* 좌우 padding 제거 */
+    overflow-x: hidden !important; /* 좌우 스크롤바 제거 */
+    width: 100% !important;
   }
   
   .server-icon {
     width: 40px;
     height: 40px;
     font-size: 14px;
-    margin-left: 6px;
+    margin-left: 0 !important; /* margin-left 제거하여 중앙 정렬 */
+  }
+
+  /* 왼쪽 인디케이터 위치 조정 */
+  .server-icon::before {
+    left: -4px !important; /* 768px 이하에서는 좀 더 안쪽으로 */
   }
   
   .server-icon .v-icon {
@@ -1084,13 +1112,26 @@ onMounted(() => {
   .server-sidebar {
     width: 52px !important;
     top: 56px;
+    padding: 10px 4px !important; /* 좌우 padding 줄여서 아이콘 공간 확보 */
+    overflow-x: hidden !important; /* 좌우 스크롤바 제거 */
+  }
+
+  .workspaces-scroll-container {
+    padding: 0 0 6px 0 !important; /* 좌우 padding 제거 */
+    overflow-x: hidden !important; /* 좌우 스크롤바 제거 */
+    width: 100% !important;
   }
   
   .server-icon {
     width: 36px;
     height: 36px;
     font-size: 12px;
-    margin-left: 6px;
+    margin-left: 0 !important; /* margin-left 제거하여 중앙 정렬 */
+  }
+
+  /* 왼쪽 인디케이터 위치 조정 */
+  .server-icon::before {
+    left: -4px !important; /* 480px 이하에서는 좀 더 안쪽으로 */
   }
   
   .server-icon .v-icon {
