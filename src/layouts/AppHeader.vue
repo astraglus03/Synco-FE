@@ -533,6 +533,37 @@ const handleNotificationClick = async (notification) => {
       return
     }
 
+    if (type === 'alarm-drive') {
+      // 공유문서/파일 공유 알림 → 드라이브 페이지 최상단으로 이동
+      const workSpaceSeq = data.workSpaceSeq || notification.workSpaceSeq
+      
+      console.log('[알림 네비] alarm-drive payload:', { workSpaceSeq, raw: data })
+      
+      if (workSpaceSeq) {
+        // 드라이브 최상단(루트)으로 이동
+        await router.push(`/workspaces/${workSpaceSeq}/drive`)
+      }
+      return
+    }
+
+    if (type === 'alarm-meeting') {
+      // 화상회의 알림 → 화상회의 페이지로 이동 (요약 정보가 있으면 종료된 회의 탭으로)
+      const workSpaceSeq = data.workSpaceSeq || notification.workSpaceSeq
+      const hasSummary = data.summary || data.roomSummary || notification.message?.includes('요약') || notification.message?.includes('종료')
+      
+      console.log('[알림 네비] alarm-meeting payload:', { workSpaceSeq, hasSummary, raw: data })
+      
+      if (workSpaceSeq) {
+        // 요약 정보가 있으면 종료된 회의 탭으로 이동, 없으면 기본(진행 중 탭)
+        if (hasSummary) {
+          await router.push(`/workspaces/${workSpaceSeq}/meeting?tab=ended`)
+        } else {
+          await router.push(`/workspaces/${workSpaceSeq}/meeting`)
+        }
+      }
+      return
+    }
+
     // 워크스페이스 강제 탈퇴(추정): 읽음 처리만
     const isKick = data?.subType === 'KICK' || /강제\s*탈퇴/.test(notification.message || '')
     if (isKick) {

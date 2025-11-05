@@ -512,6 +512,7 @@
 
 <script setup>
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import { useMeetingStore } from '@/store/meetingStore'
 import { usePermissions } from '@/composables/usePermissions'
 import { useWorkspaceStore } from '@/store/workspaceStore'
@@ -524,6 +525,9 @@ const props = defineProps({
   currentChannel: String,
   selectedChannel: String
 })
+
+// Router
+const route = useRoute()
 
 // Store
 const meetingStore = useMeetingStore()
@@ -538,7 +542,8 @@ const newRoomName = ref('')
 const newRoomDescription = ref('')
 const selectedMembers = ref([])
 const showError = ref(false)
-const activeTab = ref('active') // 'active' or 'ended'
+// 쿼리 파라미터에서 탭 정보 읽기
+const activeTab = ref(route.query.tab === 'ended' ? 'ended' : 'active') // 'active' or 'ended'
 const currentActivePage = ref(1) // 1-based page number for active rooms
 const currentEndedPage = ref(1) // 1-based page number for ended rooms
 
@@ -645,6 +650,14 @@ const onTabChange = async (tab) => {
   } catch (error) {
   }
 }
+
+// 쿼리 파라미터 변경 감지하여 탭 전환
+watch(() => route.query.tab, (newTab) => {
+  if (newTab === 'ended' || newTab === 'active') {
+    activeTab.value = newTab
+    onTabChange(newTab)
+  }
+}, { immediate: true })
 
 // 활성 회의 페이지 변경 핸들러
 const onActivePageChange = async (page) => {
