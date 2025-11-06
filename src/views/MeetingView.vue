@@ -472,14 +472,25 @@ const initializeLiveKitRoom = async () => {
       },
     })
 
-    // WS 시그널링 URL (WebSocket은 ws:// 프로토콜 사용)
-    let wsUrl = 'ws://'+import.meta.env.VITE_LIVEKIT_API_URL
+    // WS 시그널링 URL 생성
+    let livekitUrl = import.meta.env.VITE_LIVEKIT_API_URL
+    let wsUrl = ''
     
-    // http://로 시작하면 ws://로 변환
-    if (wsUrl.startsWith('http://')) {
-      wsUrl = wsUrl.replace('http://', 'ws://')
-    } else if (wsUrl.startsWith('https://')) {
-      wsUrl = wsUrl.replace('https://', 'wss://')
+    // 프로토콜이 이미 포함되어 있는지 확인
+    if (livekitUrl.startsWith('ws://') || livekitUrl.startsWith('wss://')) {
+      // 이미 WebSocket 프로토콜이 있으면 그대로 사용
+      wsUrl = livekitUrl
+    } else if (livekitUrl.startsWith('http://')) {
+      // http://로 시작하면 ws://로 변환
+      wsUrl = livekitUrl.replace('http://', 'ws://')
+    } else if (livekitUrl.startsWith('https://')) {
+      // https://로 시작하면 wss://로 변환
+      wsUrl = livekitUrl.replace('https://', 'wss://')
+    } else {
+      // 프로토콜이 없으면 현재 페이지 프로토콜에 따라 결정
+      // HTTPS 페이지에서는 wss://, HTTP 페이지에서는 ws:// 사용
+      const protocol = window.location.protocol === 'https:' ? 'wss://' : 'ws://'
+      wsUrl = protocol + livekitUrl
     }
 
     // 방 연결
