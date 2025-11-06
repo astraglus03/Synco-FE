@@ -331,12 +331,6 @@ const saveTask = async () => {
 
     if (props.isEditMode) {
       // 수정 모드
-      console.log('📝 [PersonalTaskModal] 일정 수정 요청 데이터:', {
-        taskSeq: props.editTaskData.taskSeq,
-        workSpaceSeq: props.workSpaceSeq,
-        taskData: taskData.value,
-        rawTaskData: JSON.parse(JSON.stringify(taskData.value))
-      })
       await updatePersonalTask(props.editTaskData.taskSeq, taskData.value)
       
       alert('일정이 성공적으로 수정되었습니다.')
@@ -344,15 +338,6 @@ const saveTask = async () => {
       closeModal()
     } else {
       // 생성 모드
-      console.log('➕ [PersonalTaskModal] 일정 생성 요청 데이터:', {
-        workSpaceSeq: props.workSpaceSeq,
-        taskData: taskData.value,
-        rawTaskData: JSON.parse(JSON.stringify(taskData.value)),
-        startDate: taskData.value.startDate,
-        endDate: taskData.value.endDate,
-        startDateType: typeof taskData.value.startDate,
-        endDateType: typeof taskData.value.endDate
-      })
       await createPersonalTask(props.workSpaceSeq, taskData.value)
       
       alert('일정이 성공적으로 추가되었습니다.')

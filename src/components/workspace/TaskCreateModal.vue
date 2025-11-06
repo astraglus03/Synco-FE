@@ -482,12 +482,6 @@ const createTask = async () => {
 
     if (props.isEditMode) {
       // 수정 모드
-      console.log('📝 [TaskCreateModal] 업무 수정 요청 데이터:', {
-        taskSeq: props.editTaskData.taskSeq,
-        projectId: props.projectId,
-        taskData: taskData.value,
-        rawTaskData: JSON.parse(JSON.stringify(taskData.value))
-      })
       const response = await updateTaskApi(props.editTaskData.taskSeq, taskData.value)
       
       if (response.success) {
@@ -499,15 +493,6 @@ const createTask = async () => {
       }
     } else {
       // 생성 모드
-      console.log('➕ [TaskCreateModal] 업무 생성 요청 데이터:', {
-        projectId: props.projectId,
-        taskData: taskData.value,
-        rawTaskData: JSON.parse(JSON.stringify(taskData.value)),
-        startDate: taskData.value.startDate,
-        endDate: taskData.value.endDate,
-        startDateType: typeof taskData.value.startDate,
-        endDateType: typeof taskData.value.endDate
-      })
       const response = await createTaskApi(props.projectId, taskData.value)
       
       if (response.success) {
