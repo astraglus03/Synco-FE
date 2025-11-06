@@ -1,0 +1,49 @@
+name: deploy to s3, cloutFront
+# 이벤트정의(트리거)
+
+on:
+  push:
+    branches:
+      - check1
+
+jobs:
+   build-and-deploy:
+        runs-on: ubuntu-latest
+        steps:
+          # 재사용이 가능한 사전에 만들어진 작업절차
+          - uses: actions/checkout@v2
+
+          - name: setsup nodejs
+            uses: actions/setup-node@v2
+            with:
+              node-version: '22'
+
+            #run은 개발자가 직접 작업을 정의
+          - name: npm install
+            run: npm install
+            working-directory: .
+
+          - name: Create .env file
+            run: |
+              echo "VITE_API_URL=${{ secrets.VITE_API_URL }}" >> .env
+              echo "VITE_GOOGLE_CLIENT_ID=${{ secrets.VITE_GOOGLE_CLIENT_ID }}" >> .env
+              echo "VITE_KAKAO_CLIENT_ID=${{ secrets.VITE_KAKAO_CLIENT_ID }}" >> .env
+              echo "VITE_NAVER_CLIENT_ID=${{ secrets.VITE_NAVER_CLIENT_ID }}" >> .env
+              echo "VITE_LIVEKIT_API_URL=${{ secrets.VITE_LIVEKIT_API_URL }}" >> .env
+
+          - name: npm build
+            run: npm run build
+            working-directory: .
+
+          - name: setup aws cli
+            uses: aws-actions/configure-aws-credentials@v2
+            with:
+              aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY }}
+              aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+              aws-region: "ap-northeast-2"
+
+          - name: deploy to s3
+            run: aws s3 cp ./dist s3://www.synco1.shop --recursive
+
+          - name: invalidate cloudfront
+            run: aws cloudfront create-invalidation --distribution-id EEWMDSKIMAXZW --paths "/*"
