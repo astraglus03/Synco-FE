@@ -108,7 +108,6 @@ const channels = computed(() => {
       channelData: channel,
     })) || [];
 
-
   return channelList;
 });
 
@@ -122,7 +121,6 @@ const currentChannelName = computed(() => {
     return chatUserInfo.value.name || "사용자";
   }
 
-    
   // 프로젝트 워크스페이스: 채널 이름 표시
   const channel = channels.value.find((c) => c.id === currentChannel.value);
   return channel ? channel.name : "채널";
@@ -203,11 +201,10 @@ const isPersonalChat = computed(() => {
 });
 
 // WebSocket 연결 중 플래그 (중복 호출 방지)
-const isConnecting = ref(false)
+const isConnecting = ref(false);
 
 // ✅ WebSocket 연결
 const connectWebsocket = () => {
-
   // ✅ channelSeq 유효성 검사 추가
   if (!channelSeq.value || isNaN(channelSeq.value) || channelSeq.value <= 0) {
     console.error("❌ 유효하지 않은 channelSeq:", channelSeq.value);
@@ -229,7 +226,7 @@ const connectWebsocket = () => {
   }
 
   // 연결 중 플래그 설정
-  isConnecting.value = true
+  isConnecting.value = true;
 
   // ✅ 기존 연결이 끊어진 상태면 정리
   if (stompClient.value && !stompClient.value.connected) {
@@ -256,9 +253,9 @@ const connectWebsocket = () => {
     { Authorization: `Bearer ${token.value}` },
     () => {
       // WebSocket 연결 성공
-      
+
       // 연결 완료 후 플래그 해제
-      isConnecting.value = false
+      isConnecting.value = false;
 
       subscription.value = stompClient.value.subscribe(
         `/topic/${channelSeq.value}`,
@@ -268,7 +265,6 @@ const connectWebsocket = () => {
 
             // ✅ TYPING 이벤트 처리
             if (parsed.action === "TYPING") {
-
               // 자신의 타이핑 이벤트는 무시
               if (Number(parsed.senderSeq) === Number(memberSeq.value)) {
                 return;
@@ -307,17 +303,20 @@ const connectWebsocket = () => {
 
               if (tempMsgIndex !== -1) {
                 // 🟩 temp_ 메시지 → 실제 chatMessageSeq로 교체
-                const createdAt = parsed.createdAt ? new Date(parsed.createdAt) : messages.value[tempMsgIndex].createdAt || new Date();
+                const createdAt = parsed.createdAt
+                  ? new Date(parsed.createdAt)
+                  : messages.value[tempMsgIndex].createdAt || new Date();
                 messages.value[tempMsgIndex].id = parsed.chatMessageSeq;
                 messages.value[tempMsgIndex].replyToSeq =
                   parsed.replyToSeq || null;
                 messages.value[tempMsgIndex].profileImageUrl =
                   parsed.senderProfileImageUrl || null;
                 messages.value[tempMsgIndex].createdAt = createdAt; // ✅ createdAt 업데이트
-                messages.value[tempMsgIndex].time = createdAt.toLocaleTimeString("ko-KR", {
-                  hour: "2-digit",
-                  minute: "2-digit",
-                });
+                messages.value[tempMsgIndex].time =
+                  createdAt.toLocaleTimeString("ko-KR", {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  });
 
                 // 🟩 교체했으면 새로 push하지 않도록 return
                 return;
@@ -337,7 +336,9 @@ const connectWebsocket = () => {
             }));
 
             // 💬 메시지 구조 변환 (사용자 정보 포함)
-            const createdAt = parsed.createdAt ? new Date(parsed.createdAt) : new Date();
+            const createdAt = parsed.createdAt
+              ? new Date(parsed.createdAt)
+              : new Date();
             const formattedMessage = {
               id: parsed.chatMessageSeq || Date.now(), // ✅ 백엔드에서 받은 실제 chatMessageSeq 사용
               user: parsed.senderName || parsed.senderSeq, // ✅ 백엔드에서 받은 실제 senderName 사용
@@ -387,23 +388,43 @@ const connectWebsocket = () => {
               const currentMainChannel = workspaceStore.currentChannel;
               const messageChannelSeq = Number(parsed.channelSeq);
               const messageChannelSeqStr = String(parsed.channelSeq);
-              
+
               // 실제로 현재 선택된 채널인지 확인
               let isCurrentlySelected = false;
-              if (currentMainChannel === 'chat' && currentSelectedChannel && channelSeq.value) {
-                const selectedChannelNum = Number(String(currentSelectedChannel).replace('chat_', ''));
-                isCurrentlySelected = 
-                  (selectedChannelNum === messageChannelSeq && selectedChannelNum === Number(channelSeq.value)) ||
-                  (currentSelectedChannel === messageChannelSeqStr && Number(channelSeq.value) === messageChannelSeq);
+              if (
+                currentMainChannel === "chat" &&
+                currentSelectedChannel &&
+                channelSeq.value
+              ) {
+                const selectedChannelNum = Number(
+                  String(currentSelectedChannel).replace("chat_", "")
+                );
+                isCurrentlySelected =
+                  (selectedChannelNum === messageChannelSeq &&
+                    selectedChannelNum === Number(channelSeq.value)) ||
+                  (currentSelectedChannel === messageChannelSeqStr &&
+                    Number(channelSeq.value) === messageChannelSeq);
               }
-              
+
               // 실제로 선택된 채널이고 현재 보고 있는 채널일 때만 알림 초기화
-              if (isCurrentlySelected && channelSeq.value && parsed.channelSeq && 
-                  Number(channelSeq.value) === messageChannelSeq) {
+              if (
+                isCurrentlySelected &&
+                channelSeq.value &&
+                parsed.channelSeq &&
+                Number(channelSeq.value) === messageChannelSeq
+              ) {
                 const channelSeqStr = String(channelSeq.value);
-                if (notificationStore.getChannelNotificationCount(channelSeqStr) > 0) {
-                  notificationStore.clearChannelNotificationCount(channelSeqStr);
-                  console.log('[Chat.vue] ✅ 현재 선택된 채널에서 메시지 수신, 알림 초기화:', channelSeqStr);
+                if (
+                  notificationStore.getChannelNotificationCount(channelSeqStr) >
+                  0
+                ) {
+                  notificationStore.clearChannelNotificationCount(
+                    channelSeqStr
+                  );
+                  console.log(
+                    "[Chat.vue] ✅ 현재 선택된 채널에서 메시지 수신, 알림 초기화:",
+                    channelSeqStr
+                  );
                 }
               }
 
@@ -411,13 +432,19 @@ const connectWebsocket = () => {
               if (isPersonalChat.value && parsed.channelSeq) {
                 // 알림 메시지 형식: 메시지 내용만
                 let notificationMessage = "";
-                
-                if (formattedMessage.files && formattedMessage.files.length > 0) {
+
+                if (
+                  formattedMessage.files &&
+                  formattedMessage.files.length > 0
+                ) {
                   notificationMessage = "[파일]";
-                } else if (formattedMessage.content && formattedMessage.content.trim()) {
+                } else if (
+                  formattedMessage.content &&
+                  formattedMessage.content.trim()
+                ) {
                   notificationMessage = formattedMessage.content;
                 }
-                
+
                 if (notificationMessage) {
                   emitter.emit("update-direct-message-last-message", {
                     channelSeq: parsed.channelSeq,
@@ -436,8 +463,8 @@ const connectWebsocket = () => {
     (error) => {
       console.error("❌ WebSocket 연결 실패:", error);
       // 연결 실패 시 플래그 해제
-      isConnecting.value = false
-      
+      isConnecting.value = false;
+
       if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
         reconnectAttempts++;
         setTimeout(() => connectWebsocket(), RECONNECT_DELAY);
@@ -487,13 +514,14 @@ const scrollToBottom = (smooth = false) => {
   nextTick(() => {
     const chatBox = document.querySelector(".messages-container");
     if (chatBox) {
-      const isNearBottom = chatBox.scrollHeight - chatBox.scrollTop - chatBox.clientHeight < 100;
-      
+      const isNearBottom =
+        chatBox.scrollHeight - chatBox.scrollTop - chatBox.clientHeight < 100;
+
       // 하단 근처에 있거나 강제 스크롤 요청 시에만 스크롤
       if (isNearBottom || smooth) {
         chatBox.scrollTo({
           top: chatBox.scrollHeight,
-          behavior: smooth ? 'smooth' : 'auto'
+          behavior: smooth ? "smooth" : "auto",
         });
       }
     }
@@ -541,7 +569,6 @@ const sendMessage = async () => {
 
   // ✅ WebSocket 연결 확인 및 재연결 시도
   if (!stompClient.value || !stompClient.value.connected) {
-
     if (!channelSeq.value || !token.value) {
       console.error("❌ 채널 또는 토큰이 없습니다.");
       alert("채널을 선택해주세요.");
@@ -672,13 +699,13 @@ const sendMessage = async () => {
     if (isPersonalChat.value && channelSeq.value) {
       // 알림 메시지 형식: 메시지 내용만
       let notificationMessage = "";
-      
+
       if (uploadedUrls.length > 0) {
         notificationMessage = "[파일]";
       } else if (localMessage.content && localMessage.content.trim()) {
         notificationMessage = localMessage.content;
       }
-      
+
       if (notificationMessage) {
         emitter.emit("update-direct-message-last-message", {
           channelSeq: channelSeq.value,
@@ -730,7 +757,9 @@ const loadMoreMessages = async (lastId = null) => {
   isLoadingMessages.value = true;
 
   try {
-    const url = `/chat-service/chat/channels/${channelSeq.value}/messages${lastId ? `?lastId=${lastId}` : ""}`;
+    const url = `/chat-service/chat/channels/${channelSeq.value}/messages${
+      lastId ? `?lastId=${lastId}` : ""
+    }`;
 
     const res = await apiClient.get(url);
 
@@ -952,86 +981,86 @@ const changeChannel = async (channelId) => {
       return;
     }
 
-  // ✅ 기존 연결 해제 (채널 변경 시 항상 호출)
-  await disconnectWebsocket();
+    // ✅ 기존 연결 해제 (채널 변경 시 항상 호출)
+    await disconnectWebsocket();
 
-  // 새 채널로 변경
-  currentChannel.value = channelId;
-  channelSeq.value = parseInt(channelId); // 문자열을 숫자로 변환
-  messages.value = [];
+    // 새 채널로 변경
+    currentChannel.value = channelId;
+    channelSeq.value = parseInt(channelId); // 문자열을 숫자로 변환
+    messages.value = [];
 
-  // 이전 메시지 로드 상태 리셋
-  hasMoreMessages.value = true;
-  isLoadingMessages.value = false;
-  lastReadMessageSeq.value = null; // ✅ 마지막 읽은 메시지 초기화
+    // 이전 메시지 로드 상태 리셋
+    hasMoreMessages.value = true;
+    isLoadingMessages.value = false;
+    lastReadMessageSeq.value = null; // ✅ 마지막 읽은 메시지 초기화
 
-  // ✅ 1:1 채팅일 때 상대방 정보 로드
-  if (isPersonalChat.value) {
-    await loadChatUserInfo(channelSeq.value);
-  }
-
-  try {
-    // ✅ 1단계: 마지막 읽은 이후의 새 메시지 로드
-    const newMessages = await loadMessagesAfterLastRead();
-
-    // ✅ 2단계: 채널 접속 시 읽음 상태 업데이트 (최신 메시지로)
-    // 메시지 로드 후에 읽음 처리 (프로젝트/개인 워크스페이스 모두 동일)
-    try {
-      await updateLastRead(channelSeq.value);
-    } catch (error) {
-      console.warn("⚠️ 읽음 상태 업데이트 실패:", error);
-      // 읽음 상태 업데이트 실패해도 메시지 로드는 계속 진행
+    // ✅ 1:1 채팅일 때 상대방 정보 로드
+    if (isPersonalChat.value) {
+      await loadChatUserInfo(channelSeq.value);
     }
 
-    // ✅ 3단계: 재접속 여부에 따른 처리
-    if (newMessages.length > 0 && lastReadMessageSeq.value) {
-      // 🔄 재접속: 새 메시지 표시 및 구분선으로 스크롤
-      messages.value = newMessages;
+    try {
+      // ✅ 1단계: 마지막 읽은 이후의 새 메시지 로드
+      const newMessages = await loadMessagesAfterLastRead();
 
-      // DOM 업데이트 대기
-      await new Promise((resolve) => setTimeout(resolve, 50));
+      // ✅ 2단계: 채널 접속 시 읽음 상태 업데이트 (최신 메시지로)
+      // 메시지 로드 후에 읽음 처리 (프로젝트/개인 워크스페이스 모두 동일)
+      try {
+        await updateLastRead(channelSeq.value);
+      } catch (error) {
+        console.warn("⚠️ 읽음 상태 업데이트 실패:", error);
+        // 읽음 상태 업데이트 실패해도 메시지 로드는 계속 진행
+      }
 
-      // 구분선(새 메시지 시작점)이 상단에 오도록 스크롤
-      const container = document.querySelector(".messages-container");
-      if (container) {
-        const firstNewMessage = document.querySelector(
-          `[data-message-id="${lastReadMessageSeq.value}"]`
-        );
-        if (firstNewMessage) {
-          // 구분선이 메시지 위에 있으므로, 메시지의 이전 형제 요소를 찾아서 스크롤
-          const divider = firstNewMessage.previousElementSibling;
-          if (divider && divider.classList.contains("message-divider")) {
-            // 구분선으로 스크롤
-            divider.scrollIntoView({ behavior: "instant", block: "start" });
-          } else {
-            // 구분선이 없으면 메시지 상단으로 스크롤
-            firstNewMessage.scrollIntoView({
-              behavior: "instant",
-              block: "start",
-            });
+      // ✅ 3단계: 재접속 여부에 따른 처리
+      if (newMessages.length > 0 && lastReadMessageSeq.value) {
+        // 🔄 재접속: 새 메시지 표시 및 구분선으로 스크롤
+        messages.value = newMessages;
+
+        // DOM 업데이트 대기
+        await new Promise((resolve) => setTimeout(resolve, 50));
+
+        // 구분선(새 메시지 시작점)이 상단에 오도록 스크롤
+        const container = document.querySelector(".messages-container");
+        if (container) {
+          const firstNewMessage = document.querySelector(
+            `[data-message-id="${lastReadMessageSeq.value}"]`
+          );
+          if (firstNewMessage) {
+            // 구분선이 메시지 위에 있으므로, 메시지의 이전 형제 요소를 찾아서 스크롤
+            const divider = firstNewMessage.previousElementSibling;
+            if (divider && divider.classList.contains("message-divider")) {
+              // 구분선으로 스크롤
+              divider.scrollIntoView({ behavior: "instant", block: "start" });
+            } else {
+              // 구분선이 없으면 메시지 상단으로 스크롤
+              firstNewMessage.scrollIntoView({
+                behavior: "instant",
+                block: "start",
+              });
+            }
           }
         }
+      } else {
+        // 🆕 최초 접속: 모든 메시지 로드 후 맨 아래로 스크롤
       }
-    } else {
-      // 🆕 최초 접속: 모든 메시지 로드 후 맨 아래로 스크롤
+    } catch (error) {
+      console.error("❌ loadMessagesAfterLastRead 실패:", error);
+      // 에러가 발생해도 이전 메시지는 로드해야 함
+      lastReadMessageSeq.value = null;
     }
-  } catch (error) {
-    console.error("❌ loadMessagesAfterLastRead 실패:", error);
-    // 에러가 발생해도 이전 메시지는 로드해야 함
-    lastReadMessageSeq.value = null;
-  }
 
-  // ✅ 3단계: 이전 메시지 로드
-  // 재접속 시(lastReadMessageSeq.value가 있으면): 구분선 이전의 메시지만 로드
-  // 최초 접속 시(null): 최신 메시지 로드
-  const lastId = lastReadMessageSeq.value || null;
-  try {
-    await loadMoreMessages(lastId);
-  } catch (error) {
-    console.error("❌ loadMoreMessages 실패:", error);
-    // 에러 발생 시에도 사용자에게 알림
-    alert("메시지를 불러오는 중 오류가 발생했습니다.");
-  }
+    // ✅ 3단계: 이전 메시지 로드
+    // 재접속 시(lastReadMessageSeq.value가 있으면): 구분선 이전의 메시지만 로드
+    // 최초 접속 시(null): 최신 메시지 로드
+    const lastId = lastReadMessageSeq.value || null;
+    try {
+      await loadMoreMessages(lastId);
+    } catch (error) {
+      console.error("❌ loadMoreMessages 실패:", error);
+      // 에러 발생 시에도 사용자에게 알림
+      alert("메시지를 불러오는 중 오류가 발생했습니다.");
+    }
 
     // 새 채널로 연결
     connectWebsocket();
@@ -1045,7 +1074,7 @@ const changeChannel = async (channelId) => {
 const hasLoadedInitialChannel = ref(false);
 
 // 채널 변경 중복 방지 플래그
-const isChangingChannel = ref(false)
+const isChangingChannel = ref(false);
 
 // 하위 채널 선택 이벤트 처리 (event bus용)
 const handleSubChannelSelect = ({ parentId, subChannelId }) => {
@@ -1441,13 +1470,36 @@ const getFileIconFromUrl = (url) => {
   try {
     const lower = url.split("?")[0].toLowerCase();
     if (lower.includes(".pdf")) return "mdi-file-pdf-box";
-    if (lower.includes(".doc") || lower.includes(".docx")) return "mdi-file-word-box";
-    if (lower.includes(".xls") || lower.includes(".xlsx") || lower.includes(".csv")) return "mdi-file-excel-box";
-    if (lower.includes(".ppt") || lower.includes(".pptx")) return "mdi-file-powerpoint-box";
-    if (lower.includes(".zip") || lower.includes(".rar") || lower.includes(".7z")) return "mdi-folder-zip";
+    if (lower.includes(".doc") || lower.includes(".docx"))
+      return "mdi-file-word-box";
+    if (
+      lower.includes(".xls") ||
+      lower.includes(".xlsx") ||
+      lower.includes(".csv")
+    )
+      return "mdi-file-excel-box";
+    if (lower.includes(".ppt") || lower.includes(".pptx"))
+      return "mdi-file-powerpoint-box";
+    if (
+      lower.includes(".zip") ||
+      lower.includes(".rar") ||
+      lower.includes(".7z")
+    )
+      return "mdi-folder-zip";
     if (lower.includes(".txt")) return "mdi-file-document-outline";
-    if (lower.includes(".mp4") || lower.includes(".avi") || lower.includes(".mov") || lower.includes(".mkv")) return "mdi-file-video";
-    if (lower.includes(".mp3") || lower.includes(".wav") || lower.includes(".flac")) return "mdi-file-music";
+    if (
+      lower.includes(".mp4") ||
+      lower.includes(".avi") ||
+      lower.includes(".mov") ||
+      lower.includes(".mkv")
+    )
+      return "mdi-file-video";
+    if (
+      lower.includes(".mp3") ||
+      lower.includes(".wav") ||
+      lower.includes(".flac")
+    )
+      return "mdi-file-music";
     return "mdi-file";
   } catch (e) {
     return "mdi-file";
@@ -1460,13 +1512,36 @@ const getFileIconClass = (url) => {
   try {
     const lower = url.split("?")[0].toLowerCase();
     if (lower.includes(".pdf")) return "file-icon-pdf";
-    if (lower.includes(".doc") || lower.includes(".docx")) return "file-icon-word";
-    if (lower.includes(".xls") || lower.includes(".xlsx") || lower.includes(".csv")) return "file-icon-excel";
-    if (lower.includes(".ppt") || lower.includes(".pptx")) return "file-icon-ppt";
-    if (lower.includes(".zip") || lower.includes(".rar") || lower.includes(".7z")) return "file-icon-zip";
+    if (lower.includes(".doc") || lower.includes(".docx"))
+      return "file-icon-word";
+    if (
+      lower.includes(".xls") ||
+      lower.includes(".xlsx") ||
+      lower.includes(".csv")
+    )
+      return "file-icon-excel";
+    if (lower.includes(".ppt") || lower.includes(".pptx"))
+      return "file-icon-ppt";
+    if (
+      lower.includes(".zip") ||
+      lower.includes(".rar") ||
+      lower.includes(".7z")
+    )
+      return "file-icon-zip";
     if (lower.includes(".txt")) return "file-icon-text";
-    if (lower.includes(".mp4") || lower.includes(".avi") || lower.includes(".mov") || lower.includes(".mkv")) return "file-icon-video";
-    if (lower.includes(".mp3") || lower.includes(".wav") || lower.includes(".flac")) return "file-icon-audio";
+    if (
+      lower.includes(".mp4") ||
+      lower.includes(".avi") ||
+      lower.includes(".mov") ||
+      lower.includes(".mkv")
+    )
+      return "file-icon-video";
+    if (
+      lower.includes(".mp3") ||
+      lower.includes(".wav") ||
+      lower.includes(".flac")
+    )
+      return "file-icon-audio";
     return "file-icon-default";
   } catch (e) {
     return "file-icon-default";
@@ -1678,7 +1753,7 @@ const shouldShowTime = (message, index) => {
   // 시간 비교 (같은 시:분인지 확인)
   const currentTime = message.createdAt;
   const nextTime = nextMessage.createdAt;
-  
+
   const currentMinutes = currentTime.getHours() * 60 + currentTime.getMinutes();
   const nextMinutes = nextTime.getHours() * 60 + nextTime.getMinutes();
 
@@ -1699,11 +1774,11 @@ const shouldShowTime = (message, index) => {
   return false;
 };
 
-// 1:1 채팅 상대방 정보 가져오기 
+// 1:1 채팅 상대방 정보 가져오기
 const loadChatUserInfo = async (targetChannelSeq = null) => {
   // targetChannelSeq가 제공되면 그것을 사용, 없으면 props.selectedChannel 사용
   const channelSeqToUse = targetChannelSeq || props.selectedChannel;
-  
+
   if (!isPersonalChat.value || !channelSeqToUse) return;
 
   try {
@@ -1714,7 +1789,7 @@ const loadChatUserInfo = async (targetChannelSeq = null) => {
 
     // 채널 멤버 목록 조회 (상대방 정보 포함)
     const members = await getChannelMembers(channelSeq);
-    
+
     if (!members || members.length === 0) {
       return;
     }
@@ -1730,22 +1805,24 @@ const loadChatUserInfo = async (targetChannelSeq = null) => {
 
     // 공통 워크스페이스 계산
     const currentUserWorkSpaces = workspaceStore.workspaces
-      .filter(ws => ws.type === 'project') // 프로젝트 워크스페이스만
-      .map(ws => ws.workSpaceSeq);
-    
+      .filter((ws) => ws.type === "project") // 프로젝트 워크스페이스만
+      .map((ws) => ws.workSpaceSeq);
+
     const otherUserWorkSpaces = otherMember.workSpaceList || [];
-    
+
     // 교집합 구하기 (공통 워크스페이스)
-    const commonWorkSpaceSeqs = currentUserWorkSpaces.filter(wsSeq =>
+    const commonWorkSpaceSeqs = currentUserWorkSpaces.filter((wsSeq) =>
       otherUserWorkSpaces.includes(wsSeq)
     );
-    
+
     // 워크스페이스 이름 매핑
-    const commonWorkspaces = commonWorkSpaceSeqs.map(wsSeq => {
-      const workspace = workspaceStore.workspaces.find(ws => ws.workSpaceSeq === wsSeq);
+    const commonWorkspaces = commonWorkSpaceSeqs.map((wsSeq) => {
+      const workspace = workspaceStore.workspaces.find(
+        (ws) => ws.workSpaceSeq === wsSeq
+      );
       return {
         workSpaceSeq: wsSeq,
-        workSpaceName: workspace?.name || `워크스페이스 #${wsSeq}`
+        workSpaceName: workspace?.name || `워크스페이스 #${wsSeq}`,
       };
     });
 
@@ -1756,11 +1833,21 @@ const loadChatUserInfo = async (targetChannelSeq = null) => {
       profileUrl: otherMember.memberProfileUrl || "",
       status: otherMember.activeStatus || "OFFLINE",
       memberSeq: otherMember.memberSeq,
-      commonWorkspaces: commonWorkspaces // ✅ 워크스페이스 정보 (이름 포함)
+      commonWorkspaces: commonWorkspaces, // ✅ 워크스페이스 정보 (이름 포함)
     };
   } catch (e) {
     chatUserInfo.value = null;
   }
+};
+
+// 상태별 색상 계산
+const getStatusColor = (status) => {
+  const statusMap = {
+    ONLINE: "success", // 초록색 (온라인)
+    OFFLINE: "error", // 빨간색 (오프라인)
+    AWAY: "warning", // 주황색 (자리비움)
+  };
+  return statusMap[status] || "error";
 };
 
 // selectedChannel 변경 시 사용자 정보 로드
@@ -1990,8 +2077,9 @@ onUnmounted(async () => {
               color="primary"
             >
               {{
-                (chatUserInfo?.name || currentChannelName || "사용자").charAt(0) ||
-                  "?"
+                (chatUserInfo?.name || currentChannelName || "사용자").charAt(
+                  0
+                ) || "?"
               }}
             </v-avatar>
           </template>
@@ -2032,10 +2120,11 @@ onUnmounted(async () => {
               }"
               @contextmenu="handleMessageRightClick(message, $event)"
             >
-              <div 
+              <div
                 class="message-content"
                 :class="{
-                  'has-files-content': Array.isArray(message.files) && message.files.length > 0,
+                  'has-files-content':
+                    Array.isArray(message.files) && message.files.length > 0,
                 }"
               >
                 <!-- ✅ 아바타: 항상 표시하되, 연속된 메시지는 투명하게 -->
@@ -2118,7 +2207,9 @@ onUnmounted(async () => {
                     class="message-bubble"
                     :class="{
                       mentioned: isMentionedMessage(message),
-                      'has-files': Array.isArray(message.files) && message.files.length > 0,
+                      'has-files':
+                        Array.isArray(message.files) &&
+                        message.files.length > 0,
                     }"
                   >
                     <div
@@ -2137,7 +2228,16 @@ onUnmounted(async () => {
                       <!-- 이미지 파일들을 그리드로 표시 -->
                       <template v-if="getImageFiles(message.files).length > 0">
                         <div class="images-grid-container">
-                          <div class="images-grid">
+                          <div
+                            class="images-grid"
+                            :class="{
+                              'single-image':
+                                getImageFiles(message.files).length === 1,
+                              'few-images':
+                                getImageFiles(message.files).length >= 2 &&
+                                getImageFiles(message.files).length <= 3,
+                            }"
+                          >
                             <a
                               v-for="(file, i) in getVisibleImages(message)"
                               :key="i"
@@ -2152,27 +2252,41 @@ onUnmounted(async () => {
                                     :src="file.url"
                                     :alt="file.name"
                                     class="image-thumb-grid"
-                                    @error="$event.target.style.display='none'"
+                                    @error="
+                                      $event.target.style.display = 'none'
+                                    "
                                   />
                                   <div class="image-overlay-grid">
-                                    <v-icon color="white" size="20">mdi-magnify-plus</v-icon>
+                                    <v-icon color="white" size="20"
+                                      >mdi-magnify-plus</v-icon
+                                    >
                                   </div>
                                 </div>
                               </div>
                             </a>
                           </div>
                           <!-- 더보기 버튼 -->
-                          <div 
-                            v-if="getImageFiles(message.files).length > 20 && !getExpandedImages(message.id)"
+                          <div
+                            v-if="
+                              getImageFiles(message.files).length > 20 &&
+                              !getExpandedImages(message.id)
+                            "
                             class="show-more-images"
                             @click="expandImages(message.id)"
                           >
                             <v-icon>mdi-chevron-down</v-icon>
-                            <span>더보기 ({{ getImageFiles(message.files).length - 20 }}개)</span>
+                            <span
+                              >더보기 ({{
+                                getImageFiles(message.files).length - 20
+                              }}개)</span
+                            >
                           </div>
                           <!-- 접기 버튼 -->
-                          <div 
-                            v-if="getImageFiles(message.files).length > 20 && getExpandedImages(message.id)"
+                          <div
+                            v-if="
+                              getImageFiles(message.files).length > 20 &&
+                              getExpandedImages(message.id)
+                            "
                             class="show-more-images"
                             @click="collapseImages(message.id)"
                           >
@@ -2181,9 +2295,12 @@ onUnmounted(async () => {
                           </div>
                         </div>
                       </template>
-                      
+
                       <!-- 일반 파일들을 리스트로 표시 -->
-                      <template v-for="(file, i) in getFileFiles(message.files)" :key="`file-${i}`">
+                      <template
+                        v-for="(file, i) in getFileFiles(message.files)"
+                        :key="`file-${i}`"
+                      >
                         <div class="message-file-item">
                           <a
                             :href="file.url"
@@ -2198,13 +2315,19 @@ onUnmounted(async () => {
                                 </v-icon>
                               </div>
                               <div class="file-info">
-                                <div class="file-name-text">{{ file.name }}</div>
+                                <div class="file-name-text">
+                                  {{ file.name }}
+                                </div>
                                 <div class="file-size-text">
-                                  <v-icon size="12" class="file-size-icon">mdi-download</v-icon>
+                                  <v-icon size="12" class="file-size-icon"
+                                    >mdi-download</v-icon
+                                  >
                                   파일 다운로드
                                 </div>
                               </div>
-                              <v-icon size="20" class="file-action-icon">mdi-open-in-new</v-icon>
+                              <v-icon size="20" class="file-action-icon"
+                                >mdi-open-in-new</v-icon
+                              >
                             </div>
                           </a>
                         </div>
@@ -2220,7 +2343,7 @@ onUnmounted(async () => {
                     >
                       <!-- {{ message.unread }} -->
                     </div>
-                    <div 
+                    <div
                       v-if="shouldShowTime(message, index)"
                       class="message-time"
                     >
@@ -2497,11 +2620,7 @@ onUnmounted(async () => {
       </div>
 
       <div class="user-profile">
-        <v-avatar 
-          size="80" 
-          color="primary" 
-          class="user-avatar"
-        >
+        <v-avatar size="80" color="primary" class="user-avatar">
           <v-img
             v-if="chatUserInfo.profileUrl"
             :src="chatUserInfo.profileUrl"
@@ -2512,12 +2631,15 @@ onUnmounted(async () => {
         </v-avatar>
         <div class="user-name">{{ chatUserInfo.name || "사용자" }}</div>
         <div class="user-status">
-          <v-chip 
-            size="small" 
-            :color="chatUserInfo.status === 'ONLINE' ? 'success' : 'grey'"
-          >
+          <v-chip size="small" :color="getStatusColor(chatUserInfo.status)">
             <v-icon start>mdi-circle</v-icon>
-            {{ chatUserInfo.status === 'ONLINE' ? '온라인' : '오프라인' }}
+            {{
+              chatUserInfo.status === "ONLINE"
+                ? "온라인"
+                : chatUserInfo.status === "OFFLINE"
+                ? "오프라인"
+                : "자리비움"
+            }}
           </v-chip>
         </div>
       </div>
@@ -2527,15 +2649,21 @@ onUnmounted(async () => {
         <div class="detail-section">
           <h4>공통 워크스페이스</h4>
           <div class="workspace-list">
-            <div 
-            v-for="ws in chatUserInfo.commonWorkspaces" 
-            :key="ws.workSpaceSeq"
-            class="workspace-item"
+            <div
+              v-for="ws in chatUserInfo.commonWorkspaces"
+              :key="ws.workSpaceSeq"
+              class="workspace-item"
             >
-            <v-icon size="16">mdi-folder</v-icon>
-            <span>{{ ws.workSpaceName }}</span>
+              <v-icon size="16">mdi-folder</v-icon>
+              <span>{{ ws.workSpaceName }}</span>
             </div>
-            <div v-if="!chatUserInfo.commonWorkspaces || chatUserInfo.commonWorkspaces.length === 0" class="empty-text">
+            <div
+              v-if="
+                !chatUserInfo.commonWorkspaces ||
+                chatUserInfo.commonWorkspaces.length === 0
+              "
+              class="empty-text"
+            >
               공통 워크스페이스가 없습니다
             </div>
           </div>
@@ -3445,9 +3573,22 @@ onUnmounted(async () => {
 
 .images-grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(4, minmax(150px, 1fr));
   gap: 6px;
   max-width: 100%;
+}
+
+/* 이미지가 1개일 때 크게 표시 */
+.images-grid.single-image {
+  grid-template-columns: 1fr;
+  max-width: 500px;
+  gap: 0;
+}
+
+/* 이미지가 2-3개일 때 더 크게 표시 */
+.images-grid.few-images {
+  grid-template-columns: repeat(3, minmax(180px, 1fr));
+  gap: 8px;
 }
 
 .image-grid-item {
@@ -3459,6 +3600,12 @@ onUnmounted(async () => {
   overflow: hidden;
   border-radius: 6px;
   background: rgba(var(--v-theme-on-surface), 0.05);
+}
+
+/* 이미지가 1개일 때 더 크게 */
+.single-image .image-grid-item {
+  aspect-ratio: auto;
+  max-height: 500px;
 }
 
 .image-card-grid {
@@ -3487,6 +3634,12 @@ onUnmounted(async () => {
   object-fit: cover;
   display: block;
   transition: transform 0.3s ease;
+}
+
+/* 이미지가 1개일 때는 contain 사용해서 전체 이미지 보이기 */
+.single-image .image-thumb-grid {
+  object-fit: contain;
+  max-height: 500px;
 }
 
 .image-grid-item:hover .image-thumb-grid {
@@ -3780,8 +3933,18 @@ onUnmounted(async () => {
   }
 
   .images-grid {
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: repeat(4, minmax(130px, 1fr));
     gap: 6px;
+  }
+
+  .images-grid.few-images {
+    grid-template-columns: repeat(3, minmax(150px, 1fr));
+    gap: 8px;
+  }
+
+  .images-grid.single-image {
+    grid-template-columns: 1fr;
+    max-width: 500px;
   }
 }
 
@@ -4062,7 +4225,6 @@ onUnmounted(async () => {
   font-size: 12px;
   color: rgba(var(--v-theme-on-surface), 0.6);
 }
-
 
 /* Vuetify 입력 필드 레이아웃 */
 .input-field {

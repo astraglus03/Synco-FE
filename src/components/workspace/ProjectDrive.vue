@@ -1,6 +1,6 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRouter, useRoute } from 'vue-router'
 import { usePermissions, PERMISSIONS } from '@/composables/usePermissions'
 import { useProjectDriveStore } from '@/store/drive/projectDriveStore'
 import { useWorkspaceStore } from '@/store/workspaceStore'
@@ -17,6 +17,7 @@ const driveStore = useProjectDriveStore()
 const workspaceStore = useWorkspaceStore()
 const authStore = useAuthStore()
 const router = useRouter()
+const route = useRoute()
 
 // 뷰 모드 (list, grid)
 const viewMode = ref('grid')
@@ -68,6 +69,7 @@ const sharedDocTitle = ref('')
 const sharedDocLocation = ref(null)
 const sharedDocIsLocked = ref(false)
 const showFolderSelector = ref(false)
+const isCreatingSharedDoc = ref(false)
 const showDocEditor = ref(false)
 const currentDocument = ref(null)
 
@@ -445,39 +447,79 @@ const cancelRename = () => {
   editingName.value = ''
 }
 
+// ID에서 접두사 제거 (workspace_4 → 4)
+const extractId = (fullId) => {
+  if (!fullId) return fullId
+  const match = String(fullId).match(/_(\d+)$/)
+  if (match) {
+    return match[1]
+  }
+  return fullId
+}
+
+// 현재 워크스페이스 ID 추출 (URL용)
+const getWorkspaceIdForUrl = () => {
+  const currentWorkspace = workspaceStore.currentWorkspaceInfo
+  if (!currentWorkspace) return 'personal'
+  return extractId(currentWorkspace.id)
+}
+
 // 폴더 진입
-const enterFolder = (folder) => {
+const enterFolder = async (folder) => {
   driveStore.enterFolder(folder)
+  // URL 업데이트
+  const workspaceId = getWorkspaceIdForUrl()
+  await router.push(`/workspaces/${workspaceId}/drive/${folder.id}`)
 }
 
 // 브레드크럼 클릭으로 폴더 이동
 const navigateToFolder = async (folderId) => {
+  const workspaceId = getWorkspaceIdForUrl()
+  
   if (folderId === null) {
     // 홈으로 이동
     driveStore.goToRoot()
+    await router.push(`/workspaces/${workspaceId}/drive`)
   } else {
     // 특정 폴더로 이동
     await driveStore.goToFolder(folderId)
+    await router.push(`/workspaces/${workspaceId}/drive/${folderId}`)
   }
 }
 
 // 뒤로 가기
-const goBack = () => {
+const goBack = async () => {
   driveStore.goBack()
+  // URL 업데이트
+  const workspaceId = getWorkspaceIdForUrl()
+  const currentParentId = driveStore.currentParentId
+  if (currentParentId) {
+    await router.push(`/workspaces/${workspaceId}/drive/${currentParentId}`)
+  } else {
+    await router.push(`/workspaces/${workspaceId}/drive`)
+  }
 }
 
 // 전체 폴더 목록 로드
 const loadAllFolders = async () => {
+  if (!currentDriveChannelSeq.value) {
+    console.warn('driveChannelSeq가 없습니다. 워크스페이스를 확인하세요.')
+    return
+  }
+  
+  // 스토어의 currentDriveChannelSeq가 설정되지 않았다면 loadItems를 먼저 호출
+  if (!driveStore.currentDriveChannelSeq) {
+    await driveStore.loadItems(currentDriveChannelSeq.value, null)
+  }
+  
   loadingFolders.value = true
   try {
     const result = await driveStore.getAllFolders()
-('getAllFolders result:', result) // 디버깅용
     if (result.success) {
       allFolders.value = result.data
-('allFolders.value set to:', allFolders.value) // 디버깅용
     }
   } catch (error) {
-('전체 폴더 목록 로드 실패:', error)
+    console.error('전체 폴더 목록 로드 실패:', error)
   } finally {
     loadingFolders.value = false
   }
@@ -679,9 +721,7 @@ const flattenedFolders = computed(() => {
     })
   }
   
-('allFolders.value:', allFolders.value) // 디버깅용
   flatten(buildFolderHierarchy(allFolders.value))
-('flattenedFolders result:', result) // 디버깅용
   return result
 })
 
@@ -917,22 +957,27 @@ const formatFileSizeFromBytes = (bytes) => {
 
 // 공유문서 생성
 const createSharedDoc = async () => {
-  if (!sharedDocTitle.value.trim()) return
+  if (!sharedDocTitle.value.trim() || isCreatingSharedDoc.value) return
   
-  // 선택한 폴더 위치를 사용
-  const parentFolderId = sharedDocLocation.value
-  
-  const result = await driveStore.createSharedDocument(sharedDocTitle.value.trim(), parentFolderId, sharedDocIsLocked.value)
-  if (result.success) {
-    // 폼 초기화
-    sharedDocTitle.value = ''
-    sharedDocLocation.value = null
-    sharedDocIsLocked.value = false
-    showSharedDocModal.value = false
-    showFolderSelector.value = false
-    // 스토어에서 이미 현재 폴더에 생성된 경우 자동으로 추가되므로 API 재호출 불필요
-  } else {
-    showError('공유문서 생성 실패', result.error || '공유문서 생성 중 오류가 발생했습니다.')
+  isCreatingSharedDoc.value = true
+  try {
+    // 선택한 폴더 위치를 사용
+    const parentFolderId = sharedDocLocation.value
+    
+    const result = await driveStore.createSharedDocument(sharedDocTitle.value.trim(), parentFolderId, sharedDocIsLocked.value)
+    if (result.success) {
+      // 폼 초기화
+      sharedDocTitle.value = ''
+      sharedDocLocation.value = null
+      sharedDocIsLocked.value = false
+      showSharedDocModal.value = false
+      showFolderSelector.value = false
+      // 스토어에서 이미 현재 폴더에 생성된 경우 자동으로 추가되므로 API 재호출 불필요
+    } else {
+      showError('공유문서 생성 실패', result.error || '공유문서 생성 중 오류가 발생했습니다.')
+    }
+  } finally {
+    isCreatingSharedDoc.value = false
   }
 }
 
@@ -1027,9 +1072,18 @@ const closeModals = () => {
 const previousChannel = ref(null)
 
 // 생명주기
-onMounted(() => {
+onMounted(async () => {
   previousChannel.value = props.currentChannel
-  loadDriveItems()
+  
+  // URL에서 folderSeq 확인 (subChannel 파라미터)
+  const folderSeq = route.params.subChannel
+  if (folderSeq && props.currentChannel === 'drive') {
+    // goToFolder가 내부적으로 데이터를 로드하므로 loadDriveItems 호출 불필요
+    await navigateToFolder(Number(folderSeq))
+  } else {
+    // 일반적인 경우에만 loadDriveItems 호출
+    loadDriveItems()
+  }
   
   // 전역 클릭 이벤트로 편집 모드 취소
   document.addEventListener('click', handleGlobalClick)
@@ -1726,7 +1780,8 @@ watch(() => props.currentChannel, (newChannel, oldChannel) => {
           <v-btn 
             color="primary" 
             @click="createSharedDoc"
-            :disabled="!sharedDocTitle.trim()"
+            :disabled="!sharedDocTitle.trim() || isCreatingSharedDoc"
+            :loading="isCreatingSharedDoc"
           >
             만들기
           </v-btn>

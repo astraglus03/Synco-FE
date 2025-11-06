@@ -229,7 +229,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import { useWorkspaceStore } from '@/store/workspaceStore'
 import { 
   getPersonalTasks, 
@@ -468,7 +468,41 @@ watch(showTaskDetailModal, async (newVal, oldVal) => {
 
 onMounted(async () => {
   await loadPersonalTasks()
+  // 검색/알림에서 넘어온 상세 열기 이벤트 리스너 등록
+  window.addEventListener('open-task-detail', onOpenTaskDetailFromExternal)
+  // 내비게이션 직후 세션 스토리지 전달값 처리 (이벤트 미리스닝 대비)
+  try {
+    const pendingTaskSeq = sessionStorage.getItem('openTaskDetailTaskSeq')
+    if (pendingTaskSeq) {
+      sessionStorage.removeItem('openTaskDetailTaskSeq')
+      onOpenTaskDetailFromExternal({ detail: { taskSeq: Number(pendingTaskSeq) } })
+    }
+  } catch {}
 })
+
+onBeforeUnmount(() => {
+  window.removeEventListener('open-task-detail', onOpenTaskDetailFromExternal)
+})
+
+// 외부 트리거(검색/알림)로 개인 업무 상세 열기
+const onOpenTaskDetailFromExternal = async (e) => {
+  try {
+    const detail = e?.detail || {}
+    const taskSeq = Number(detail.taskSeq || detail.channelSeq)
+    if (!taskSeq) return
+    loadingTaskDetail.value = true
+    const response = await getPersonalTask(taskSeq)
+    const taskDetail = response?.data || response
+    if (taskDetail) {
+      selectedTask.value = taskDetail
+      showTaskDetailModal.value = true
+    }
+  } catch (err) {
+    console.error('[개인 일정] 태스크 상세 열기 실패:', err)
+  } finally {
+    loadingTaskDetail.value = false
+  }
+}
 </script>
 
 <style scoped>

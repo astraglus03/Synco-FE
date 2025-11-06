@@ -283,13 +283,33 @@ const openDatePicker = (type) => {
 
 // 시작일 업데이트
 const updateStartDate = (value) => {
-  taskData.value.startDate = value
+  // v-date-picker가 Date 객체를 반환할 수 있으므로 문자열로 변환
+  if (value instanceof Date) {
+    const year = value.getFullYear()
+    const month = String(value.getMonth() + 1).padStart(2, '0')
+    const day = String(value.getDate()).padStart(2, '0')
+    taskData.value.startDate = `${year}-${month}-${day}`
+  } else if (typeof value === 'string') {
+    taskData.value.startDate = value
+  } else {
+    taskData.value.startDate = value ? String(value) : ''
+  }
   startDateMenu.value = false
 }
 
 // 종료일 업데이트
 const updateEndDate = (value) => {
-  taskData.value.endDate = value
+  // v-date-picker가 Date 객체를 반환할 수 있으므로 문자열로 변환
+  if (value instanceof Date) {
+    const year = value.getFullYear()
+    const month = String(value.getMonth() + 1).padStart(2, '0')
+    const day = String(value.getDate()).padStart(2, '0')
+    taskData.value.endDate = `${year}-${month}-${day}`
+  } else if (typeof value === 'string') {
+    taskData.value.endDate = value
+  } else {
+    taskData.value.endDate = value ? String(value) : ''
+  }
   endDateMenu.value = false
 }
 
