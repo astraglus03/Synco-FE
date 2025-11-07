@@ -106,6 +106,10 @@ const filteredItems = computed(() => {
   )
 })
 
+const sortedItems = computed(() => {
+  return sortItems(filteredItems.value)
+})
+
 // 아이템 정렬
 const sortItems = (items) => {
   return [...items].sort((a, b) => {
@@ -1317,7 +1321,7 @@ watch(() => props.currentChannel, (newChannel, oldChannel) => {
       </div>
       
       <!-- 빈 상태 -->
-      <div v-else-if="filteredItems.length === 0" class="empty-container">
+      <div v-else-if="sortedItems.length === 0" class="empty-container">
         <v-icon size="64" color="grey">mdi-folder-open-outline</v-icon>
         <h3>폴더가 비어있습니다</h3>
         <p>파일을 업로드하거나 새 폴더를 만들어보세요</p>
@@ -1327,7 +1331,7 @@ watch(() => props.currentChannel, (newChannel, oldChannel) => {
       <div v-else-if="viewMode === 'grid'" class="grid-view">
         <div class="grid-container">
           <div
-            v-for="item in filteredItems"
+            v-for="item in sortedItems"
             :key="item.id"
             class="grid-item"
             :class="{ 
@@ -1498,7 +1502,7 @@ watch(() => props.currentChannel, (newChannel, oldChannel) => {
         
         <div class="list-items">
           <div
-            v-for="item in filteredItems"
+            v-for="item in sortedItems"
             :key="item.id"
             class="list-item"
             :class="{ 

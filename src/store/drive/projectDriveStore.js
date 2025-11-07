@@ -40,6 +40,47 @@ export const useProjectDriveStore = defineStore('projectDrive', () => {
     return items.value.filter(item => selectedItems.value.includes(item.id))
   })
 
+  const sortDriveItems = (list = []) => {
+    const getTypePriority = (item) => {
+      if (item?.type === 'folder') return 0
+      if (item?.type === 'shared-doc') return 1
+      return 2
+    }
+
+    const getFolderOrder = (item) => {
+      if (item?.type !== 'folder') return Number.POSITIVE_INFINITY
+      const order = Number(item?.orders)
+      return Number.isFinite(order) ? order : Number.POSITIVE_INFINITY
+    }
+
+    const getName = (item) => (item?.name || '').toString().toLowerCase()
+
+    return [...list].sort((a, b) => {
+      const typeDiff = getTypePriority(a) - getTypePriority(b)
+      if (typeDiff !== 0) return typeDiff
+
+      if (getTypePriority(a) === 0) {
+        const orderDiff = getFolderOrder(a) - getFolderOrder(b)
+        if (orderDiff !== 0) return orderDiff
+      }
+
+      const nameA = getName(a)
+      const nameB = getName(b)
+      if (nameA < nameB) return -1
+      if (nameA > nameB) return 1
+
+      const idA = String(a?.id || '')
+      const idB = String(b?.id || '')
+      if (idA < idB) return -1
+      if (idA > idB) return 1
+      return 0
+    })
+  }
+
+  const setSortedItems = (list = []) => {
+    items.value = sortDriveItems(list)
+  }
+
   // 액션
   const loadItems = async (driveChannelSeq, parentId = null) => {
     isLoading.value = true
@@ -50,7 +91,7 @@ export const useProjectDriveStore = defineStore('projectDrive', () => {
       const result = await projectDriveApi.getItems(driveChannelSeq, parentId)
       
       if (result.success) {
-        items.value = result.data
+        setSortedItems(result.data)
         currentParentId.value = parentId
       } else {
         error.value = result.error
@@ -75,7 +116,7 @@ export const useProjectDriveStore = defineStore('projectDrive', () => {
         // 업로드된 파일이 현재 보고 있는 폴더에 업로드된 경우에만 즉시 추가
         // (다른 폴더에 업로드된 경우는 해당 폴더로 이동할 때 자동으로 조회됨)
         if (targetParentId === currentParentId.value) {
-          items.value.push(...result.data)
+          setSortedItems([...items.value, ...result.data])
         }
         return { success: true, data: result.data }
       } else {
@@ -129,7 +170,7 @@ export const useProjectDriveStore = defineStore('projectDrive', () => {
         // 생성된 문서가 현재 보고 있는 폴더에 생성된 경우에만 즉시 추가
         // (다른 폴더에 생성된 경우는 해당 폴더로 이동할 때 자동으로 조회됨)
         if (targetParentId === currentParentId.value) {
-          items.value.push(result.data)
+          setSortedItems([...items.value, result.data])
         }
         return { success: true, data: result.data }
       } else {
@@ -153,7 +194,7 @@ export const useProjectDriveStore = defineStore('projectDrive', () => {
       const result = await projectDriveApi.deleteItem(itemId, itemType, currentDriveChannelSeq.value)
       
       if (result.success) {
-        items.value = items.value.filter(item => item.id !== itemId)
+        setSortedItems(items.value.filter(item => item.id !== itemId))
         selectedItems.value = selectedItems.value.filter(id => id !== itemId)
         return { success: true }
       } else {
@@ -181,8 +222,11 @@ export const useProjectDriveStore = defineStore('projectDrive', () => {
         const index = items.value.findIndex(item => item.id === folderId && item.type === 'folder')
         if (index !== -1) {
           items.value[index].name = newName
+          const updatedItem = items.value[index]
+          setSortedItems(items.value)
+          return { success: true, data: updatedItem }
         }
-        return { success: true, data: items.value[index] }
+        return { success: true, data: null }
       } else {
         error.value = result.error
         return { success: false, error: result.error }
@@ -210,8 +254,11 @@ export const useProjectDriveStore = defineStore('projectDrive', () => {
         )
         if (index !== -1) {
           items.value[index].name = newName
+          const updatedItem = items.value[index]
+          setSortedItems(items.value)
+          return { success: true, data: updatedItem }
         }
-        return { success: true, data: items.value[index] }
+        return { success: true, data: null }
       } else {
         error.value = result.error
         return { success: false, error: result.error }
@@ -374,7 +421,7 @@ export const useProjectDriveStore = defineStore('projectDrive', () => {
       
       if (result.success) {
         // 로컬 상태에서 아이템 제거 (새 위치로 이동됨)
-        items.value = items.value.filter(item => item.id !== itemId)
+        setSortedItems(items.value.filter(item => item.id !== itemId))
         selectedItems.value = selectedItems.value.filter(id => id !== itemId)
         return { success: true }
       } else {
