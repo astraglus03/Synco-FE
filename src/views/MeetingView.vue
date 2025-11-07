@@ -455,8 +455,11 @@ const initializeExistingTracks = async () => {
 
 // LiveKit Room 초기화
 const initializeLiveKitRoom = async () => {
+  let wsUrl = '' // catch 블록에서 접근 가능하도록 함수 스코프에 선언
+  let token = null
+  
   try {
-    const token = meetingData.value.livekitToken
+    token = meetingData.value.livekitToken
     const lkRoomName = meetingData.value.livekitRoomName
 
     if (!token || !lkRoomName) {
@@ -480,8 +483,6 @@ const initializeLiveKitRoom = async () => {
       console.error('❌ VITE_LIVEKIT_API_URL이 설정되지 않았습니다.')
       throw new Error('LiveKit 서버 URL이 설정되지 않았습니다.')
     }
-    
-    let wsUrl = ''
     
     // 프로토콜이 이미 포함되어 있는지 확인
     if (livekitUrl.startsWith('ws://') || livekitUrl.startsWith('wss://')) {
@@ -520,7 +521,9 @@ const initializeLiveKitRoom = async () => {
     })
 
     // 방 연결
+    console.log('🚀 LiveKit 연결 시도:', wsUrl)
     await room.value.connect(wsUrl, token)
+    console.log('✅ LiveKit 연결 성공')
 
     // 로컬 참가자 identity 저장
     localParticipantIdentity.value = room.value.localParticipant.identity
@@ -557,7 +560,15 @@ const initializeLiveKitRoom = async () => {
     // 기존 채팅 메시지 불러오기
     await loadChatMessages()
   } catch (error) {
-    alert('화상회의 연결에 실패했습니다.')
+    console.error('❌ LiveKit 연결 실패:', error)
+    console.error('연결 시도 URL:', wsUrl || 'URL 생성 실패')
+    console.error('토큰 존재:', !!token)
+    console.error('에러 상세:', {
+      message: error.message,
+      stack: error.stack,
+      name: error.name
+    })
+    alert(`화상회의 연결에 실패했습니다: ${error.message || error}`)
   }
 }
 
