@@ -520,16 +520,28 @@ const initializeLiveKitRoom = async () => {
       note: 'LiveKit 클라이언트가 자동으로 /rtc 경로를 추가합니다'
     })
 
+    // 이벤트 리스너 먼저 등록 (연결 전에 등록하여 모든 이벤트 캡처)
+    setupRoomEventListeners()
+
     // 방 연결
     console.log('🚀 LiveKit 연결 시도:', wsUrl)
-    await room.value.connect(wsUrl, token)
-    console.log('✅ LiveKit 연결 성공')
+    console.log('토큰 길이:', token?.length || 0)
+    
+    try {
+      await room.value.connect(wsUrl, token)
+      console.log('✅ LiveKit 연결 성공')
+    } catch (connectError) {
+      console.error('❌ room.connect() 실패:', connectError)
+      console.error('연결 실패 상세:', {
+        message: connectError.message,
+        name: connectError.name,
+        stack: connectError.stack
+      })
+      throw connectError
+    }
 
     // 로컬 참가자 identity 저장
     localParticipantIdentity.value = room.value.localParticipant.identity
-
-    // 이벤트 리스너 등록 (connect 이후)
-    setupRoomEventListeners()
 
     // 현재 방에 있는 참가자/트랙 DOM 부착
     await initializeExistingTracks()
@@ -630,7 +642,33 @@ const setupRoomEventListeners = () => {
 
   // 룸 연결 끊김
   room.value.on(RoomEvent.Disconnected, (reason) => {
+    console.error('❌ LiveKit 연결 끊김:', reason)
     endCall()
+  })
+  
+  // 연결 상태 모니터링
+  room.value.on(RoomEvent.SignalConnected, () => {
+    console.log('✅ WebSocket 시그널링 연결 성공')
+  })
+  
+  room.value.on(RoomEvent.SignalDisconnected, () => {
+    console.error('❌ 시그널 연결 끊김')
+  })
+  
+  room.value.on(RoomEvent.Connected, () => {
+    console.log('✅ LiveKit 룸 연결 완료')
+  })
+  
+  room.value.on(RoomEvent.Reconnecting, () => {
+    console.warn('⚠️ LiveKit 재연결 시도 중...')
+  })
+  
+  room.value.on(RoomEvent.Reconnected, () => {
+    console.log('✅ LiveKit 재연결 성공')
+  })
+  
+  room.value.on(RoomEvent.ConnectionStateChanged, (state) => {
+    console.log('🔄 LiveKit 연결 상태 변경:', state)
   })
 }
 
