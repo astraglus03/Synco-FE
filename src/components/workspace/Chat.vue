@@ -303,9 +303,13 @@ const connectWebsocket = () => {
 
               if (tempMsgIndex !== -1) {
                 // 🟩 temp_ 메시지 → 실제 chatMessageSeq로 교체
-                const createdAt = parsed.createdAt
+                let createdAt = parsed.createdAt
                   ? new Date(parsed.createdAt)
                   : messages.value[tempMsgIndex].createdAt || new Date();
+                
+                // UTC -> KST 변환 (9시간 더하기)
+                createdAt = new Date(createdAt.getTime() + (9 * 60 * 60 * 1000))
+                
                 messages.value[tempMsgIndex].id = parsed.chatMessageSeq;
                 messages.value[tempMsgIndex].replyToSeq =
                   parsed.replyToSeq || null;
@@ -336,9 +340,13 @@ const connectWebsocket = () => {
             }));
 
             // 💬 메시지 구조 변환 (사용자 정보 포함)
-            const createdAt = parsed.createdAt
+            let createdAt = parsed.createdAt
               ? new Date(parsed.createdAt)
               : new Date();
+            
+            // UTC -> KST 변환 (9시간 더하기)
+            createdAt = new Date(createdAt.getTime() + (9 * 60 * 60 * 1000))
+            
             const formattedMessage = {
               id: parsed.chatMessageSeq || Date.now(), // ✅ 백엔드에서 받은 실제 chatMessageSeq 사용
               user: parsed.senderName || parsed.senderSeq, // ✅ 백엔드에서 받은 실제 senderName 사용
@@ -788,7 +796,11 @@ const loadMoreMessages = async (lastId = null) => {
 
     // 메시지 맵핑 → WebSocket 수신 형식과 동일하게 변환
     const formatted = loadedMessages.map((m) => {
-      const createdAt = new Date(m.createdAt);
+      let createdAt = new Date(m.createdAt);
+      
+      // UTC -> KST 변환 (9시간 더하기)
+      createdAt = new Date(createdAt.getTime() + (9 * 60 * 60 * 1000))
+      
       return {
         id: m.chatMessageSeq,
         user: m.senderName,

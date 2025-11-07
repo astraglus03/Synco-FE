@@ -426,7 +426,11 @@ const getInitial = (name) => {
 const formatDate = (dateString) => {
   if (!dateString) return ''
   
-  const date = new Date(dateString)
+  let date = new Date(dateString)
+  
+  // UTC -> KST 변환 (9시간 더하기)
+  date = new Date(date.getTime() + (9 * 60 * 60 * 1000))
+  
   const now = new Date()
   const diffMs = now - date
   const diffMinutes = Math.floor(diffMs / (1000 * 60))
