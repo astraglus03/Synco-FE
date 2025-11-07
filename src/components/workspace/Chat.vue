@@ -5,7 +5,7 @@ import { useWorkspaceStore } from "@/store/workspaceStore";
 import { useWorkspaceMemberStore } from "@/store/workspaceMemberStore";
 import { useNotificationStore } from "@/store/notificationStore";
 import { emitter } from "@/eventBus";
-import { useRoute } from "vue-router";
+import { useRoute, useRouter } from "vue-router";
 // import PollModal from "./PollModal.vue";
 import FileAttachmentModal from "./FileAttachmentModal.vue";
 import SockJS from "sockjs-client";
@@ -56,6 +56,7 @@ const { hasPermission, isManager, isSuper } = usePermissions();
 // Store 사용
 const workspaceStore = useWorkspaceStore();
 const route = useRoute();
+const router = useRouter();
 const workspaceMemberStore = useWorkspaceMemberStore();
 const notificationStore = useNotificationStore();
 
@@ -131,6 +132,11 @@ const messages = ref([]);
 
 // 새 메시지
 const newMessage = ref("");
+
+const normalizeChannelId = (id) => {
+  if (id === undefined || id === null) return null;
+  return String(id).replace(/^chat_/, "");
+};
 
 // 메시지 입력 관련 상태
 const showAttachmentMenu = ref(false);
@@ -986,7 +992,7 @@ const changeChannel = async (channelId) => {
     sendTypingStopEvent();
 
     // ✅ channelSeq 유효성 검사
-    const parsedChannelSeq = parseInt(channelId);
+    const parsedChannelSeq = parseInt(normalizeChannelId(channelId), 10);
     if (isNaN(parsedChannelSeq) || parsedChannelSeq <= 0) {
       console.error("❌ 유효하지 않은 channelSeq:", channelId);
       isChangingChannel.value = false;
@@ -998,7 +1004,7 @@ const changeChannel = async (channelId) => {
 
     // 새 채널로 변경
     currentChannel.value = channelId;
-    channelSeq.value = parseInt(channelId); // 문자열을 숫자로 변환
+    channelSeq.value = parsedChannelSeq; // 문자열을 숫자로 변환
     messages.value = [];
 
     // 이전 메시지 로드 상태 리셋
@@ -1794,7 +1800,7 @@ const loadChatUserInfo = async (targetChannelSeq = null) => {
   if (!isPersonalChat.value || !channelSeqToUse) return;
 
   try {
-    const channelSeq = parseInt(channelSeqToUse);
+    const channelSeq = parseInt(normalizeChannelId(channelSeqToUse), 10);
     if (!channelSeq || isNaN(channelSeq)) {
       return;
     }
@@ -1873,6 +1879,15 @@ watch(
   { immediate: true }
 );
 
+watch(
+  () => props.currentChannel,
+  async (newChannel, oldChannel) => {
+    if (oldChannel === "chat" && newChannel !== "chat") {
+      await disconnectWebsocket();
+    }
+  }
+);
+
 // 이벤트 리스너 등록/해제
 onMounted(async () => {
   emitter.on("select-chat-channel", handleSubChannelSelect);
@@ -1931,7 +1946,7 @@ onMounted(async () => {
 
   // ✅ 채널이 있으면 초기화 진행
   currentChannel.value = initialChannel;
-  const parsedChannelSeq = parseInt(initialChannel);
+  const parsedChannelSeq = parseInt(normalizeChannelId(initialChannel), 10);
 
   // channelSeq 유효성 검사
   if (isNaN(parsedChannelSeq) || parsedChannelSeq <= 0) {
@@ -2012,6 +2027,13 @@ onMounted(async () => {
   if (container) {
     container.addEventListener("scroll", handleScroll);
   }
+
+  routeLeaveStopper = router.beforeEach(async (to, from, next) => {
+    if (from.name === "Chat" && to.name !== "Chat") {
+      await disconnectWebsocket();
+    }
+    next();
+  });
 });
 
 // ✅ props.selectedChannel 변경 감지 - 채널 자동 전환
@@ -2038,6 +2060,11 @@ watch(
 onUnmounted(async () => {
   emitter.off("select-chat-channel", handleSubChannelSelect);
   window.removeEventListener("click", closeContextMenu);
+
+  if (routeLeaveStopper) {
+    routeLeaveStopper();
+    routeLeaveStopper = null;
+  }
 
   // ✅ 컴포넌트 종료 시 타이핑 종료 브로드캐스트
   try {
