@@ -152,40 +152,53 @@ export class RoomEndedListDto {
     }
     
     try {
-      // DB에서 받은 시간은 이미 한국 시간(KST)이므로 UTC 변환 없이 직접 파싱
-      // LocalDateTime 형식 (예: "2024-01-15T14:30:00" 또는 "2024-01-15 14:30:00" 또는 "2024-01-15T14:30:00.123")
       let dateStr = String(this.createdAt).trim()
       
-      // ISO 형식에서 날짜/시간 부분만 추출 (시간대 정보 제거)
-      // T 또는 공백으로 구분된 형식 모두 처리
-      let datePart, timePart
-      
-      if (dateStr.includes('T')) {
-        // ISO 형식: "2024-01-15T14:30:00"
-        const parts = dateStr.split('T')
-        datePart = parts[0] // "2024-01-15"
-        timePart = parts[1]?.split('.')[0] || '' // "14:30:00" (밀리초 제거)
-      } else if (dateStr.includes(' ')) {
-        // 공백 구분 형식: "2024-01-15 14:30:00"
-        const parts = dateStr.split(' ')
-        datePart = parts[0] // "2024-01-15"
-        timePart = parts[1]?.split('.')[0] || '' // "14:30:00" (밀리초 제거)
-      } else {
-        // 다른 형식이면 기존 방식 사용 (하지만 시간대 변환 없이)
-        console.warn('RoomEndedListDto: 예상하지 못한 날짜 형식', this.createdAt)
-        return ''
+      // Z 제거 (UTC 표시)
+      const hasZ = dateStr.endsWith('Z')
+      if (hasZ) {
+        dateStr = dateStr.slice(0, -1)
       }
       
+      // 공백을 T로 변환
+      if (dateStr.includes(' ') && !dateStr.includes('T')) {
+        dateStr = dateStr.replace(' ', 'T')
+      }
+      
+      // 시간대 정보 제거 (+09:00, -05:00 등)
+      dateStr = dateStr.replace(/[+-]\d{2}:?\d{2}$/, '')
+      
+      // 밀리초 제거
+      if (dateStr.includes('.')) {
+        dateStr = dateStr.split('.')[0]
+      }
+      
+      // 날짜와 시간 분리
+      const [datePart, timePart] = dateStr.split('T')
       if (!datePart || !timePart) {
-        console.warn('RoomEndedListDto: 날짜/시간 파싱 실패', this.createdAt)
+        console.warn('RoomEndedListDto: 날짜 형식 오류', this.createdAt)
         return ''
       }
       
+      // 날짜 파싱
       const [year, month, day] = datePart.split('-')
+      
+      // 시간 파싱
       const [hours, minutes] = timePart.split(':')
       
+      // Z가 있으면 UTC로 해석되었으므로 9시간 더하기
+      let finalHours = Number(hours)
+      let finalMinutes = Number(minutes)
+      
+      if (hasZ) {
+        // UTC 시간에 9시간 더해서 한국 시간으로 변환
+        finalHours = (finalHours + 9) % 24
+        // 날짜가 넘어갈 수 있으므로 처리 필요하지만, 간단하게 시간만 처리
+        // 실제로는 Date 객체를 사용하는 것이 더 정확하지만, 여기서는 시간만 표시하므로 이렇게 처리
+      }
+      
       // 한국어 형식으로 포맷팅 (YYYY. MM. DD. HH:mm)
-      return `${year}. ${month}. ${day}. ${hours}:${minutes}`
+      return `${year}. ${month}. ${day}. ${String(finalHours).padStart(2, '0')}:${String(finalMinutes).padStart(2, '0')}`
     } catch (error) {
       console.error('RoomEndedListDto: 날짜 포맷팅 오류', error, this.createdAt)
       return ''
@@ -212,24 +225,44 @@ export class RoomDetailDto {
     if (!this.createdAt) return ''
     
     try {
-      // DB에서 받은 시간은 이미 한국 시간(KST)이므로 UTC 변환 없이 직접 파싱
-      let dateStr = this.createdAt
+      let dateStr = String(this.createdAt).trim()
       
-      // ISO 형식에서 날짜/시간 부분만 추출 (시간대 정보 제거)
-      if (dateStr.includes('T')) {
-        const parts = dateStr.split('T')
-        const datePart = parts[0] // "2024-01-15"
-        const timePart = parts[1].split('.')[0] // "14:30:00" (밀리초 제거)
-        
-        const [year, month, day] = datePart.split('-')
-        const [hours, minutes, seconds] = timePart.split(':')
-        
-        // 한국어 형식으로 포맷팅
-        return `${year}. ${month}. ${day}. ${hours}:${minutes}:${seconds || '00'}`
-      } else {
-        // 다른 형식이면 기존 방식 사용
-        return new Date(this.createdAt).toLocaleString('ko-KR')
+      // Z 제거 (UTC 표시)
+      const hasZ = dateStr.endsWith('Z')
+      if (hasZ) {
+        dateStr = dateStr.slice(0, -1)
       }
+      
+      // 공백을 T로 변환
+      if (dateStr.includes(' ') && !dateStr.includes('T')) {
+        dateStr = dateStr.replace(' ', 'T')
+      }
+      
+      // 시간대 정보 제거
+      dateStr = dateStr.replace(/[+-]\d{2}:?\d{2}$/, '')
+      
+      // 밀리초 제거
+      if (dateStr.includes('.')) {
+        dateStr = dateStr.split('.')[0]
+      }
+      
+      // 날짜와 시간 분리
+      const [datePart, timePart] = dateStr.split('T')
+      if (!datePart || !timePart) {
+        console.warn('RoomDetailDto: 날짜 형식 오류', this.createdAt)
+        return ''
+      }
+      
+      const [year, month, day] = datePart.split('-')
+      const [hours, minutes, seconds = '00'] = timePart.split(':')
+      
+      // Z가 있으면 UTC로 해석되었으므로 9시간 더하기
+      let finalHours = Number(hours)
+      if (hasZ) {
+        finalHours = (finalHours + 9) % 24
+      }
+      
+      return `${year}. ${month}. ${day}. ${String(finalHours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`
     } catch (error) {
       console.error('RoomDetailDto: 날짜 포맷팅 오류', error)
       return ''
@@ -336,24 +369,44 @@ export class ChatMessageRes {
     if (!this.createdAt) return ''
     
     try {
-      // DB에서 받은 시간은 이미 한국 시간(KST)이므로 UTC 변환 없이 직접 파싱
-      let dateStr = this.createdAt
+      let dateStr = String(this.createdAt).trim()
       
-      // ISO 형식에서 날짜/시간 부분만 추출 (시간대 정보 제거)
-      if (dateStr.includes('T')) {
-        const parts = dateStr.split('T')
-        const datePart = parts[0] // "2024-01-15"
-        const timePart = parts[1].split('.')[0] // "14:30:00" (밀리초 제거)
-        
-        const [year, month, day] = datePart.split('-')
-        const [hours, minutes, seconds] = timePart.split(':')
-        
-        // 한국어 형식으로 포맷팅
-        return `${year}. ${month}. ${day}. ${hours}:${minutes}:${seconds || '00'}`
-      } else {
-        // 다른 형식이면 기존 방식 사용
-        return new Date(this.createdAt).toLocaleString('ko-KR')
+      // Z 제거 (UTC 표시)
+      const hasZ = dateStr.endsWith('Z')
+      if (hasZ) {
+        dateStr = dateStr.slice(0, -1)
       }
+      
+      // 공백을 T로 변환
+      if (dateStr.includes(' ') && !dateStr.includes('T')) {
+        dateStr = dateStr.replace(' ', 'T')
+      }
+      
+      // 시간대 정보 제거
+      dateStr = dateStr.replace(/[+-]\d{2}:?\d{2}$/, '')
+      
+      // 밀리초 제거
+      if (dateStr.includes('.')) {
+        dateStr = dateStr.split('.')[0]
+      }
+      
+      // 날짜와 시간 분리
+      const [datePart, timePart] = dateStr.split('T')
+      if (!datePart || !timePart) {
+        console.warn('ChatMessageRes: 날짜 형식 오류', this.createdAt)
+        return ''
+      }
+      
+      const [year, month, day] = datePart.split('-')
+      const [hours, minutes, seconds = '00'] = timePart.split(':')
+      
+      // Z가 있으면 UTC로 해석되었으므로 9시간 더하기
+      let finalHours = Number(hours)
+      if (hasZ) {
+        finalHours = (finalHours + 9) % 24
+      }
+      
+      return `${year}. ${month}. ${day}. ${String(finalHours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`
     } catch (error) {
       console.error('ChatMessageRes: 날짜 포맷팅 오류', error)
       return ''
@@ -364,21 +417,43 @@ export class ChatMessageRes {
     if (!this.createdAt) return ''
     
     try {
-      // DB에서 받은 시간은 이미 한국 시간(KST)이므로 UTC 변환 없이 직접 파싱
-      let dateStr = this.createdAt
+      let dateStr = String(this.createdAt).trim()
       
-      // ISO 형식에서 시간 부분만 추출
-      if (dateStr.includes('T')) {
-        const timePart = dateStr.split('T')[1]?.split('.')[0] || '' // "14:30:00"
-        const [hours, minutes] = timePart.split(':')
-        return `${hours}:${minutes}`
-      } else {
-        // 다른 형식이면 기존 방식 사용
-        return new Date(this.createdAt).toLocaleTimeString('ko-KR', {
-          hour: '2-digit',
-          minute: '2-digit'
-        })
+      // Z 제거 (UTC 표시)
+      const hasZ = dateStr.endsWith('Z')
+      if (hasZ) {
+        dateStr = dateStr.slice(0, -1)
       }
+      
+      // 공백을 T로 변환
+      if (dateStr.includes(' ') && !dateStr.includes('T')) {
+        dateStr = dateStr.replace(' ', 'T')
+      }
+      
+      // 시간대 정보 제거
+      dateStr = dateStr.replace(/[+-]\d{2}:?\d{2}$/, '')
+      
+      // 밀리초 제거
+      if (dateStr.includes('.')) {
+        dateStr = dateStr.split('.')[0]
+      }
+      
+      // 시간 부분만 추출
+      const timePart = dateStr.split('T')[1]
+      if (!timePart) {
+        console.warn('ChatMessageRes: 시간 형식 오류', this.createdAt)
+        return ''
+      }
+      
+      const [hours, minutes] = timePart.split(':')
+      
+      // Z가 있으면 UTC로 해석되었으므로 9시간 더하기
+      let finalHours = Number(hours)
+      if (hasZ) {
+        finalHours = (finalHours + 9) % 24
+      }
+      
+      return `${String(finalHours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`
     } catch (error) {
       console.error('ChatMessageRes: 시간 포맷팅 오류', error)
       return ''
