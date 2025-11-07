@@ -505,40 +505,16 @@ const initializeLiveKitRoom = async () => {
     // 예: livekit.synco1.shop:7880 -> livekit.synco1.shop
     if (wsUrl.includes(':7880')) {
       wsUrl = wsUrl.replace(':7880', '')
-      console.warn('⚠️ 포트 7880이 URL에서 제거되었습니다. Nginx 프록시를 사용합니다.')
     }
     
     // 마지막 슬래시 제거 (LiveKit 클라이언트가 자동으로 /rtc 경로를 추가함)
     wsUrl = wsUrl.replace(/\/$/, '')
-    
-    // 디버깅 로그
-    console.log('🔗 LiveKit 연결 정보:', {
-      livekitUrl,
-      wsUrl,
-      hasToken: !!token,
-      roomName: lkRoomName,
-      note: 'LiveKit 클라이언트가 자동으로 /rtc 경로를 추가합니다'
-    })
 
     // 이벤트 리스너 먼저 등록 (연결 전에 등록하여 모든 이벤트 캡처)
     setupRoomEventListeners()
 
     // 방 연결
-    console.log('🚀 LiveKit 연결 시도:', wsUrl)
-    console.log('토큰 길이:', token?.length || 0)
-    
-    try {
-      await room.value.connect(wsUrl, token)
-      console.log('✅ LiveKit 연결 성공')
-    } catch (connectError) {
-      console.error('❌ room.connect() 실패:', connectError)
-      console.error('연결 실패 상세:', {
-        message: connectError.message,
-        name: connectError.name,
-        stack: connectError.stack
-      })
-      throw connectError
-    }
+    await room.value.connect(wsUrl, token)
 
     // 로컬 참가자 identity 저장
     localParticipantIdentity.value = room.value.localParticipant.identity
@@ -572,14 +548,6 @@ const initializeLiveKitRoom = async () => {
     // 기존 채팅 메시지 불러오기
     await loadChatMessages()
   } catch (error) {
-    console.error('❌ LiveKit 연결 실패:', error)
-    console.error('연결 시도 URL:', wsUrl || 'URL 생성 실패')
-    console.error('토큰 존재:', !!token)
-    console.error('에러 상세:', {
-      message: error.message,
-      stack: error.stack,
-      name: error.name
-    })
     alert(`화상회의 연결에 실패했습니다: ${error.message || error}`)
   }
 }
@@ -642,33 +610,7 @@ const setupRoomEventListeners = () => {
 
   // 룸 연결 끊김
   room.value.on(RoomEvent.Disconnected, (reason) => {
-    console.error('❌ LiveKit 연결 끊김:', reason)
     endCall()
-  })
-  
-  // 연결 상태 모니터링
-  room.value.on(RoomEvent.SignalConnected, () => {
-    console.log('✅ WebSocket 시그널링 연결 성공')
-  })
-  
-  room.value.on(RoomEvent.SignalDisconnected, () => {
-    console.error('❌ 시그널 연결 끊김')
-  })
-  
-  room.value.on(RoomEvent.Connected, () => {
-    console.log('✅ LiveKit 룸 연결 완료')
-  })
-  
-  room.value.on(RoomEvent.Reconnecting, () => {
-    console.warn('⚠️ LiveKit 재연결 시도 중...')
-  })
-  
-  room.value.on(RoomEvent.Reconnected, () => {
-    console.log('✅ LiveKit 재연결 성공')
-  })
-  
-  room.value.on(RoomEvent.ConnectionStateChanged, (state) => {
-    console.log('🔄 LiveKit 연결 상태 변경:', state)
   })
 }
 
