@@ -153,38 +153,41 @@ export class RoomEndedListDto {
     
     try {
       // DB에서 받은 시간은 이미 한국 시간(KST)이므로 UTC 변환 없이 직접 파싱
-      // LocalDateTime 형식 (예: "2024-01-15T14:30:00" 또는 "2024-01-15T14:30:00.123")
-      let dateStr = this.createdAt
+      // LocalDateTime 형식 (예: "2024-01-15T14:30:00" 또는 "2024-01-15 14:30:00" 또는 "2024-01-15T14:30:00.123")
+      let dateStr = String(this.createdAt).trim()
       
       // ISO 형식에서 날짜/시간 부분만 추출 (시간대 정보 제거)
+      // T 또는 공백으로 구분된 형식 모두 처리
+      let datePart, timePart
+      
       if (dateStr.includes('T')) {
+        // ISO 형식: "2024-01-15T14:30:00"
         const parts = dateStr.split('T')
-        const datePart = parts[0] // "2024-01-15"
-        const timePart = parts[1].split('.')[0] // "14:30:00" (밀리초 제거)
-        
-        const [year, month, day] = datePart.split('-')
-        const [hours, minutes] = timePart.split(':')
-        
-        // 한국어 형식으로 포맷팅 (YYYY. MM. DD. HH:mm)
-        return `${year}. ${month}. ${day}. ${hours}:${minutes}`
+        datePart = parts[0] // "2024-01-15"
+        timePart = parts[1]?.split('.')[0] || '' // "14:30:00" (밀리초 제거)
+      } else if (dateStr.includes(' ')) {
+        // 공백 구분 형식: "2024-01-15 14:30:00"
+        const parts = dateStr.split(' ')
+        datePart = parts[0] // "2024-01-15"
+        timePart = parts[1]?.split('.')[0] || '' // "14:30:00" (밀리초 제거)
       } else {
-        // 다른 형식이면 기존 방식 사용
-        const date = new Date(this.createdAt)
-        if (isNaN(date.getTime())) {
-          console.warn('RoomEndedListDto: 유효하지 않은 날짜', this.createdAt)
-          return ''
-        }
-        
-        const year = date.getFullYear()
-        const month = String(date.getMonth() + 1).padStart(2, '0')
-        const day = String(date.getDate()).padStart(2, '0')
-        const hours = String(date.getHours()).padStart(2, '0')
-        const minutes = String(date.getMinutes()).padStart(2, '0')
-        
-        return `${year}. ${month}. ${day}. ${hours}:${minutes}`
+        // 다른 형식이면 기존 방식 사용 (하지만 시간대 변환 없이)
+        console.warn('RoomEndedListDto: 예상하지 못한 날짜 형식', this.createdAt)
+        return ''
       }
+      
+      if (!datePart || !timePart) {
+        console.warn('RoomEndedListDto: 날짜/시간 파싱 실패', this.createdAt)
+        return ''
+      }
+      
+      const [year, month, day] = datePart.split('-')
+      const [hours, minutes] = timePart.split(':')
+      
+      // 한국어 형식으로 포맷팅 (YYYY. MM. DD. HH:mm)
+      return `${year}. ${month}. ${day}. ${hours}:${minutes}`
     } catch (error) {
-      console.error('RoomEndedListDto: 날짜 포맷팅 오류', error)
+      console.error('RoomEndedListDto: 날짜 포맷팅 오류', error, this.createdAt)
       return ''
     }
   }
