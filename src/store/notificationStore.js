@@ -57,6 +57,8 @@ export const useNotificationStore = defineStore('notification', () => {
     saveChannelNotificationCounts()
   }, { deep: true })
 
+  const projectScopedFilterKeys = new Set(['workspace', 'task', 'meeting', 'drive', 'project'])
+
   // ===== Computed =====
   
   // 필터링된 알림 목록 (프론트엔드 필터링)
@@ -64,21 +66,35 @@ export const useNotificationStore = defineStore('notification', () => {
     
     let filtered = notifications.value
     
+    const normalizeSeq = (value) => {
+      return value === undefined || value === null ? null : String(value)
+    }
+
+    const currentSeq = normalizeSeq(currentWorkspaceSeq.value)
+
+    const belongsToCurrentWorkspace = (notification) => {
+      if (!currentSeq) return false
+
+      const candidates = [
+        notification.workSpaceSeq,
+        notification.data?.workSpaceSeq,
+        notification.data?.workspaceSeq,
+        notification.data?.projectSeq
+      ]
+
+      return candidates
+        .map(normalizeSeq)
+        .some(seq => seq !== null && seq === currentSeq)
+    }
+
     // alarm-chat 타입은 알림 목록에서 제외 (채널별 알림 개수로만 표시)
     filtered = filtered.filter(n => n.type !== 'alarm-chat')
     
     // 1. 워크스페이스 타입별 필터링
     if (currentWorkspaceType.value === 'project') {
       // 요구사항: 프로젝트의 '모든 알림' 탭에서는 친구 요청 포함 (개인 대시보드와 동일)
-      if (activeFilter.value === 'all') {
-        // 프로젝트 상관없이 전체 표시 (친구 요청 포함)
-        // 필터링 없음
-      } else if (activeFilter.value === 'workspace') {
-        // 현재 프로젝트만 표시 (친구 요청은 workSpaceSeq가 없으면 제외됨)
-        filtered = filtered.filter(n => !n.workSpaceSeq || n.workSpaceSeq === currentWorkspaceSeq.value)
-      } else {
-        // 기타 타입 탭: 기존 로직 유지. 필요 시 프로젝트 범위 필터는 유지 가능
-        // 여기서는 별도 workspaceSeq 필터링은 하지 않음
+      if (activeFilter.value !== 'all' && projectScopedFilterKeys.has(activeFilter.value)) {
+        filtered = filtered.filter(belongsToCurrentWorkspace)
       }
     } else {
       // 개인 워크스페이스: "전체" 탭에서는 모든 알림 표시, 특정 탭에서는 프로젝트 전용 알림 제외

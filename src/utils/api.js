@@ -50,8 +50,7 @@ apiClient.interceptors.request.use(async (config) => {
     '/workspace-service/member/refreshAt',
     '/workspace-service/member/create',
     '/workspace-service/member/findId',
-    '/workspace-service/member/findPassword',
-    '/workspace-service/member/changePassword'
+    '/workspace-service/member/findPassword'
   ].some((path) => url.includes(path))
 
   if (isAuthEndpoint) {

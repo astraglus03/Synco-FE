@@ -920,15 +920,19 @@ const loadMembers = async () => {
     const members = await getWorkspaceMembers(currentWorkspace.workSpaceSeq)
     
     // 멤버 데이터 매핑 (권한 정보 포함)
-    teamMembers.value = members.map(member => ({
-      id: member.memberSeq,
-      memberSeq: member.memberSeq,
-      name: member.name,
-      profileImageUrl: member.profileImageUrl,
-      avatar: member.avatarText,
-      status: member.uiStatus,
-      authority: member.authority
-    }))
+    teamMembers.value = members.map(member => {
+      const profileImageUrl = member.profileImageUrl || member.profileImage || member.profileUrl
+      return {
+        id: member.memberSeq,
+        memberSeq: member.memberSeq,
+        name: member.name,
+        profileImageUrl,
+        profileImage: profileImageUrl,
+        avatar: member.avatarText,
+        status: member.uiStatus,
+        authority: member.authority
+      }
+    })
     
     // 권한 데이터 매핑 (API에서 받은 권한 정보 사용)
     const permissions = {}
@@ -1205,15 +1209,19 @@ const loadInviteFriends = async () => {
     
     const friendList = Array.isArray(response) ? response : (response.content || [])
     
-    inviteFriends.value = friendList.map(friend => ({
-      id: friend.memberId || friend.id,
-      memberSeq: friend.memberSeq || friend.friendSeq,
-      name: friend.name,
-      email: friend.email,
-      profileImage: friend.profileImage,
-      avatarText: friend.name ? friend.name.charAt(0) : '?',
-      isFriend: true
-    }))
+    inviteFriends.value = friendList.map(friend => {
+      const profileImage = friend.profileImage || friend.profileImageUrl || friend.profileUrl
+      return {
+        id: friend.memberId || friend.id,
+        memberSeq: friend.memberSeq || friend.friendSeq,
+        name: friend.name,
+        email: friend.email,
+        profileImage,
+        profileImageUrl: friend.profileImageUrl || friend.profileImage || profileImage,
+        avatarText: friend.name ? friend.name.charAt(0) : '?',
+        isFriend: true
+      }
+    })
   } catch (error) {
     // 에러 무시
   } finally {
@@ -1240,15 +1248,19 @@ watch(inviteSearchQuery, (newValue) => {
       
       const memberList = Array.isArray(response) ? response : (response.content || [])
       
-      inviteSearchResults.value = memberList.map(member => ({
-        id: member.memberId || member.id,
-        memberSeq: member.memberSeq,
-        name: member.name,
-        email: member.email,
-        profileImage: member.profileImage,
-        avatarText: member.name ? member.name.charAt(0) : '?',
-        isFriend: member.isFriend || false
-      }))
+      inviteSearchResults.value = memberList.map(member => {
+        const profileImage = member.profileImage || member.profileImageUrl || member.profileUrl
+        return {
+          id: member.memberId || member.id,
+          memberSeq: member.memberSeq,
+          name: member.name,
+          email: member.email,
+          profileImage,
+          profileImageUrl: member.profileImageUrl || member.profileImage || profileImage,
+          avatarText: member.name ? member.name.charAt(0) : '?',
+          isFriend: member.isFriend || false
+        }
+      })
     } catch (error) {
       inviteSearchResults.value = []
     } finally {
@@ -1882,7 +1894,11 @@ onMounted(() => {
                     @click="toggleInviteList(friend)"
                   >
                     <v-avatar size="40" color="primary">
-                      <v-img v-if="friend.profileImage" :src="friend.profileImage" />
+                      <v-img
+                        v-if="friend.profileImage || friend.profileImageUrl"
+                        :src="friend.profileImage || friend.profileImageUrl"
+                        cover
+                      />
                       <span v-else>{{ friend.avatarText }}</span>
                     </v-avatar>
                     <div class="member-info">
@@ -1950,7 +1966,11 @@ onMounted(() => {
                     @click="toggleInviteList(member)"
                   >
                     <v-avatar size="40" color="primary">
-                      <v-img v-if="member.profileImage" :src="member.profileImage" />
+                      <v-img
+                        v-if="member.profileImage || member.profileImageUrl"
+                        :src="member.profileImage || member.profileImageUrl"
+                        cover
+                      />
                       <span v-else>{{ member.avatarText }}</span>
                     </v-avatar>
                     <div class="member-info">
@@ -2008,7 +2028,11 @@ onMounted(() => {
                     class="invited-member-item"
                   >
                     <v-avatar size="40" color="primary">
-                      <v-img v-if="member.profileImage" :src="member.profileImage" />
+                      <v-img
+                        v-if="member.profileImage || member.profileImageUrl"
+                        :src="member.profileImage || member.profileImageUrl"
+                        cover
+                      />
                       <span v-else>{{ member.avatarText }}</span>
                     </v-avatar>
                     <div class="member-info">
@@ -2093,8 +2117,13 @@ onMounted(() => {
                 >
                     <div class="member-left">
                       <v-avatar size="48" color="primary">
-                      <span class="text-white font-weight-bold">{{ member.avatar }}</span>
-                    </v-avatar>
+                        <v-img
+                          v-if="member.profileImage || member.profileImageUrl"
+                          :src="member.profileImage || member.profileImageUrl"
+                          cover
+                        />
+                        <span v-else class="text-white font-weight-bold">{{ member.avatar }}</span>
+                      </v-avatar>
                       <div class="member-info">
                         <div class="member-name-row">
                           <p class="member-name">{{ member.name }}</p>
