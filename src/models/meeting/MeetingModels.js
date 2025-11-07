@@ -154,9 +154,8 @@ export class RoomEndedListDto {
     try {
       let dateStr = String(this.createdAt).trim()
       
-      // Z 제거 (UTC 표시)
-      const hasZ = dateStr.endsWith('Z')
-      if (hasZ) {
+      // Z 제거
+      if (dateStr.endsWith('Z')) {
         dateStr = dateStr.slice(0, -1)
       }
       
@@ -165,7 +164,7 @@ export class RoomEndedListDto {
         dateStr = dateStr.replace(' ', 'T')
       }
       
-      // 시간대 정보 제거 (+09:00, -05:00 등)
+      // 시간대 정보 제거
       dateStr = dateStr.replace(/[+-]\d{2}:?\d{2}$/, '')
       
       // 밀리초 제거
@@ -181,24 +180,37 @@ export class RoomEndedListDto {
       }
       
       // 날짜 파싱
-      const [year, month, day] = datePart.split('-')
+      const [year, month, day] = datePart.split('-').map(Number)
       
       // 시간 파싱
-      const [hours, minutes] = timePart.split(':')
+      const [hours, minutes] = timePart.split(':').map(Number)
       
-      // Z가 있으면 UTC로 해석되었으므로 9시간 더하기
-      let finalHours = Number(hours)
-      let finalMinutes = Number(minutes)
+      // 무조건 9시간 더하기 (UTC -> KST)
+      let finalHours = hours + 9
+      let finalDay = day
+      let finalMonth = month
+      let finalYear = year
       
-      if (hasZ) {
-        // UTC 시간에 9시간 더해서 한국 시간으로 변환
-        finalHours = (finalHours + 9) % 24
-        // 날짜가 넘어갈 수 있으므로 처리 필요하지만, 간단하게 시간만 처리
-        // 실제로는 Date 객체를 사용하는 것이 더 정확하지만, 여기서는 시간만 표시하므로 이렇게 처리
+      // 24시간 넘어가면 다음날로
+      if (finalHours >= 24) {
+        finalHours = finalHours - 24
+        finalDay = finalDay + 1
+        
+        // 월의 마지막 날 체크 (간단하게 31일까지 있다고 가정)
+        const daysInMonth = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
+        if (finalDay > daysInMonth[finalMonth - 1]) {
+          finalDay = 1
+          finalMonth = finalMonth + 1
+          
+          if (finalMonth > 12) {
+            finalMonth = 1
+            finalYear = finalYear + 1
+          }
+        }
       }
       
       // 한국어 형식으로 포맷팅 (YYYY. MM. DD. HH:mm)
-      return `${year}. ${month}. ${day}. ${String(finalHours).padStart(2, '0')}:${String(finalMinutes).padStart(2, '0')}`
+      return `${finalYear}. ${String(finalMonth).padStart(2, '0')}. ${String(finalDay).padStart(2, '0')}. ${String(finalHours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`
     } catch (error) {
       console.error('RoomEndedListDto: 날짜 포맷팅 오류', error, this.createdAt)
       return ''
@@ -227,9 +239,8 @@ export class RoomDetailDto {
     try {
       let dateStr = String(this.createdAt).trim()
       
-      // Z 제거 (UTC 표시)
-      const hasZ = dateStr.endsWith('Z')
-      if (hasZ) {
+      // Z 제거
+      if (dateStr.endsWith('Z')) {
         dateStr = dateStr.slice(0, -1)
       }
       
@@ -253,16 +264,33 @@ export class RoomDetailDto {
         return ''
       }
       
-      const [year, month, day] = datePart.split('-')
-      const [hours, minutes, seconds = '00'] = timePart.split(':')
+      const [year, month, day] = datePart.split('-').map(Number)
+      const [hours, minutes, seconds = 0] = timePart.split(':').map(Number)
       
-      // Z가 있으면 UTC로 해석되었으므로 9시간 더하기
-      let finalHours = Number(hours)
-      if (hasZ) {
-        finalHours = (finalHours + 9) % 24
+      // 무조건 9시간 더하기 (UTC -> KST)
+      let finalHours = hours + 9
+      let finalDay = day
+      let finalMonth = month
+      let finalYear = year
+      
+      // 24시간 넘어가면 다음날로
+      if (finalHours >= 24) {
+        finalHours = finalHours - 24
+        finalDay = finalDay + 1
+        
+        const daysInMonth = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
+        if (finalDay > daysInMonth[finalMonth - 1]) {
+          finalDay = 1
+          finalMonth = finalMonth + 1
+          
+          if (finalMonth > 12) {
+            finalMonth = 1
+            finalYear = finalYear + 1
+          }
+        }
       }
       
-      return `${year}. ${month}. ${day}. ${String(finalHours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`
+      return `${finalYear}. ${String(finalMonth).padStart(2, '0')}. ${String(finalDay).padStart(2, '0')}. ${String(finalHours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`
     } catch (error) {
       console.error('RoomDetailDto: 날짜 포맷팅 오류', error)
       return ''
@@ -371,9 +399,8 @@ export class ChatMessageRes {
     try {
       let dateStr = String(this.createdAt).trim()
       
-      // Z 제거 (UTC 표시)
-      const hasZ = dateStr.endsWith('Z')
-      if (hasZ) {
+      // Z 제거
+      if (dateStr.endsWith('Z')) {
         dateStr = dateStr.slice(0, -1)
       }
       
@@ -397,16 +424,33 @@ export class ChatMessageRes {
         return ''
       }
       
-      const [year, month, day] = datePart.split('-')
-      const [hours, minutes, seconds = '00'] = timePart.split(':')
+      const [year, month, day] = datePart.split('-').map(Number)
+      const [hours, minutes, seconds = 0] = timePart.split(':').map(Number)
       
-      // Z가 있으면 UTC로 해석되었으므로 9시간 더하기
-      let finalHours = Number(hours)
-      if (hasZ) {
-        finalHours = (finalHours + 9) % 24
+      // 무조건 9시간 더하기 (UTC -> KST)
+      let finalHours = hours + 9
+      let finalDay = day
+      let finalMonth = month
+      let finalYear = year
+      
+      // 24시간 넘어가면 다음날로
+      if (finalHours >= 24) {
+        finalHours = finalHours - 24
+        finalDay = finalDay + 1
+        
+        const daysInMonth = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
+        if (finalDay > daysInMonth[finalMonth - 1]) {
+          finalDay = 1
+          finalMonth = finalMonth + 1
+          
+          if (finalMonth > 12) {
+            finalMonth = 1
+            finalYear = finalYear + 1
+          }
+        }
       }
       
-      return `${year}. ${month}. ${day}. ${String(finalHours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`
+      return `${finalYear}. ${String(finalMonth).padStart(2, '0')}. ${String(finalDay).padStart(2, '0')}. ${String(finalHours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`
     } catch (error) {
       console.error('ChatMessageRes: 날짜 포맷팅 오류', error)
       return ''
@@ -419,9 +463,8 @@ export class ChatMessageRes {
     try {
       let dateStr = String(this.createdAt).trim()
       
-      // Z 제거 (UTC 표시)
-      const hasZ = dateStr.endsWith('Z')
-      if (hasZ) {
+      // Z 제거
+      if (dateStr.endsWith('Z')) {
         dateStr = dateStr.slice(0, -1)
       }
       
@@ -445,13 +488,10 @@ export class ChatMessageRes {
         return ''
       }
       
-      const [hours, minutes] = timePart.split(':')
+      const [hours, minutes] = timePart.split(':').map(Number)
       
-      // Z가 있으면 UTC로 해석되었으므로 9시간 더하기
-      let finalHours = Number(hours)
-      if (hasZ) {
-        finalHours = (finalHours + 9) % 24
-      }
+      // 무조건 9시간 더하기 (UTC -> KST)
+      const finalHours = (hours + 9) % 24
       
       return `${String(finalHours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`
     } catch (error) {
