@@ -370,6 +370,7 @@ const loadRoomParticipants = async () => {
     }
     
     // 녹화 상태 확인 (재참여 시 대비) - 모든 참가자가 확인 가능
+    // checkRecordingStatus에서 이미 확인했지만, 여기서도 확인 (중복 체크)
     if (response?.data?.isRecording !== undefined) {
       isRecording.value = response.data.isRecording === true || response.data.isRecording === 'true'
     } else if (response?.data?.recordingStatus !== undefined) {
@@ -377,6 +378,8 @@ const loadRoomParticipants = async () => {
       isRecording.value = response.data.recordingStatus === 'RECORDING' || response.data.recordingStatus === true
     }
   } catch (error) {
+    // 참가자 정보 로드 실패 시 재시도하지 않음 (에러 무시)
+    console.warn('참가자 정보 로드 실패:', error)
   }
 }
 
@@ -451,6 +454,13 @@ const initializeExistingTracks = async () => {
 
   // 참가자 정보 먼저 로드
   await loadRoomParticipants()
+  
+  // 참가자 정보가 없으면 한 번 더 시도
+  if (roomParticipants.value.length === 0 && room.value.remoteParticipants.length > 0) {
+    console.warn('참가자 정보가 없어 재시도합니다.')
+    await new Promise(resolve => setTimeout(resolve, 500)) // 0.5초 대기
+    await loadRoomParticipants()
+  }
 
   // remoteParticipants 초기화 (재참여 시 중복 방지)
   remoteParticipants.value = []
@@ -458,33 +468,23 @@ const initializeExistingTracks = async () => {
   // 원격 참가자들
   room.value.remoteParticipants.forEach((participant) => {
     // 참가자 이름 찾기
-    const participantName = getParticipantName(participant.identity)
+    let participantName = getParticipantName(participant.identity)
     
-    // 이름이 없으면 다시 시도
+    // 이름이 없으면 roomParticipants에서 직접 찾기
     if (!participantName) {
-      // roomParticipants에서 다시 찾기
       const found = roomParticipants.value.find(
         p => p.participantId?.toString() === participant.identity?.toString()
       )
-      if (found?.participantName) {
-        remoteParticipants.value.push({
-          identity: participant.identity,
-          name: found.participantName,
-        })
-      } else {
-        // 그래도 없으면 identity 사용
-        remoteParticipants.value.push({
-          identity: participant.identity,
-          name: participant.identity,
-        })
-      }
-    } else {
-      // 참가자를 배열에 추가
-      remoteParticipants.value.push({
-        identity: participant.identity,
-        name: participantName,
-      })
+      participantName = found?.participantName || null
     }
+    
+    // 그래도 없으면 identity 사용 (임시)
+    const displayName = participantName || participant.name || participant.identity
+    
+    remoteParticipants.value.push({
+      identity: participant.identity,
+      name: displayName,
+    })
     
     setupParticipantEvents(participant)
     participant.trackPublications.forEach((pub) => {
@@ -568,6 +568,9 @@ const initializeLiveKitRoom = async () => {
     // 로컬 참가자 identity 저장
     localParticipantIdentity.value = room.value.localParticipant.identity
 
+    // 녹화 상태 먼저 확인 (재참여 시 대비) - 참가자 정보 로드 전에 확인
+    await checkRecordingStatus()
+    
     // 현재 방에 있는 참가자/트랙 DOM 부착
     await initializeExistingTracks()
 
@@ -596,16 +599,15 @@ const initializeLiveKitRoom = async () => {
 
     // 기존 채팅 메시지 불러오기
     await loadChatMessages()
-    
-    // 녹화 상태 확인 (재참여 시 대비)
-    await checkRecordingStatus()
   } catch (error) {
     alert(`화상회의 연결에 실패했습니다: ${error.message || error}`)
   }
 }
 
-// 녹화 상태 확인 (재참여 시 호출)
+// 녹화 상태 확인 (재참여 시 호출) - 참가자 정보 로드 전에 먼저 호출
 const checkRecordingStatus = async () => {
+  if (!props.roomId) return
+  
   try {
     const response = await meetingApi.getRoomDetail(props.roomId, authStore.memberSeq)
     // 백엔드에서 isRecording 필드 확인
@@ -1229,7 +1231,10 @@ watch(activeScreenShare, async (newVal, oldVal) => {
 const loadChatMessages = async () => {
   try {
     // 참가자 정보 먼저 로드 (이름을 찾기 위해)
-    await loadRoomParticipants()
+    // 이미 로드되었을 수 있지만, 없으면 다시 로드
+    if (roomParticipants.value.length === 0) {
+      await loadRoomParticipants()
+    }
     
     const response = await meetingApi.getMessages(
       authStore.memberSeq,
