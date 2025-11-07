@@ -474,6 +474,13 @@ const initializeLiveKitRoom = async () => {
 
     // WS 시그널링 URL 생성
     let livekitUrl = import.meta.env.VITE_LIVEKIT_API_URL
+    
+    // 환경 변수 검증
+    if (!livekitUrl || livekitUrl.trim() === '') {
+      console.error('❌ VITE_LIVEKIT_API_URL이 설정되지 않았습니다.')
+      throw new Error('LiveKit 서버 URL이 설정되지 않았습니다.')
+    }
+    
     let wsUrl = ''
     
     // 프로토콜이 이미 포함되어 있는지 확인
@@ -492,6 +499,28 @@ const initializeLiveKitRoom = async () => {
       const protocol = window.location.protocol === 'https:' ? 'wss://' : 'ws://'
       wsUrl = protocol + livekitUrl
     }
+    
+    // 포트 번호가 포함되어 있으면 제거 (Nginx가 443 포트로 프록시하므로)
+    // 예: livekit.synco1.shop:7880 -> livekit.synco1.shop
+    if (wsUrl.includes(':7880')) {
+      wsUrl = wsUrl.replace(':7880', '')
+      console.warn('⚠️ 포트 7880이 URL에서 제거되었습니다. Nginx 프록시를 사용합니다.')
+    }
+    
+    // LiveKit은 /rtc 경로를 필요로 함 (명시적으로 추가)
+    // 라이브러리 버전에 따라 자동 추가되지 않을 수 있으므로 안전하게 명시적으로 추가
+    if (!wsUrl.endsWith('/rtc')) {
+      // 마지막 슬래시 제거 후 /rtc 추가
+      wsUrl = wsUrl.replace(/\/$/, '') + '/rtc'
+    }
+    
+    // 디버깅 로그
+    console.log('🔗 LiveKit 연결 정보:', {
+      livekitUrl,
+      wsUrl,
+      hasToken: !!token,
+      roomName: lkRoomName
+    })
 
     // 방 연결
     await room.value.connect(wsUrl, token)
