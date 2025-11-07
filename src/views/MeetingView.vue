@@ -14,7 +14,7 @@
           color="grey-darken-1"
           @click="handleRecording"
         />
-        <!-- 녹화 중 표시 -->
+        <!-- 녹화 중 표시 (모든 참가자에게 표시) -->
         <div v-if="isRecording" class="recording-status">
           🔴 녹화 중
         </div>
@@ -152,9 +152,10 @@
             :key="message.id"
             class="chat-message"
           >
-            <div class="message-avatar">
-              {{ message.name?.charAt(0) || '?' }}
-            </div>
+            <v-avatar size="32" :color="getAvatarColor(message.name)">
+              <v-img v-if="message.profileImageUrl" :src="message.profileImageUrl" cover />
+              <span v-else class="text-white font-weight-bold">{{ message.name?.charAt(0) || '?' }}</span>
+            </v-avatar>
             <div class="message-content">
               <div class="message-sender">{{ message.name || '알 수 없음' }}</div>
               <div class="message-text">{{ message.content }}</div>
@@ -367,8 +368,29 @@ const loadRoomParticipants = async () => {
     if (response?.data?.participants && Array.isArray(response.data.participants)) {
       roomParticipants.value = response.data.participants
     }
+    
+    // 녹화 상태 확인 (재참여 시 대비)
+    if (response?.data?.isRecording !== undefined) {
+      isRecording.value = response.data.isRecording
+    }
   } catch (error) {
   }
+}
+
+// 이름 기반 아바타 색상 생성
+const getAvatarColor = (name) => {
+  if (!name) return 'primary'
+  
+  // 이름의 첫 글자로 색상 결정
+  const colors = [
+    'primary', 'success', 'warning', 'error', 'info', 
+    'purple', 'teal', 'pink', 'indigo', 'orange',
+    'cyan', 'amber', 'deep-purple', 'light-blue', 'lime'
+  ]
+  
+  const charCode = name.charCodeAt(0)
+  const index = charCode % colors.length
+  return colors[index]
 }
 
 // participant identity로 이름 찾기
@@ -547,8 +569,32 @@ const initializeLiveKitRoom = async () => {
 
     // 기존 채팅 메시지 불러오기
     await loadChatMessages()
+    
+    // 녹화 상태 확인 (재참여 시 대비)
+    await checkRecordingStatus()
   } catch (error) {
     alert(`화상회의 연결에 실패했습니다: ${error.message || error}`)
+  }
+}
+
+// 녹화 상태 확인
+const checkRecordingStatus = async () => {
+  try {
+    const response = await meetingApi.getRoomDetail(props.roomId, authStore.memberSeq)
+    if (response?.data?.isRecording !== undefined) {
+      isRecording.value = response.data.isRecording
+    }
+  } catch (error) {
+    // 에러 무시 (녹화 상태 확인 실패해도 회의는 계속 진행)
+  }
+}
+
+// 녹화 상태 변경 처리 (다른 참가자로부터 받은 메시지)
+const handleRecordingStatus = (data) => {
+  if (data.action === 'start') {
+    isRecording.value = true
+  } else if (data.action === 'stop') {
+    isRecording.value = false
   }
 }
 
@@ -597,12 +643,14 @@ const setupRoomEventListeners = () => {
     },
   )
 
-  // 데이터 수신 (채팅)
+  // 데이터 수신 (채팅, 녹화 상태 등)
   room.value.on(RoomEvent.DataReceived, (payload, participant) => {
     try {
       const data = JSON.parse(new TextDecoder().decode(payload))
       if (data.type === 'chat') {
         handleChatMessage(data, participant)
+      } else if (data.type === 'recording') {
+        handleRecordingStatus(data)
       }
     } catch (err) {
     }
@@ -802,25 +850,34 @@ const createAudioElement = (participantIdentity) => {
 }
 
 // 채팅 메시지 처리
-const handleChatMessage = (data, participant) => {
+const handleChatMessage = async (data, participant) => {
   const senderId = participant?.identity || data?.senderId || 'unknown'
-  const senderName =
-    participant?.name ||
-    data?.name ||
-    participant?.identity ||
-    '알 수 없음'
-
-  // senderId가 현재 사용자이면 실제 이름 표시
-  const displayName = 
-    senderId?.toString() === authStore.memberSeq?.toString() 
-      ? (authStore.user?.name || '알 수 없음')
-      : senderName
+  
+  // 참가자 정보가 없으면 다시 로드 시도 (재참여 시 대비)
+  if (roomParticipants.value.length === 0) {
+    await loadRoomParticipants()
+  }
+  
+  // getParticipantName을 사용하여 이름 찾기 (가장 정확함)
+  let displayName = getParticipantName(senderId)
+  
+  // 찾지 못한 경우 fallback
+  if (!displayName) {
+    displayName = 
+      participant?.name ||
+      data?.name ||
+      remoteParticipants.value.find(p => p.identity === senderId)?.name ||
+      senderId?.toString() === authStore.memberSeq?.toString()
+        ? (authStore.user?.name || '알 수 없음')
+        : '알 수 없음'
+  }
 
   const message = {
     id: Date.now(),
     senderId: senderId,
     name: displayName,
     content: data.content,
+    profileImageUrl: participant?.profileImageUrl || data?.profileImageUrl || null,
     createdAt: new Date().toISOString(),
     timeOnly: new Date().toLocaleTimeString('ko-KR', {
       hour: '2-digit',
@@ -864,6 +921,19 @@ const startRecording = async () => {
     const response = await meetingApi.startRecording(authStore.memberSeq, props.roomId)
     
     isRecording.value = true
+    
+    // 다른 참가자에게 녹화 시작 알림
+    if (room.value) {
+      const payload = {
+        type: 'recording',
+        action: 'start',
+        roomId: props.roomId,
+      }
+      await room.value.localParticipant.publishData(
+        new TextEncoder().encode(JSON.stringify(payload)),
+        { reliable: true },
+      )
+    }
   } catch (err) {
     alert('녹화 시작에 실패했습니다: ' + (err.message || err))
   }
@@ -1133,6 +1203,7 @@ const loadChatMessages = async () => {
           senderId: msg.senderId,
           name: displayName,
           content: msg.content,
+          profileImageUrl: msg.profileImageUrl || null,
           createdAt: msg.createdAt,
           timeOnly: new Date(msg.createdAt).toLocaleTimeString('ko-KR', {
             hour: '2-digit',
@@ -1174,6 +1245,7 @@ const sendMessage = async () => {
       senderId: authStore.memberSeq?.toString() || 'me',
       name: userName,
       content: messageText,
+      profileImageUrl: authStore.user?.profileImageUrl || null,
     }
 
     await room.value.localParticipant.publishData(
@@ -1201,6 +1273,7 @@ const sendMessage = async () => {
       senderId: authStore.memberSeq?.toString() || 'me',
       name: userName,
       content: messageText,
+      profileImageUrl: authStore.user?.profileImageUrl || null,
       createdAt: new Date().toISOString(),
       timeOnly: new Date().toLocaleTimeString('ko-KR', {
         hour: '2-digit',
@@ -1693,15 +1766,6 @@ onUnmounted(() => {
 }
 
 .message-avatar {
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
-  background: #1976d2;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 12px;
-  font-weight: 600;
   flex-shrink: 0;
 }
 

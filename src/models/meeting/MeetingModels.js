@@ -197,7 +197,7 @@ export class RoomDetailDto {
   }
 
   get formattedDuration() {
-    if (!this.duration) return '0분'
+    if (!this.duration) return '0초'
     
     // LiveKit Egress duration은 나노초(nanoseconds) 단위로 반환됨
     // 48656565668 ns / 1,000,000 = 48656.565668 ms = 48.656 초
@@ -208,14 +208,32 @@ export class RoomDetailDto {
       durationMs = this.duration / 1000000 // 나노초를 밀리초로 변환
     }
     
-    const totalMinutes = Math.floor(durationMs / 60000)
-    const hours = Math.floor(totalMinutes / 60)
-    const minutes = totalMinutes % 60
+    const totalSeconds = Math.floor(durationMs / 1000)
+    const hours = Math.floor(totalSeconds / 3600)
+    const minutes = Math.floor((totalSeconds % 3600) / 60)
+    const seconds = totalSeconds % 60
     
-    if (hours === 0) {
-      return `${minutes}분`
+    if (hours > 0) {
+      // 1시간 이상: "1시간 12분 14초"
+      if (minutes > 0 && seconds > 0) {
+        return `${hours}시간 ${minutes}분 ${seconds}초`
+      } else if (minutes > 0) {
+        return `${hours}시간 ${minutes}분`
+      } else if (seconds > 0) {
+        return `${hours}시간 ${seconds}초`
+      } else {
+        return `${hours}시간`
+      }
+    } else if (minutes > 0) {
+      // 1분 이상 1시간 미만: "2분 35초"
+      if (seconds > 0) {
+        return `${minutes}분 ${seconds}초`
+      } else {
+        return `${minutes}분`
+      }
     } else {
-      return minutes > 0 ? `${hours}시간 ${minutes}분` : `${hours}시간`
+      // 1분 미만: "40초"
+      return `${seconds}초`
     }
   }
 }
