@@ -184,16 +184,20 @@ const loadFriendList = async () => {
     // API 응답이 배열인지, 페이징 객체인지 확인
     const friendList = Array.isArray(response) ? response : (response.content || [])
     
-    friends.value = friendList.map(friend => ({
-      id: friend.memberId || friend.id,
-      memberSeq: friend.memberSeq || friend.friendSeq,
-      name: friend.name,
-      email: friend.email,
-      profileImage: friend.profileImage,
-      avatarText: friend.name ? friend.name.charAt(0) : '?',
-      avatarColor: getRandomColor(),
-      isFriend: true
-    }))
+    friends.value = friendList.map(friend => {
+      const profileImage = friend.profileImage || friend.profileImageUrl || friend.profileUrl
+      return {
+        id: friend.memberId || friend.id,
+        memberSeq: friend.memberSeq || friend.friendSeq,
+        name: friend.name,
+        email: friend.email,
+        profileImage,
+        profileImageUrl: friend.profileImageUrl || friend.profileImage || profileImage,
+        avatarText: friend.name ? friend.name.charAt(0) : '?',
+        avatarColor: getRandomColor(),
+        isFriend: true
+      }
+    })
   } catch (error) {
     console.error('친구 목록 로딩 실패:', error)
     // alert('친구 목록을 불러오는데 실패했습니다.')
@@ -222,16 +226,20 @@ watch(friendSearchQuery, (newValue) => {
       // API 응답이 배열인지, 페이징 객체인지 확인
       const memberList = Array.isArray(response) ? response : (response.content || [])
       
-      searchResults.value = memberList.map(member => ({
-        id: member.memberId || member.id,
-        memberSeq: member.memberSeq,
-        name: member.name,
-        email: member.email,
-        profileImage: member.profileImage,
-        avatarText: member.name ? member.name.charAt(0) : '?',
-        avatarColor: getRandomColor(),
-        isFriend: member.isFriend || false
-      }))
+      searchResults.value = memberList.map(member => {
+        const profileImage = member.profileImage || member.profileImageUrl || member.profileUrl
+        return {
+          id: member.memberId || member.id,
+          memberSeq: member.memberSeq,
+          name: member.name,
+          email: member.email,
+          profileImage,
+          profileImageUrl: member.profileImageUrl || member.profileImage || profileImage,
+          avatarText: member.name ? member.name.charAt(0) : '?',
+          avatarColor: getRandomColor(),
+          isFriend: member.isFriend || false
+        }
+      })
     } catch (error) {
       console.error('회원 검색 실패:', error)
       searchResults.value = []
@@ -608,7 +616,11 @@ onMounted(() => {
                     @click="addToInviteList(friend)"
                   >
                     <v-avatar size="32" :color="friend.avatarColor">
-                      <img v-if="friend.profileImage" :src="friend.profileImage" alt="Profile" />
+                      <img
+                        v-if="friend.profileImage || friend.profileImageUrl"
+                        :src="friend.profileImage || friend.profileImageUrl"
+                        alt="Profile"
+                      />
                       <span v-else>{{ friend.avatarText }}</span>
                     </v-avatar>
                     <div class="friend-info">
@@ -665,7 +677,11 @@ onMounted(() => {
                     @click="addToInviteList(user)"
                   >
                     <v-avatar size="32" :color="user.avatarColor">
-                      <img v-if="user.profileImage" :src="user.profileImage" alt="Profile" />
+                      <img
+                        v-if="user.profileImage || user.profileImageUrl"
+                        :src="user.profileImage || user.profileImageUrl"
+                        alt="Profile"
+                      />
                       <span v-else>{{ user.avatarText }}</span>
                     </v-avatar>
                     <div class="friend-info">
@@ -715,7 +731,11 @@ onMounted(() => {
                     class="invite-item"
                   >
                     <v-avatar size="32" :color="member.avatarColor">
-                      <img v-if="member.profileImage" :src="member.profileImage" alt="Profile" />
+                      <img
+                        v-if="member.profileImage || member.profileImageUrl"
+                        :src="member.profileImage || member.profileImageUrl"
+                        alt="Profile"
+                      />
                       <span v-else>{{ member.avatarText }}</span>
                     </v-avatar>
                     <div class="member-info">
