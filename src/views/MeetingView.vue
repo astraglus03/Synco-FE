@@ -507,19 +507,16 @@ const initializeLiveKitRoom = async () => {
       console.warn('⚠️ 포트 7880이 URL에서 제거되었습니다. Nginx 프록시를 사용합니다.')
     }
     
-    // LiveKit은 /rtc 경로를 필요로 함 (명시적으로 추가)
-    // 라이브러리 버전에 따라 자동 추가되지 않을 수 있으므로 안전하게 명시적으로 추가
-    if (!wsUrl.endsWith('/rtc')) {
-      // 마지막 슬래시 제거 후 /rtc 추가
-      wsUrl = wsUrl.replace(/\/$/, '') + '/rtc'
-    }
+    // 마지막 슬래시 제거 (LiveKit 클라이언트가 자동으로 /rtc를 추가하므로)
+    wsUrl = wsUrl.replace(/\/$/, '')
     
     // 디버깅 로그
     console.log('🔗 LiveKit 연결 정보:', {
       livekitUrl,
       wsUrl,
       hasToken: !!token,
-      roomName: lkRoomName
+      roomName: lkRoomName,
+      note: 'LiveKit 클라이언트가 자동으로 /rtc 경로를 추가합니다'
     })
 
     // 방 연결
