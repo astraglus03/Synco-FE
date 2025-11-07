@@ -257,6 +257,13 @@ const showChat = ref(true)
 const isRecording = ref(false)
 const isEndingCall = ref(false) // 종료 중 플래그
 
+const toKstDate = (value) => {
+  if (!value) return new Date()
+  const base = new Date(value)
+  if (Number.isNaN(base.getTime())) return new Date()
+  return new Date(base.getTime() + 9 * 60 * 60 * 1000)
+}
+
 // LiveKit refs
 const room = ref(null)
 const roomContainer = ref(null)
@@ -1252,14 +1259,15 @@ const loadChatMessages = async () => {
       const messages = messagesArray.map((msg) => {
         // senderId가 현재 사용자이면 실제 이름 표시
         if (msg.senderId?.toString() === authStore.memberSeq?.toString()) {
+          const createdAtKst = toKstDate(msg.createdAt)
           return {
             id: msg.id,
             senderId: msg.senderId,
             name: authStore.user?.name || '알 수 없음',
             content: msg.content,
             profileImageUrl: msg.profileImageUrl || authStore.user?.profileImageUrl || null,
-            createdAt: msg.createdAt,
-            timeOnly: new Date(msg.createdAt).toLocaleTimeString('ko-KR', {
+            createdAt: createdAtKst.toISOString(),
+            timeOnly: createdAtKst.toLocaleTimeString('ko-KR', {
               hour: '2-digit',
               minute: '2-digit',
             }),
@@ -1275,6 +1283,7 @@ const loadChatMessages = async () => {
           p => p.participantId?.toString() === msg.senderId?.toString()
         )
         const profileImageUrl = participant?.participantProfileUrl || msg.profileImageUrl || null
+        const createdAtKst = toKstDate(msg.createdAt)
         
         return {
           id: msg.id,
@@ -1282,8 +1291,8 @@ const loadChatMessages = async () => {
           name: displayName,
           content: msg.content,
           profileImageUrl: profileImageUrl,
-          createdAt: msg.createdAt,
-          timeOnly: new Date(msg.createdAt).toLocaleTimeString('ko-KR', {
+          createdAt: createdAtKst.toISOString(),
+          timeOnly: createdAtKst.toLocaleTimeString('ko-KR', {
             hour: '2-digit',
             minute: '2-digit',
           }),
