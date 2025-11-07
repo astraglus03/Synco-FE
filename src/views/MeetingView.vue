@@ -369,9 +369,12 @@ const loadRoomParticipants = async () => {
       roomParticipants.value = response.data.participants
     }
     
-    // 녹화 상태 확인 (재참여 시 대비)
+    // 녹화 상태 확인 (재참여 시 대비) - 모든 참가자가 확인 가능
     if (response?.data?.isRecording !== undefined) {
-      isRecording.value = response.data.isRecording
+      isRecording.value = response.data.isRecording === true || response.data.isRecording === 'true'
+    } else if (response?.data?.recordingStatus !== undefined) {
+      // recordingStatus 필드로도 확인
+      isRecording.value = response.data.recordingStatus === 'RECORDING' || response.data.recordingStatus === true
     }
   } catch (error) {
   }
@@ -449,16 +452,40 @@ const initializeExistingTracks = async () => {
   // 참가자 정보 먼저 로드
   await loadRoomParticipants()
 
+  // remoteParticipants 초기화 (재참여 시 중복 방지)
+  remoteParticipants.value = []
+
   // 원격 참가자들
   room.value.remoteParticipants.forEach((participant) => {
     // 참가자 이름 찾기
     const participantName = getParticipantName(participant.identity)
     
-    // 참가자를 배열에 추가
-    remoteParticipants.value.push({
-      identity: participant.identity,
-      name: participantName || participant.name || participant.identity,
-    })
+    // 이름이 없으면 다시 시도
+    if (!participantName) {
+      // roomParticipants에서 다시 찾기
+      const found = roomParticipants.value.find(
+        p => p.participantId?.toString() === participant.identity?.toString()
+      )
+      if (found?.participantName) {
+        remoteParticipants.value.push({
+          identity: participant.identity,
+          name: found.participantName,
+        })
+      } else {
+        // 그래도 없으면 identity 사용
+        remoteParticipants.value.push({
+          identity: participant.identity,
+          name: participant.identity,
+        })
+      }
+    } else {
+      // 참가자를 배열에 추가
+      remoteParticipants.value.push({
+        identity: participant.identity,
+        name: participantName,
+      })
+    }
+    
     setupParticipantEvents(participant)
     participant.trackPublications.forEach((pub) => {
       if (pub.track) {
@@ -577,15 +604,20 @@ const initializeLiveKitRoom = async () => {
   }
 }
 
-// 녹화 상태 확인
+// 녹화 상태 확인 (재참여 시 호출)
 const checkRecordingStatus = async () => {
   try {
     const response = await meetingApi.getRoomDetail(props.roomId, authStore.memberSeq)
+    // 백엔드에서 isRecording 필드 확인
     if (response?.data?.isRecording !== undefined) {
-      isRecording.value = response.data.isRecording
+      isRecording.value = response.data.isRecording === true || response.data.isRecording === 'true'
+    } else if (response?.data?.recordingStatus !== undefined) {
+      // recordingStatus 필드로도 확인
+      isRecording.value = response.data.recordingStatus === 'RECORDING' || response.data.recordingStatus === true
     }
   } catch (error) {
     // 에러 무시 (녹화 상태 확인 실패해도 회의는 계속 진행)
+    console.warn('녹화 상태 확인 실패:', error)
   }
 }
 
@@ -609,12 +641,30 @@ const setupRoomEventListeners = () => {
     await loadRoomParticipants()
     
     // 참가자 이름 찾기
-    const participantName = getParticipantName(participant.identity)
+    let participantName = getParticipantName(participant.identity)
     
-    remoteParticipants.value.push({
-      identity: participant.identity,
-      name: participantName || participant.name || participant.identity,
-    })
+    // 이름이 없으면 roomParticipants에서 직접 찾기
+    if (!participantName) {
+      const found = roomParticipants.value.find(
+        p => p.participantId?.toString() === participant.identity?.toString()
+      )
+      participantName = found?.participantName || participant.name || participant.identity
+    }
+    
+    // 중복 체크 (이미 있는 참가자는 추가하지 않음)
+    const existing = remoteParticipants.value.find(
+      p => p.identity === participant.identity
+    )
+    if (!existing) {
+      remoteParticipants.value.push({
+        identity: participant.identity,
+        name: participantName,
+      })
+    } else {
+      // 이미 있으면 이름만 업데이트
+      existing.name = participantName
+    }
+    
     setupParticipantEvents(participant)
   })
 
@@ -1178,6 +1228,9 @@ watch(activeScreenShare, async (newVal, oldVal) => {
 // 채팅 메시지 불러오기
 const loadChatMessages = async () => {
   try {
+    // 참가자 정보 먼저 로드 (이름을 찾기 위해)
+    await loadRoomParticipants()
+    
     const response = await meetingApi.getMessages(
       authStore.memberSeq,
       props.roomId,
@@ -1192,18 +1245,38 @@ const loadChatMessages = async () => {
     
     if (Array.isArray(messagesArray) && messagesArray.length > 0) {
       const messages = messagesArray.map((msg) => {
-        // senderId가 현재 사용자이면 실제 이름 표시, 아니면 이름 또는 senderId 표시
-        const displayName = 
-          msg.senderId?.toString() === authStore.memberSeq?.toString() 
-            ? (authStore.user?.name || '알 수 없음')
-            : (msg.name || msg.senderId?.toString() || '알 수 없음')
+        // senderId가 현재 사용자이면 실제 이름 표시
+        if (msg.senderId?.toString() === authStore.memberSeq?.toString()) {
+          return {
+            id: msg.id,
+            senderId: msg.senderId,
+            name: authStore.user?.name || '알 수 없음',
+            content: msg.content,
+            profileImageUrl: msg.profileImageUrl || authStore.user?.profileImageUrl || null,
+            createdAt: msg.createdAt,
+            timeOnly: new Date(msg.createdAt).toLocaleTimeString('ko-KR', {
+              hour: '2-digit',
+              minute: '2-digit',
+            }),
+          }
+        }
+        
+        // 다른 참가자의 경우 getParticipantName 사용
+        const participantName = getParticipantName(msg.senderId)
+        const displayName = participantName || msg.name || msg.senderId?.toString() || '알 수 없음'
+        
+        // 프로필 이미지 찾기
+        const participant = roomParticipants.value.find(
+          p => p.participantId?.toString() === msg.senderId?.toString()
+        )
+        const profileImageUrl = participant?.participantProfileUrl || msg.profileImageUrl || null
         
         return {
           id: msg.id,
           senderId: msg.senderId,
           name: displayName,
           content: msg.content,
-          profileImageUrl: msg.profileImageUrl || null,
+          profileImageUrl: profileImageUrl,
           createdAt: msg.createdAt,
           timeOnly: new Date(msg.createdAt).toLocaleTimeString('ko-KR', {
             hour: '2-digit',

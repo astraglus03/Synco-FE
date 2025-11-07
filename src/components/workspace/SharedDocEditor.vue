@@ -2490,6 +2490,15 @@ const handleIncomingMessage = (message) => {
 
 .back-btn {
   margin-right: 8px;
+  color: rgba(0, 0, 0, 0.87) !important;
+}
+
+.back-btn .v-icon {
+  color: rgba(0, 0, 0, 0.87) !important;
+}
+
+.back-btn:hover {
+  background-color: rgba(0, 0, 0, 0.04) !important;
 }
 
 .document-title {
@@ -2497,6 +2506,19 @@ const handleIncomingMessage = (message) => {
   font-size: 1.2em;
   font-weight: 500;
   color: #1e293b !important;
+}
+
+.editor-header .header-left {
+  display: flex;
+  align-items: center;
+}
+
+.editor-header .header-left .v-btn {
+  color: rgba(0, 0, 0, 0.87) !important;
+}
+
+.editor-header .header-left .v-btn .v-icon {
+  color: rgba(0, 0, 0, 0.87) !important;
 }
 
 .connection-status {
