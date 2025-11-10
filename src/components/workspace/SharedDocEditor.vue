@@ -2490,6 +2490,15 @@ const handleIncomingMessage = (message) => {
 
 .back-btn {
   margin-right: 8px;
+  color: rgba(0, 0, 0, 0.87) !important;
+}
+
+.back-btn .v-icon {
+  color: rgba(0, 0, 0, 0.87) !important;
+}
+
+.back-btn:hover {
+  background-color: rgba(0, 0, 0, 0.04) !important;
 }
 
 .document-title {
@@ -2497,6 +2506,19 @@ const handleIncomingMessage = (message) => {
   font-size: 1.2em;
   font-weight: 500;
   color: #1e293b !important;
+}
+
+.editor-header .header-left {
+  display: flex;
+  align-items: center;
+}
+
+.editor-header .header-left .v-btn {
+  color: rgba(0, 0, 0, 0.87) !important;
+}
+
+.editor-header .header-left .v-btn .v-icon {
+  color: rgba(0, 0, 0, 0.87) !important;
 }
 
 .connection-status {
@@ -2512,13 +2534,59 @@ const handleIncomingMessage = (message) => {
   display: flex;
   align-items: center;
   padding: 8px 16px;
-  background-color: white;
+  background-color: white !important;
   border-bottom: 1px solid #e0e0e0;
   gap: 8px;
 }
 
 .editor-toolbar .v-btn {
   min-width: 36px;
+  background-color: white !important;
+  color: rgba(0, 0, 0, 0.87) !important;
+}
+
+.editor-toolbar .v-btn:hover {
+  background-color: rgba(0, 0, 0, 0.04) !important;
+}
+
+.editor-toolbar .v-btn.is-active {
+  background-color: rgba(0, 0, 0, 0.08) !important;
+  color: rgba(0, 0, 0, 0.87) !important;
+}
+
+.editor-toolbar .v-btn-toggle {
+  background-color: white !important;
+}
+
+.editor-toolbar .v-btn-toggle .v-btn {
+  background-color: white !important;
+  color: rgba(0, 0, 0, 0.87) !important;
+}
+
+.editor-toolbar .v-btn-toggle .v-btn:hover {
+  background-color: rgba(0, 0, 0, 0.04) !important;
+}
+
+.editor-toolbar .v-btn-toggle .v-btn.is-active {
+  background-color: rgba(0, 0, 0, 0.08) !important;
+  color: rgba(0, 0, 0, 0.87) !important;
+}
+
+.editor-toolbar .v-divider {
+  border-color: #e0e0e0 !important;
+}
+
+.editor-toolbar .v-icon {
+  color: rgba(0, 0, 0, 0.87) !important;
+}
+
+.editor-toolbar .v-menu .v-card {
+  background-color: white !important;
+}
+
+.editor-toolbar .v-menu .v-card-text {
+  background-color: white !important;
+  color: rgba(0, 0, 0, 0.87) !important;
 }
 
 /* 참여자 토글 스타일 */
@@ -2752,6 +2820,12 @@ const handleIncomingMessage = (message) => {
 /* 이모티콘 피커 스타일 */
 .emoji-picker {
   border-radius: 8px;
+  background-color: white !important;
+}
+
+.emoji-picker .v-card-text {
+  background-color: white !important;
+  color: rgba(0, 0, 0, 0.87) !important;
 }
 
 .emoji-grid {
@@ -2767,10 +2841,12 @@ const handleIncomingMessage = (message) => {
   border-radius: 4px;
   text-align: center;
   transition: background-color 0.2s;
+  background-color: white !important;
+  color: rgba(0, 0, 0, 0.87) !important;
 }
 
 .emoji-item:hover {
-  background-color: #f0f0f0;
+  background-color: #f0f0f0 !important;
 }
 
 /* 인쇄 스타일 - 에디터 영역만 인쇄 */

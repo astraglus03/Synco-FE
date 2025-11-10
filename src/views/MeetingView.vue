@@ -14,7 +14,7 @@
           color="grey-darken-1"
           @click="handleRecording"
         />
-        <!-- 녹화 중 표시 -->
+        <!-- 녹화 중 표시 (모든 참가자에게 표시) -->
         <div v-if="isRecording" class="recording-status">
           🔴 녹화 중
         </div>
@@ -152,9 +152,10 @@
             :key="message.id"
             class="chat-message"
           >
-            <div class="message-avatar">
-              {{ message.name?.charAt(0) || '?' }}
-            </div>
+            <v-avatar size="32" :color="getAvatarColor(message.name)">
+              <v-img v-if="message.profileImageUrl" :src="message.profileImageUrl" cover />
+              <span v-else class="text-white font-weight-bold">{{ message.name?.charAt(0) || '?' }}</span>
+            </v-avatar>
             <div class="message-content">
               <div class="message-sender">{{ message.name || '알 수 없음' }}</div>
               <div class="message-text">{{ message.content }}</div>
@@ -255,6 +256,13 @@ const newMessage = ref('')
 const showChat = ref(true)
 const isRecording = ref(false)
 const isEndingCall = ref(false) // 종료 중 플래그
+
+const toKstDate = (value) => {
+  if (!value) return new Date()
+  const base = new Date(value)
+  if (Number.isNaN(base.getTime())) return new Date()
+  return new Date(base.getTime() + 9 * 60 * 60 * 1000)
+}
 
 // LiveKit refs
 const room = ref(null)
@@ -367,8 +375,35 @@ const loadRoomParticipants = async () => {
     if (response?.data?.participants && Array.isArray(response.data.participants)) {
       roomParticipants.value = response.data.participants
     }
+    
+    // 녹화 상태 확인 (재참여 시 대비) - 모든 참가자가 확인 가능
+    // checkRecordingStatus에서 이미 확인했지만, 여기서도 확인 (중복 체크)
+    if (response?.data?.isRecording !== undefined) {
+      isRecording.value = response.data.isRecording === true || response.data.isRecording === 'true'
+    } else if (response?.data?.recordingStatus !== undefined) {
+      // recordingStatus 필드로도 확인
+      isRecording.value = response.data.recordingStatus === 'RECORDING' || response.data.recordingStatus === true
+    }
   } catch (error) {
+    // 참가자 정보 로드 실패 시 재시도하지 않음 (에러 무시)
+    console.warn('참가자 정보 로드 실패:', error)
   }
+}
+
+// 이름 기반 아바타 색상 생성
+const getAvatarColor = (name) => {
+  if (!name) return 'primary'
+  
+  // 이름의 첫 글자로 색상 결정
+  const colors = [
+    'primary', 'success', 'warning', 'error', 'info', 
+    'purple', 'teal', 'pink', 'indigo', 'orange',
+    'cyan', 'amber', 'deep-purple', 'light-blue', 'lime'
+  ]
+  
+  const charCode = name.charCodeAt(0)
+  const index = charCode % colors.length
+  return colors[index]
 }
 
 // participant identity로 이름 찾기
@@ -426,17 +461,38 @@ const initializeExistingTracks = async () => {
 
   // 참가자 정보 먼저 로드
   await loadRoomParticipants()
+  
+  // 참가자 정보가 없으면 한 번 더 시도
+  if (roomParticipants.value.length === 0 && room.value.remoteParticipants.length > 0) {
+    console.warn('참가자 정보가 없어 재시도합니다.')
+    await new Promise(resolve => setTimeout(resolve, 500)) // 0.5초 대기
+    await loadRoomParticipants()
+  }
+
+  // remoteParticipants 초기화 (재참여 시 중복 방지)
+  remoteParticipants.value = []
 
   // 원격 참가자들
   room.value.remoteParticipants.forEach((participant) => {
     // 참가자 이름 찾기
-    const participantName = getParticipantName(participant.identity)
+    let participantName = getParticipantName(participant.identity)
     
-    // 참가자를 배열에 추가
+    // 이름이 없으면 roomParticipants에서 직접 찾기
+    if (!participantName) {
+      const found = roomParticipants.value.find(
+        p => p.participantId?.toString() === participant.identity?.toString()
+      )
+      participantName = found?.participantName || null
+    }
+    
+    // 그래도 없으면 identity 사용 (임시)
+    const displayName = participantName || participant.name || participant.identity
+    
     remoteParticipants.value.push({
       identity: participant.identity,
-      name: participantName || participant.name || participant.identity,
+      name: displayName,
     })
+    
     setupParticipantEvents(participant)
     participant.trackPublications.forEach((pub) => {
       if (pub.track) {
@@ -455,8 +511,11 @@ const initializeExistingTracks = async () => {
 
 // LiveKit Room 초기화
 const initializeLiveKitRoom = async () => {
+  let wsUrl = '' // catch 블록에서 접근 가능하도록 함수 스코프에 선언
+  let token = null
+  
   try {
-    const token = meetingData.value.livekitToken
+    token = meetingData.value.livekitToken
     const lkRoomName = meetingData.value.livekitRoomName
 
     if (!token || !lkRoomName) {
@@ -472,15 +531,43 @@ const initializeLiveKitRoom = async () => {
       },
     })
 
-    // WS 시그널링 URL (WebSocket은 ws:// 프로토콜 사용)
-    let wsUrl = 'ws://'+import.meta.env.VITE_LIVEKIT_API_URL
+    // WS 시그널링 URL 생성
+    let livekitUrl = import.meta.env.VITE_LIVEKIT_API_URL
     
-    // http://로 시작하면 ws://로 변환
-    if (wsUrl.startsWith('http://')) {
-      wsUrl = wsUrl.replace('http://', 'ws://')
-    } else if (wsUrl.startsWith('https://')) {
-      wsUrl = wsUrl.replace('https://', 'wss://')
+    // 환경 변수 검증
+    if (!livekitUrl || livekitUrl.trim() === '') {
+      console.error('❌ VITE_LIVEKIT_API_URL이 설정되지 않았습니다.')
+      throw new Error('LiveKit 서버 URL이 설정되지 않았습니다.')
     }
+    
+    // 프로토콜이 이미 포함되어 있는지 확인
+    if (livekitUrl.startsWith('ws://') || livekitUrl.startsWith('wss://')) {
+      // 이미 WebSocket 프로토콜이 있으면 그대로 사용
+      wsUrl = livekitUrl
+    } else if (livekitUrl.startsWith('http://')) {
+      // http://로 시작하면 ws://로 변환
+      wsUrl = livekitUrl.replace('http://', 'ws://')
+    } else if (livekitUrl.startsWith('https://')) {
+      // https://로 시작하면 wss://로 변환
+      wsUrl = livekitUrl.replace('https://', 'wss://')
+    } else {
+      // 프로토콜이 없으면 현재 페이지 프로토콜에 따라 결정
+      // HTTPS 페이지에서는 wss://, HTTP 페이지에서는 ws:// 사용
+      const protocol = window.location.protocol === 'https:' ? 'wss://' : 'ws://'
+      wsUrl = protocol + livekitUrl
+    }
+    
+    // 포트 번호가 포함되어 있으면 제거 (Nginx가 443 포트로 프록시하므로)
+    // 예: livekit.synco1.shop:7880 -> livekit.synco1.shop
+    if (wsUrl.includes(':7880')) {
+      wsUrl = wsUrl.replace(':7880', '')
+    }
+    
+    // 마지막 슬래시 제거 (LiveKit 클라이언트가 자동으로 /rtc 경로를 추가함)
+    wsUrl = wsUrl.replace(/\/$/, '')
+
+    // 이벤트 리스너 먼저 등록 (연결 전에 등록하여 모든 이벤트 캡처)
+    setupRoomEventListeners()
 
     // 방 연결
     await room.value.connect(wsUrl, token)
@@ -488,9 +575,9 @@ const initializeLiveKitRoom = async () => {
     // 로컬 참가자 identity 저장
     localParticipantIdentity.value = room.value.localParticipant.identity
 
-    // 이벤트 리스너 등록 (connect 이후)
-    setupRoomEventListeners()
-
+    // 녹화 상태 먼저 확인 (재참여 시 대비) - 참가자 정보 로드 전에 확인
+    await checkRecordingStatus()
+    
     // 현재 방에 있는 참가자/트랙 DOM 부착
     await initializeExistingTracks()
 
@@ -520,7 +607,35 @@ const initializeLiveKitRoom = async () => {
     // 기존 채팅 메시지 불러오기
     await loadChatMessages()
   } catch (error) {
-    alert('화상회의 연결에 실패했습니다.')
+    alert(`화상회의 연결에 실패했습니다: ${error.message || error}`)
+  }
+}
+
+// 녹화 상태 확인 (재참여 시 호출) - 참가자 정보 로드 전에 먼저 호출
+const checkRecordingStatus = async () => {
+  if (!props.roomId) return
+  
+  try {
+    const response = await meetingApi.getRoomDetail(props.roomId, authStore.memberSeq)
+    // 백엔드에서 isRecording 필드 확인
+    if (response?.data?.isRecording !== undefined) {
+      isRecording.value = response.data.isRecording === true || response.data.isRecording === 'true'
+    } else if (response?.data?.recordingStatus !== undefined) {
+      // recordingStatus 필드로도 확인
+      isRecording.value = response.data.recordingStatus === 'RECORDING' || response.data.recordingStatus === true
+    }
+  } catch (error) {
+    // 에러 무시 (녹화 상태 확인 실패해도 회의는 계속 진행)
+    console.warn('녹화 상태 확인 실패:', error)
+  }
+}
+
+// 녹화 상태 변경 처리 (다른 참가자로부터 받은 메시지)
+const handleRecordingStatus = (data) => {
+  if (data.action === 'start') {
+    isRecording.value = true
+  } else if (data.action === 'stop') {
+    isRecording.value = false
   }
 }
 
@@ -535,12 +650,30 @@ const setupRoomEventListeners = () => {
     await loadRoomParticipants()
     
     // 참가자 이름 찾기
-    const participantName = getParticipantName(participant.identity)
+    let participantName = getParticipantName(participant.identity)
     
-    remoteParticipants.value.push({
-      identity: participant.identity,
-      name: participantName || participant.name || participant.identity,
-    })
+    // 이름이 없으면 roomParticipants에서 직접 찾기
+    if (!participantName) {
+      const found = roomParticipants.value.find(
+        p => p.participantId?.toString() === participant.identity?.toString()
+      )
+      participantName = found?.participantName || participant.name || participant.identity
+    }
+    
+    // 중복 체크 (이미 있는 참가자는 추가하지 않음)
+    const existing = remoteParticipants.value.find(
+      p => p.identity === participant.identity
+    )
+    if (!existing) {
+      remoteParticipants.value.push({
+        identity: participant.identity,
+        name: participantName,
+      })
+    } else {
+      // 이미 있으면 이름만 업데이트
+      existing.name = participantName
+    }
+    
     setupParticipantEvents(participant)
   })
 
@@ -569,12 +702,14 @@ const setupRoomEventListeners = () => {
     },
   )
 
-  // 데이터 수신 (채팅)
+  // 데이터 수신 (채팅, 녹화 상태 등)
   room.value.on(RoomEvent.DataReceived, (payload, participant) => {
     try {
       const data = JSON.parse(new TextDecoder().decode(payload))
       if (data.type === 'chat') {
         handleChatMessage(data, participant)
+      } else if (data.type === 'recording') {
+        handleRecordingStatus(data)
       }
     } catch (err) {
     }
@@ -774,25 +909,34 @@ const createAudioElement = (participantIdentity) => {
 }
 
 // 채팅 메시지 처리
-const handleChatMessage = (data, participant) => {
+const handleChatMessage = async (data, participant) => {
   const senderId = participant?.identity || data?.senderId || 'unknown'
-  const senderName =
-    participant?.name ||
-    data?.name ||
-    participant?.identity ||
-    '알 수 없음'
-
-  // senderId가 현재 사용자이면 실제 이름 표시
-  const displayName = 
-    senderId?.toString() === authStore.memberSeq?.toString() 
-      ? (authStore.user?.name || '알 수 없음')
-      : senderName
+  
+  // 참가자 정보가 없으면 다시 로드 시도 (재참여 시 대비)
+  if (roomParticipants.value.length === 0) {
+    await loadRoomParticipants()
+  }
+  
+  // getParticipantName을 사용하여 이름 찾기 (가장 정확함)
+  let displayName = getParticipantName(senderId)
+  
+  // 찾지 못한 경우 fallback
+  if (!displayName) {
+    displayName = 
+      participant?.name ||
+      data?.name ||
+      remoteParticipants.value.find(p => p.identity === senderId)?.name ||
+      senderId?.toString() === authStore.memberSeq?.toString()
+        ? (authStore.user?.name || '알 수 없음')
+        : '알 수 없음'
+  }
 
   const message = {
     id: Date.now(),
     senderId: senderId,
     name: displayName,
     content: data.content,
+    profileImageUrl: participant?.profileImageUrl || data?.profileImageUrl || null,
     createdAt: new Date().toISOString(),
     timeOnly: new Date().toLocaleTimeString('ko-KR', {
       hour: '2-digit',
@@ -836,6 +980,19 @@ const startRecording = async () => {
     const response = await meetingApi.startRecording(authStore.memberSeq, props.roomId)
     
     isRecording.value = true
+    
+    // 다른 참가자에게 녹화 시작 알림
+    if (room.value) {
+      const payload = {
+        type: 'recording',
+        action: 'start',
+        roomId: props.roomId,
+      }
+      await room.value.localParticipant.publishData(
+        new TextEncoder().encode(JSON.stringify(payload)),
+        { reliable: true },
+      )
+    }
   } catch (err) {
     alert('녹화 시작에 실패했습니다: ' + (err.message || err))
   }
@@ -1080,6 +1237,12 @@ watch(activeScreenShare, async (newVal, oldVal) => {
 // 채팅 메시지 불러오기
 const loadChatMessages = async () => {
   try {
+    // 참가자 정보 먼저 로드 (이름을 찾기 위해)
+    // 이미 로드되었을 수 있지만, 없으면 다시 로드
+    if (roomParticipants.value.length === 0) {
+      await loadRoomParticipants()
+    }
+    
     const response = await meetingApi.getMessages(
       authStore.memberSeq,
       props.roomId,
@@ -1094,19 +1257,42 @@ const loadChatMessages = async () => {
     
     if (Array.isArray(messagesArray) && messagesArray.length > 0) {
       const messages = messagesArray.map((msg) => {
-        // senderId가 현재 사용자이면 실제 이름 표시, 아니면 이름 또는 senderId 표시
-        const displayName = 
-          msg.senderId?.toString() === authStore.memberSeq?.toString() 
-            ? (authStore.user?.name || '알 수 없음')
-            : (msg.name || msg.senderId?.toString() || '알 수 없음')
+        // senderId가 현재 사용자이면 실제 이름 표시
+        if (msg.senderId?.toString() === authStore.memberSeq?.toString()) {
+          const createdAtKst = toKstDate(msg.createdAt)
+          return {
+            id: msg.id,
+            senderId: msg.senderId,
+            name: authStore.user?.name || '알 수 없음',
+            content: msg.content,
+            profileImageUrl: msg.profileImageUrl || authStore.user?.profileImageUrl || null,
+            createdAt: createdAtKst.toISOString(),
+            timeOnly: createdAtKst.toLocaleTimeString('ko-KR', {
+              hour: '2-digit',
+              minute: '2-digit',
+            }),
+          }
+        }
+        
+        // 다른 참가자의 경우 getParticipantName 사용
+        const participantName = getParticipantName(msg.senderId)
+        const displayName = participantName || msg.name || msg.senderId?.toString() || '알 수 없음'
+        
+        // 프로필 이미지 찾기
+        const participant = roomParticipants.value.find(
+          p => p.participantId?.toString() === msg.senderId?.toString()
+        )
+        const profileImageUrl = participant?.participantProfileUrl || msg.profileImageUrl || null
+        const createdAtKst = toKstDate(msg.createdAt)
         
         return {
           id: msg.id,
           senderId: msg.senderId,
           name: displayName,
           content: msg.content,
-          createdAt: msg.createdAt,
-          timeOnly: new Date(msg.createdAt).toLocaleTimeString('ko-KR', {
+          profileImageUrl: profileImageUrl,
+          createdAt: createdAtKst.toISOString(),
+          timeOnly: createdAtKst.toLocaleTimeString('ko-KR', {
             hour: '2-digit',
             minute: '2-digit',
           }),
@@ -1146,6 +1332,7 @@ const sendMessage = async () => {
       senderId: authStore.memberSeq?.toString() || 'me',
       name: userName,
       content: messageText,
+      profileImageUrl: authStore.user?.profileImageUrl || null,
     }
 
     await room.value.localParticipant.publishData(
@@ -1173,6 +1360,7 @@ const sendMessage = async () => {
       senderId: authStore.memberSeq?.toString() || 'me',
       name: userName,
       content: messageText,
+      profileImageUrl: authStore.user?.profileImageUrl || null,
       createdAt: new Date().toISOString(),
       timeOnly: new Date().toLocaleTimeString('ko-KR', {
         hour: '2-digit',
@@ -1665,15 +1853,6 @@ onUnmounted(() => {
 }
 
 .message-avatar {
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
-  background: #1976d2;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 12px;
-  font-weight: 600;
   flex-shrink: 0;
 }
 

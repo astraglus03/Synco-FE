@@ -312,6 +312,7 @@
                     v-if="participant.participantProfileUrl" 
                     :src="participant.participantProfileUrl"
                     :alt="participant.participantName"
+                    cover
                   />
                   <span v-else class="text-white font-weight-bold text-h6">
                     {{ participant.avatar }}
@@ -731,15 +732,20 @@ const downloadMeetingRecording = async () => {
 }
 
 // 참여자 색상 가져오기
+// 이름 기반 아바타 색상 생성
 const getParticipantColor = (participant) => {
-  const statusColor = participant.statusColor
-  const colorMap = {
-    'success': 'success',
-    'warning': 'warning',
-    'grey': 'grey',
-    'error': 'error'
-  }
-  return colorMap[statusColor] || 'primary'
+  if (!participant?.participantName) return 'primary'
+  
+  // 이름의 첫 글자로 색상 결정
+  const colors = [
+    'primary', 'success', 'warning', 'error', 'info', 
+    'purple', 'teal', 'pink', 'indigo', 'orange',
+    'cyan', 'amber', 'deep-purple', 'light-blue', 'lime'
+  ]
+  
+  const charCode = participant.participantName.charCodeAt(0)
+  const index = charCode % colors.length
+  return colors[index]
 }
 
 const joinFirstActiveRoom = async () => {

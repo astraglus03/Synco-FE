@@ -309,9 +309,13 @@ const connectWebsocket = () => {
 
               if (tempMsgIndex !== -1) {
                 // 🟩 temp_ 메시지 → 실제 chatMessageSeq로 교체
-                const createdAt = parsed.createdAt
+                let createdAt = parsed.createdAt
                   ? new Date(parsed.createdAt)
                   : messages.value[tempMsgIndex].createdAt || new Date();
+                
+                // UTC -> KST 변환 (9시간 더하기)
+                createdAt = new Date(createdAt.getTime() + (9 * 60 * 60 * 1000))
+                
                 messages.value[tempMsgIndex].id = parsed.chatMessageSeq;
                 messages.value[tempMsgIndex].replyToSeq =
                   parsed.replyToSeq || null;
@@ -342,9 +346,13 @@ const connectWebsocket = () => {
             }));
 
             // 💬 메시지 구조 변환 (사용자 정보 포함)
-            const createdAt = parsed.createdAt
+            let createdAt = parsed.createdAt
               ? new Date(parsed.createdAt)
               : new Date();
+            
+            // UTC -> KST 변환 (9시간 더하기)
+            createdAt = new Date(createdAt.getTime() + (9 * 60 * 60 * 1000))
+            
             const formattedMessage = {
               id: parsed.chatMessageSeq || Date.now(), // ✅ 백엔드에서 받은 실제 chatMessageSeq 사용
               user: parsed.senderName || parsed.senderSeq, // ✅ 백엔드에서 받은 실제 senderName 사용
@@ -794,7 +802,11 @@ const loadMoreMessages = async (lastId = null) => {
 
     // 메시지 맵핑 → WebSocket 수신 형식과 동일하게 변환
     const formatted = loadedMessages.map((m) => {
-      const createdAt = new Date(m.createdAt);
+      let createdAt = new Date(m.createdAt)
+      if (!Number.isNaN(createdAt.getTime())) {
+        createdAt = new Date(createdAt.getTime() + 9 * 60 * 60 * 1000)
+      }
+
       return {
         id: m.chatMessageSeq,
         user: m.senderName,
@@ -915,26 +927,34 @@ const loadMessagesAfterLastRead = async () => {
     }
 
     // 메시지 맵핑
-    const formatted = loadedMessages.map((m) => ({
-      id: m.chatMessageSeq,
-      user: m.senderName,
-      content: m.chatMessageText,
-      time: new Date(m.createdAt).toLocaleTimeString("ko-KR", {
-        hour: "2-digit",
-        minute: "2-digit",
-      }),
-      profileImageUrl: m.senderProfileImageUrl || null,
-      senderSeq: m.senderSeq,
-      isOwn: Number(m.senderSeq) === Number(memberSeq.value),
-      unread: Number(m.senderSeq) !== Number(memberSeq.value) ? 1 : 0,
-      files: (m.chatMessageFileUrls || "")
-        .split(",")
-        .filter(Boolean)
-        .map((url) => ({ name: url.split("/").pop(), url, type: "file" })),
-      messageType: m.messageType || "TEXT",
-      replyToSeq: m.replyToSeq || null,
-      isNewMessage: true, // ✅ 새 메시지 플래그
-    }));
+    const formatted = loadedMessages.map((m) => {
+      let createdAt = new Date(m.createdAt)
+      if (!Number.isNaN(createdAt.getTime())) {
+        createdAt = new Date(createdAt.getTime() + 9 * 60 * 60 * 1000)
+      }
+
+      return {
+        id: m.chatMessageSeq,
+        user: m.senderName,
+        content: m.chatMessageText,
+        time: createdAt.toLocaleTimeString("ko-KR", {
+          hour: "2-digit",
+          minute: "2-digit",
+        }),
+        createdAt,
+        profileImageUrl: m.senderProfileImageUrl || null,
+        senderSeq: m.senderSeq,
+        isOwn: Number(m.senderSeq) === Number(memberSeq.value),
+        unread: Number(m.senderSeq) !== Number(memberSeq.value) ? 1 : 0,
+        files: (m.chatMessageFileUrls || "")
+          .split(",")
+          .filter(Boolean)
+          .map((url) => ({ name: url.split("/").pop(), url, type: "file" })),
+        messageType: m.messageType || "TEXT",
+        replyToSeq: m.replyToSeq || null,
+        isNewMessage: true, // ✅ 새 메시지 플래그
+      }
+    })
 
     // 마지막 읽은 메시지 저장 (가장 오래된 새 메시지)
     // ✅ 새 메시지가 있으면 → 재접속 (lastReadSeq가 있음)

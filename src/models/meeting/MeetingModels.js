@@ -152,25 +152,67 @@ export class RoomEndedListDto {
     }
     
     try {
-      // LocalDateTime 형식 (예: "2024-01-15T14:30:00")
-      const date = new Date(this.createdAt)
+      let dateStr = String(this.createdAt).trim()
       
-      // 유효한 날짜인지 확인
-      if (isNaN(date.getTime())) {
-        console.warn('RoomEndedListDto: 유효하지 않은 날짜', this.createdAt)
+      // Z 제거
+      if (dateStr.endsWith('Z')) {
+        dateStr = dateStr.slice(0, -1)
+      }
+      
+      // 공백을 T로 변환
+      if (dateStr.includes(' ') && !dateStr.includes('T')) {
+        dateStr = dateStr.replace(' ', 'T')
+      }
+      
+      // 시간대 정보 제거
+      dateStr = dateStr.replace(/[+-]\d{2}:?\d{2}$/, '')
+      
+      // 밀리초 제거
+      if (dateStr.includes('.')) {
+        dateStr = dateStr.split('.')[0]
+      }
+      
+      // 날짜와 시간 분리
+      const [datePart, timePart] = dateStr.split('T')
+      if (!datePart || !timePart) {
+        console.warn('RoomEndedListDto: 날짜 형식 오류', this.createdAt)
         return ''
       }
       
-      // 한국어 형식으로 포맷팅 (YYYY. MM. DD. HH:mm)
-      const year = date.getFullYear()
-      const month = String(date.getMonth() + 1).padStart(2, '0')
-      const day = String(date.getDate()).padStart(2, '0')
-      const hours = String(date.getHours()).padStart(2, '0')
-      const minutes = String(date.getMinutes()).padStart(2, '0')
+      // 날짜 파싱
+      const [year, month, day] = datePart.split('-').map(Number)
       
-      return `${year}. ${month}. ${day}. ${hours}:${minutes}`
+      // 시간 파싱
+      const [hours, minutes] = timePart.split(':').map(Number)
+      
+      // 무조건 9시간 더하기 (UTC -> KST)
+      let finalHours = hours + 9
+      let finalDay = day
+      let finalMonth = month
+      let finalYear = year
+      
+      // 24시간 넘어가면 다음날로
+      if (finalHours >= 24) {
+        finalHours = finalHours - 24
+        finalDay = finalDay + 1
+        
+        // 월의 마지막 날 체크 (간단하게 31일까지 있다고 가정)
+        const daysInMonth = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
+        if (finalDay > daysInMonth[finalMonth - 1]) {
+          finalDay = 1
+          finalMonth = finalMonth + 1
+          
+          if (finalMonth > 12) {
+            finalMonth = 1
+            finalYear = finalYear + 1
+          }
+        }
+      }
+      
+      // 한국어 형식으로 포맷팅 (YYYY. MM. DD. HH:mm)
+      return `${finalYear}. ${String(finalMonth).padStart(2, '0')}. ${String(finalDay).padStart(2, '0')}. ${String(finalHours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`
     } catch (error) {
-      console.error('RoomEndedListDto: 날짜 포맷팅 오류', error)
+      console.error('RoomEndedListDto: 날짜 포맷팅 오류', error, this.createdAt)
       return ''
     }
   }
@@ -193,11 +235,70 @@ export class RoomDetailDto {
 
   get formattedCreatedAt() {
     if (!this.createdAt) return ''
-    return new Date(this.createdAt).toLocaleString('ko-KR')
+    
+    try {
+      let dateStr = String(this.createdAt).trim()
+      
+      // Z 제거
+      if (dateStr.endsWith('Z')) {
+        dateStr = dateStr.slice(0, -1)
+      }
+      
+      // 공백을 T로 변환
+      if (dateStr.includes(' ') && !dateStr.includes('T')) {
+        dateStr = dateStr.replace(' ', 'T')
+      }
+      
+      // 시간대 정보 제거
+      dateStr = dateStr.replace(/[+-]\d{2}:?\d{2}$/, '')
+      
+      // 밀리초 제거
+      if (dateStr.includes('.')) {
+        dateStr = dateStr.split('.')[0]
+      }
+      
+      // 날짜와 시간 분리
+      const [datePart, timePart] = dateStr.split('T')
+      if (!datePart || !timePart) {
+        console.warn('RoomDetailDto: 날짜 형식 오류', this.createdAt)
+        return ''
+      }
+      
+      const [year, month, day] = datePart.split('-').map(Number)
+      const [hours, minutes, seconds = 0] = timePart.split(':').map(Number)
+      
+      // 무조건 9시간 더하기 (UTC -> KST)
+      let finalHours = hours + 9
+      let finalDay = day
+      let finalMonth = month
+      let finalYear = year
+      
+      // 24시간 넘어가면 다음날로
+      if (finalHours >= 24) {
+        finalHours = finalHours - 24
+        finalDay = finalDay + 1
+        
+        const daysInMonth = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
+        if (finalDay > daysInMonth[finalMonth - 1]) {
+          finalDay = 1
+          finalMonth = finalMonth + 1
+          
+          if (finalMonth > 12) {
+            finalMonth = 1
+            finalYear = finalYear + 1
+          }
+        }
+      }
+      
+      return `${finalYear}. ${String(finalMonth).padStart(2, '0')}. ${String(finalDay).padStart(2, '0')}. ${String(finalHours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`
+    } catch (error) {
+      console.error('RoomDetailDto: 날짜 포맷팅 오류', error)
+      return ''
+    }
   }
 
   get formattedDuration() {
-    if (!this.duration) return '0분'
+    if (!this.duration) return '0초'
     
     // LiveKit Egress duration은 나노초(nanoseconds) 단위로 반환됨
     // 48656565668 ns / 1,000,000 = 48656.565668 ms = 48.656 초
@@ -208,14 +309,32 @@ export class RoomDetailDto {
       durationMs = this.duration / 1000000 // 나노초를 밀리초로 변환
     }
     
-    const totalMinutes = Math.floor(durationMs / 60000)
-    const hours = Math.floor(totalMinutes / 60)
-    const minutes = totalMinutes % 60
+    const totalSeconds = Math.floor(durationMs / 1000)
+    const hours = Math.floor(totalSeconds / 3600)
+    const minutes = Math.floor((totalSeconds % 3600) / 60)
+    const seconds = totalSeconds % 60
     
-    if (hours === 0) {
-      return `${minutes}분`
+    if (hours > 0) {
+      // 1시간 이상: "1시간 12분 14초"
+      if (minutes > 0 && seconds > 0) {
+        return `${hours}시간 ${minutes}분 ${seconds}초`
+      } else if (minutes > 0) {
+        return `${hours}시간 ${minutes}분`
+      } else if (seconds > 0) {
+        return `${hours}시간 ${seconds}초`
+      } else {
+        return `${hours}시간`
+      }
+    } else if (minutes > 0) {
+      // 1분 이상 1시간 미만: "2분 35초"
+      if (seconds > 0) {
+        return `${minutes}분 ${seconds}초`
+      } else {
+        return `${minutes}분`
+      }
     } else {
-      return minutes > 0 ? `${hours}시간 ${minutes}분` : `${hours}시간`
+      // 1분 미만: "40초"
+      return `${seconds}초`
     }
   }
 }
@@ -275,14 +394,110 @@ export class ChatMessageRes {
   }
 
   get formattedCreatedAt() {
-    return new Date(this.createdAt).toLocaleString('ko-KR')
+    if (!this.createdAt) return ''
+    
+    try {
+      let dateStr = String(this.createdAt).trim()
+      
+      // Z 제거
+      if (dateStr.endsWith('Z')) {
+        dateStr = dateStr.slice(0, -1)
+      }
+      
+      // 공백을 T로 변환
+      if (dateStr.includes(' ') && !dateStr.includes('T')) {
+        dateStr = dateStr.replace(' ', 'T')
+      }
+      
+      // 시간대 정보 제거
+      dateStr = dateStr.replace(/[+-]\d{2}:?\d{2}$/, '')
+      
+      // 밀리초 제거
+      if (dateStr.includes('.')) {
+        dateStr = dateStr.split('.')[0]
+      }
+      
+      // 날짜와 시간 분리
+      const [datePart, timePart] = dateStr.split('T')
+      if (!datePart || !timePart) {
+        console.warn('ChatMessageRes: 날짜 형식 오류', this.createdAt)
+        return ''
+      }
+      
+      const [year, month, day] = datePart.split('-').map(Number)
+      const [hours, minutes, seconds = 0] = timePart.split(':').map(Number)
+      
+      // 무조건 9시간 더하기 (UTC -> KST)
+      let finalHours = hours + 9
+      let finalDay = day
+      let finalMonth = month
+      let finalYear = year
+      
+      // 24시간 넘어가면 다음날로
+      if (finalHours >= 24) {
+        finalHours = finalHours - 24
+        finalDay = finalDay + 1
+        
+        const daysInMonth = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
+        if (finalDay > daysInMonth[finalMonth - 1]) {
+          finalDay = 1
+          finalMonth = finalMonth + 1
+          
+          if (finalMonth > 12) {
+            finalMonth = 1
+            finalYear = finalYear + 1
+          }
+        }
+      }
+      
+      return `${finalYear}. ${String(finalMonth).padStart(2, '0')}. ${String(finalDay).padStart(2, '0')}. ${String(finalHours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`
+    } catch (error) {
+      console.error('ChatMessageRes: 날짜 포맷팅 오류', error)
+      return ''
+    }
   }
 
   get timeOnly() {
-    return new Date(this.createdAt).toLocaleTimeString('ko-KR', {
-      hour: '2-digit',
-      minute: '2-digit'
-    })
+    if (!this.createdAt) return ''
+    
+    try {
+      let dateStr = String(this.createdAt).trim()
+      
+      // Z 제거
+      if (dateStr.endsWith('Z')) {
+        dateStr = dateStr.slice(0, -1)
+      }
+      
+      // 공백을 T로 변환
+      if (dateStr.includes(' ') && !dateStr.includes('T')) {
+        dateStr = dateStr.replace(' ', 'T')
+      }
+      
+      // 시간대 정보 제거
+      dateStr = dateStr.replace(/[+-]\d{2}:?\d{2}$/, '')
+      
+      // 밀리초 제거
+      if (dateStr.includes('.')) {
+        dateStr = dateStr.split('.')[0]
+      }
+      
+      // 시간 부분만 추출
+      const timePart = dateStr.split('T')[1]
+      if (!timePart) {
+        console.warn('ChatMessageRes: 시간 형식 오류', this.createdAt)
+        return ''
+      }
+      
+      const [hours, minutes] = timePart.split(':').map(Number)
+      
+      // 무조건 9시간 더하기 (UTC -> KST)
+      const finalHours = (hours + 9) % 24
+      
+      return `${String(finalHours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`
+    } catch (error) {
+      console.error('ChatMessageRes: 시간 포맷팅 오류', error)
+      return ''
+    }
   }
 }
 

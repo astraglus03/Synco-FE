@@ -5,7 +5,7 @@ export const getGoogleAuthorizeUrl = () => {
   const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID
   const redirectUri = import.meta.env.VITE_GOOGLE_REDIRECT_URL
   const scope = import.meta.env.VITE_GOOGLE_SCOPE
-  const responseType = import.meta.env.VITE_GOOGLE_RESPONSE_TYPE || 'code'
+  const responseType = 'code'
 
   const state = encodeURIComponent(
     (window.location.pathname + window.location.search) || '/'
