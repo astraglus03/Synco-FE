@@ -1200,7 +1200,6 @@ const inviteSearchResults = ref([])
 const invitedMembers = ref([])
 const isLoadingInviteFriends = ref(false)
 const isLoadingInviteSearch = ref(false)
-const isInvitingMembers = ref(false)
 
 // 친구 목록 로드 (초대용)
 const loadInviteFriends = async () => {
@@ -1313,10 +1312,6 @@ const isAlreadyMember = (userSeq) => {
 
 // 멤버 초대 처리
 const handleInviteMembers = async () => {
-  if (isInvitingMembers.value) {
-    return
-  }
-
   if (invitedMembers.value.length === 0) {
     showCustomToast('멤버 선택 필요', '초대할 멤버를 선택해주세요.', 'warning')
     return
@@ -1326,21 +1321,9 @@ const handleInviteMembers = async () => {
   const inviteCount = invitedMembers.value.length
   
   try {
-    isInvitingMembers.value = true
-
     const memberList = invitedMembers.value.map(member => member.memberSeq)
-    console.log('[AppHeader] inviteWorkspaceMembers 요청 시작', {
-      workSpaceSeq: currentWorkspace.workSpaceSeq,
-      memberList,
-      timestamp: new Date().toISOString()
-    })
     
     await inviteWorkspaceMembers(currentWorkspace.workSpaceSeq, memberList, null)
-    console.log('[AppHeader] inviteWorkspaceMembers 요청 성공', {
-      workSpaceSeq: currentWorkspace.workSpaceSeq,
-      invitedCount: memberList.length,
-      timestamp: new Date().toISOString()
-    })
     
     // 초대 목록 초기화
     invitedMembers.value = []
@@ -1370,8 +1353,6 @@ const handleInviteMembers = async () => {
   } catch (error) {
     console.error('멤버 초대 실패:', error)
     showCustomToast('멤버 초대 실패', '멤버 초대에 실패했습니다.', 'error')
-  } finally {
-    isInvitingMembers.value = false
   }
 }
 
@@ -2256,8 +2237,7 @@ onMounted(() => {
           size="large"
           @click="handleInviteMembers"
           prepend-icon="mdi-send"
-          :disabled="invitedMembers.length === 0 || isInvitingMembers"
-          :loading="isInvitingMembers"
+          :disabled="invitedMembers.length === 0"
           class="invite-btn"
         >
           {{ invitedMembers.length > 0 ? `${invitedMembers.length}명 초대하기` : '초대하기' }}
