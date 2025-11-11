@@ -134,6 +134,7 @@ const newWorkspaceProfileFile = ref(null)
 const profileInput = ref(null)
 const newWorkspaceStartDate = ref('') // yyyy-MM-dd
 const newWorkspaceEndDate = ref('')   // yyyy-MM-dd
+const isCreatingWorkspace = ref(false)
 
 // 프로젝트 생성 날짜 메뉴 상태
 const newWorkspaceStartDateMenu = ref(false)
@@ -287,6 +288,10 @@ const isInvited = (userSeq) => {
 
 // 프로젝트 생성 함수
 const handleCreateWorkspace = async () => {
+  if (isCreatingWorkspace.value) {
+    return
+  }
+
   if (!newWorkspaceName.value.trim()) {
     alert('프로젝트 이름을 입력해주세요.')
     return
@@ -305,6 +310,8 @@ const handleCreateWorkspace = async () => {
   }
 
   try {
+    isCreatingWorkspace.value = true
+
     // memberList 생성 (memberSeq 배열)
     const memberList = invitedMembers.value.map(member => member.memberSeq)
     
@@ -365,6 +372,8 @@ const handleCreateWorkspace = async () => {
     console.error('프로젝트 생성 실패:', error)
     const errorMessage = error.response?.data?.message || error.response?.data?.error || '프로젝트 생성에 실패했습니다. 다시 시도해주세요.'
     alert(errorMessage)
+  } finally {
+    isCreatingWorkspace.value = false
   }
 }
 
@@ -402,6 +411,7 @@ const updateNewWorkspaceEndDate = (value) => {
 // 모달 닫기 및 초기화
 const closeCreateWorkspaceDialog = () => {
   createWorkspaceDialog.value = false
+  isCreatingWorkspace.value = false
   newWorkspaceName.value = ''
   newWorkspaceProfile.value = ''
   newWorkspaceProfileFile.value = null
@@ -867,7 +877,8 @@ onMounted(() => {
           </v-btn>
           <v-btn
             color="primary"
-            :disabled="!newWorkspaceName.trim()"
+          :disabled="!newWorkspaceName.trim() || isCreatingWorkspace"
+          :loading="isCreatingWorkspace"
             @click="handleCreateWorkspace"
             class="create-workspace-btn"
           >
